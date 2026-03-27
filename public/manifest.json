@@ -1,0 +1,10 @@
+{
+  "name": "Mapky",
+  "short_name": "Mapky",
+  "description": "Decentralized social layer on OpenStreetMap",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": []
+}

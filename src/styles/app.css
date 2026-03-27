@@ -1,0 +1,19 @@
+@import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-mapky-primary: #2563eb;
+  --color-mapky-primary-dark: #3b82f6;
+  --color-mapky-bg: #ffffff;
+  --color-mapky-bg-dark: #0f172a;
+  --color-mapky-surface: #f8fafc;
+  --color-mapky-surface-dark: #1e293b;
+  --color-mapky-text: #0f172a;
+  --color-mapky-text-dark: #f1f5f9;
+  --color-mapky-muted: #64748b;
+  --color-mapky-muted-dark: #94a3b8;
+  --color-mapky-border: #e2e8f0;
+  --color-mapky-border-dark: #334155;
+}
