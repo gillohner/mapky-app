@@ -1,19 +1,80 @@
 @import "tailwindcss";
-@import "maplibre-gl/dist/maplibre-gl.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
-  --color-mapky-primary: #2563eb;
-  --color-mapky-primary-dark: #3b82f6;
-  --color-mapky-bg: #ffffff;
-  --color-mapky-bg-dark: #0f172a;
-  --color-mapky-surface: #f8fafc;
-  --color-mapky-surface-dark: #1e293b;
-  --color-mapky-text: #0f172a;
-  --color-mapky-text-dark: #f1f5f9;
-  --color-mapky-muted: #64748b;
-  --color-mapky-muted-dark: #94a3b8;
-  --color-mapky-border: #e2e8f0;
-  --color-mapky-border-dark: #334155;
+/*
+ * Color scheme system.
+ * Raw values in --raw-* variables, Tailwind tokens reference them via @theme.
+ * To add a scheme: add a CSS class overriding the --raw-* vars.
+ */
+
+:root {
+  --raw-bg: #ffffff;
+  --raw-surface: #f8fafc;
+  --raw-fg: #0f172a;
+  --raw-muted: #64748b;
+  --raw-border: #e2e8f0;
+  --raw-accent: #16a34a;
+  --raw-accent-hover: #15803d;
+  --raw-accent-subtle: #dcfce7;
+}
+
+.dark {
+  --raw-bg: #000000;
+  --raw-surface: #0a0a0a;
+  --raw-fg: #e2e8f0;
+  --raw-muted: #94a3b8;
+  --raw-border: #1e293b;
+  --raw-accent: #22c55e;
+  --raw-accent-hover: #16a34a;
+  --raw-accent-subtle: #052e16;
+}
+
+@theme inline {
+  --color-background: var(--raw-bg);
+  --color-surface: var(--raw-surface);
+  --color-foreground: var(--raw-fg);
+  --color-muted: var(--raw-muted);
+  --color-border: var(--raw-border);
+  --color-accent: var(--raw-accent);
+  --color-accent-hover: var(--raw-accent-hover);
+  --color-accent-subtle: var(--raw-accent-subtle);
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+/* Import MapLibre CSS AFTER Tailwind so its button styles aren't reset */
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+/* MapLibre control overrides for .dark class (MapLibre uses prefers-color-scheme) */
+.dark .maplibregl-ctrl-group {
+  background: #1f2937;
+}
+
+.dark .maplibregl-ctrl-group button {
+  background-color: #1f2937;
+}
+
+.dark .maplibregl-ctrl-group button + button {
+  border-top-color: #374151;
+}
+
+.dark .maplibregl-ctrl-group button:hover {
+  background-color: #374151;
+}
+
+.dark .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(1);
+}
+
+.dark .maplibregl-ctrl-attrib {
+  background-color: rgba(0, 0, 0, 0.7);
+  color: #94a3b8;
+}
+
+.dark .maplibregl-ctrl-attrib a {
+  color: #94a3b8;
 }

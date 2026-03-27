@@ -25,13 +25,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hasHydrated) return;
 
-    // Already have a live session
     if (session) {
       if (isRestoringSession) store.setIsRestoringSession(false);
       return;
     }
 
-    // Try restoring from seed (recovery file auth)
     if (seed && !sessionExport) {
       (async () => {
         try {
@@ -50,7 +48,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Try restoring from session export (QR auth)
     if (sessionExport) {
       (async () => {
         try {
@@ -76,16 +73,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Nothing to restore
     if (isRestoringSession) store.setIsRestoringSession(false);
   }, [hasHydrated, session, sessionExport, seed, isRestoringSession, store]);
 
   if (!hasHydrated || isRestoringSession) {
     return (
-      <div className="flex h-dvh items-center justify-center bg-mapky-bg dark:bg-mapky-bg-dark">
+      <div className="flex h-dvh items-center justify-center bg-background">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-mapky-primary border-t-transparent" />
-          <p className="text-mapky-muted dark:text-mapky-muted-dark">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-accent border-t-transparent" />
+          <p className="text-muted">
             {isRestoringSession ? "Restoring session..." : "Loading..."}
           </p>
         </div>

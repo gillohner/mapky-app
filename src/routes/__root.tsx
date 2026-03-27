@@ -14,7 +14,7 @@ function RootLayout() {
   return (
     <QueryProvider>
       <AuthProvider>
-        <div className="relative h-dvh w-full">
+        <div style={{ position: "relative", width: "100vw", height: "100dvh" }}>
           <MapView />
           <MapkyPlacesLayer />
           <div className="pointer-events-none absolute inset-0 z-10">

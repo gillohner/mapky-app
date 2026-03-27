@@ -1,25 +1,22 @@
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
-import { addProtomapsProtocol } from "@/lib/map/protomaps";
 import { createMapStyle } from "@/lib/map/style";
 import { useMapStore } from "@/stores/map-store";
 
 export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const initializedRef = useRef(false);
   const { center, zoom, theme, setMap, setView } = useMapStore();
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-
-    addProtomapsProtocol();
 
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: createMapStyle(theme),
       center: center,
       zoom: zoom,
-      attributionControl: {},
     });
 
     map.addControl(new maplibregl.NavigationControl(), "bottom-right");
@@ -32,12 +29,15 @@ export function MapView() {
       "bottom-right",
     );
 
+    map.on("load", () => {
+      initializedRef.current = true;
+    });
+
     map.on("moveend", () => {
       const c = map.getCenter();
       setView([c.lng, c.lat], map.getZoom());
     });
 
-    // POI click handler — log for now, will navigate to place route later
     map.on("click", (e) => {
       const features = map.queryRenderedFeatures(e.point);
       const poi = features.find(
@@ -52,7 +52,6 @@ export function MapView() {
       }
     });
 
-    // Change cursor on POI hover
     map.on("mousemove", (e) => {
       const features = map.queryRenderedFeatures(e.point);
       const hasPoi = features.some(
@@ -71,17 +70,22 @@ export function MapView() {
     return () => {
       setMap(null);
       mapRef.current = null;
+      initializedRef.current = false;
       map.remove();
     };
-    // Only run on mount — center/zoom are read once, then tracked via moveend
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update map style when theme changes
+  // Only update style AFTER the initial load completes
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !initializedRef.current) return;
     mapRef.current.setStyle(createMapStyle(theme));
   }, [theme]);
 
-  return <div ref={containerRef} className="absolute inset-0" />;
+  return (
+    <div
+      ref={containerRef}
+      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+    />
+  );
 }

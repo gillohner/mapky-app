@@ -1,4 +1,3 @@
-import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
@@ -33,8 +32,8 @@ if (
   document.documentElement.classList.add("dark");
 }
 
+// No StrictMode — it double-mounts MapLibre, creating two WebGL contexts
+// which exceeds browser limits and causes "WebGL context was lost"
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <RouterProvider router={router} />
-  </StrictMode>,
+  <RouterProvider router={router} />,
 );

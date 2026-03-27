@@ -14,13 +14,13 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="absolute bottom-28 right-2.5 z-20 rounded-lg bg-mapky-bg/90 p-2 shadow-lg backdrop-blur transition-colors hover:bg-mapky-surface dark:bg-mapky-bg-dark/90 dark:hover:bg-mapky-surface-dark"
+      className="absolute left-2.5 top-2.5 z-20 rounded-lg bg-white p-2 shadow-md transition-colors hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700"
       title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
     >
       {theme === "dark" ? (
-        <Sun className="h-5 w-5 text-mapky-text-dark" />
+        <Sun className="h-5 w-5 text-gray-200" />
       ) : (
-        <Moon className="h-5 w-5 text-mapky-text" />
+        <Moon className="h-5 w-5 text-gray-700" />
       )}
     </button>
   );
