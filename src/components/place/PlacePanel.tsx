@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, ChevronUp, ChevronDown, ExternalLink } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { usePlaceDetail } from "@/lib/api/hooks";
+import { usePlaceDetail, useOsmLookup } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
 import {
   encodeFeatureId,
@@ -198,6 +198,19 @@ function PlaceContent({
 }
 
 
+/** Build a display name from Nominatim address fields. */
+function buildAddressName(address: Record<string, string>): string | null {
+  const num = address.house_number;
+  const road = address.road;
+  if (num && road) return `${num} ${road}`;
+  if (road) return road;
+  // Fall back to first meaningful address field
+  for (const key of ["hamlet", "village", "suburb", "town", "city"]) {
+    if (address[key]) return address[key];
+  }
+  return null;
+}
+
 function NotIndexedHeader({
   osmType,
   osmId,
@@ -209,19 +222,42 @@ function NotIndexedHeader({
   tileName?: string;
   tileKind?: string;
 }) {
-  const placeName = tileName || `${osmType}/${osmId}`;
-  const locationType = tileKind?.replace(/_/g, " ") || null;
+  // Only fetch from Nominatim if the tile didn't provide a name
+  const needsLookup = !tileName;
+  const { data: lookup, isLoading } = useOsmLookup(osmType, osmId, needsLookup);
+
+  const placeName =
+    tileName ||
+    lookup?.name ||
+    (lookup?.address && buildAddressName(lookup.address)) ||
+    lookup?.display_name?.split(",")[0] ||
+    `${osmType}/${osmId}`;
+
+  const locationType =
+    tileKind?.replace(/_/g, " ") ||
+    lookup?.type?.replace(/_/g, " ") ||
+    null;
+
   const osmUrl = `https://www.openstreetmap.org/${osmType}/${osmId}`;
 
   return (
     <div>
       <h2 className="pr-16 text-lg font-semibold text-foreground">
-        {placeName}
+        {isLoading ? (
+          <span className="inline-block h-5 w-40 animate-pulse rounded bg-border" />
+        ) : (
+          placeName
+        )}
       </h2>
       {locationType && (
         <span className="mt-1 inline-block rounded bg-surface px-2 py-0.5 text-xs capitalize text-muted">
           {locationType}
         </span>
+      )}
+      {lookup?.display_name && (
+        <p className="mt-1 pr-16 text-xs text-muted line-clamp-1">
+          {lookup.display_name}
+        </p>
       )}
       <div className="mt-2 flex items-center gap-2">
         <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchViewportPlaces, fetchPlaceDetail, fetchPlacePosts } from "./mapky";
 import { fetchUserProfile } from "./user";
-import { reverseGeocode, searchPlaces } from "./nominatim";
+import { reverseGeocode, searchPlaces, lookupOsmElement } from "./nominatim";
 import type { ViewportBounds } from "@/types/mapky";
 
 export function useViewportPlaces(bounds: ViewportBounds | null) {
@@ -46,6 +46,20 @@ export function useNominatimReverse(lat: number | null, lon: number | null) {
     queryFn: () => reverseGeocode(lat!, lon!),
     enabled: lat != null && lon != null,
     staleTime: 60 * 60_000,
+    gcTime: Infinity,
+  });
+}
+
+export function useOsmLookup(
+  osmType: string,
+  osmId: number,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["nominatim", "lookup", osmType, osmId],
+    queryFn: () => lookupOsmElement(osmType, osmId),
+    enabled,
+    staleTime: Infinity,
     gcTime: Infinity,
   });
 }

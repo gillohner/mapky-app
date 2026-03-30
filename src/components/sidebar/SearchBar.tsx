@@ -3,6 +3,7 @@ import { Search, X, MapPin } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useNominatimSearch } from "@/lib/api/hooks";
 import { useMapStore } from "@/stores/map-store";
+import { useUiStore } from "@/stores/ui-store";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
 
 export function SearchBar() {
@@ -14,6 +15,7 @@ export function SearchBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const map = useMapStore((s) => s.map);
+  const sidebarOpen = useUiStore((s) => s.sidebarOpen);
 
   const { data: results, isLoading } = useNominatimSearch(query);
 
@@ -73,7 +75,9 @@ export function SearchBar() {
   return (
     <div
       ref={containerRef}
-      className="pointer-events-auto absolute top-3 z-20 left-14 right-3 md:left-14 md:right-auto md:w-[340px]"
+      className={`pointer-events-auto absolute top-3 z-20 left-14 right-3 md:right-auto md:w-[340px] transition-[left] duration-300 ${
+        sidebarOpen ? "md:left-[440px]" : "md:left-14"
+      }`}
     >
       {/* Search input */}
       <div className="flex items-center gap-2 rounded-xl border border-border bg-background/90 px-3 py-2 shadow-lg backdrop-blur">

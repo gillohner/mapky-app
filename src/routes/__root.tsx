@@ -25,9 +25,7 @@ function RootLayout() {
           <SelectedPlaceMarker />
           <IconRail />
           <SearchBar />
-          <div className="pointer-events-none absolute inset-0 z-10">
-            <Outlet />
-          </div>
+          <Outlet />
           <Menu />
         </div>
         <Toaster position="bottom-center" />

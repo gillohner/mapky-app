@@ -5,9 +5,10 @@ import {
   makeSearchKey,
 } from "./nominatim-cache";
 
-const NOMINATIM_HEADERS = {
-  "User-Agent": "Mapky/1.0 (https://mapky.app)",
-};
+/** In dev, Nominatim is proxied through Vite to avoid CORS issues. */
+const NOMINATIM_BASE = import.meta.env.DEV
+  ? "/nominatim"
+  : "https://nominatim.openstreetmap.org";
 
 export interface NominatimResult {
   osm_type: string | null;
@@ -27,13 +28,13 @@ export async function reverseGeocode(
   const cached = getCached<NominatimResult>(cacheKey);
   if (cached) return cached;
 
-  const url = new URL("https://nominatim.openstreetmap.org/reverse");
+  const url = new URL(`${NOMINATIM_BASE}/reverse`, window.location.origin);
   url.searchParams.set("lat", String(lat));
   url.searchParams.set("lon", String(lon));
   url.searchParams.set("format", "json");
   url.searchParams.set("zoom", "18");
 
-  const res = await fetch(url, { headers: NOMINATIM_HEADERS });
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
 
   const data = await res.json();
@@ -69,7 +70,7 @@ export async function searchNearby(
   const delta = 0.002;
   const viewbox = `${lon - delta},${lat + delta},${lon + delta},${lat - delta}`;
 
-  const url = new URL("https://nominatim.openstreetmap.org/search");
+  const url = new URL(`${NOMINATIM_BASE}/search`, window.location.origin);
   url.searchParams.set("q", name);
   url.searchParams.set("format", "json");
   url.searchParams.set("limit", "1");
@@ -77,7 +78,7 @@ export async function searchNearby(
   url.searchParams.set("bounded", "1");
   url.searchParams.set("dedupe", "1");
 
-  const res = await fetch(url, { headers: NOMINATIM_HEADERS });
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
 
   const data = await res.json();
@@ -120,14 +121,14 @@ export async function searchPlaces(
   const cached = getCached<NominatimSearchResult[]>(cacheKey);
   if (cached) return cached;
 
-  const url = new URL("https://nominatim.openstreetmap.org/search");
+  const url = new URL(`${NOMINATIM_BASE}/search`, window.location.origin);
   url.searchParams.set("q", query);
   url.searchParams.set("format", "json");
   url.searchParams.set("limit", "8");
   url.searchParams.set("dedupe", "1");
   url.searchParams.set("addressdetails", "0");
 
-  const res = await fetch(url, { headers: NOMINATIM_HEADERS });
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
 
   const data = await res.json();
@@ -147,4 +148,63 @@ export async function searchPlaces(
 
   setCache(cacheKey, results);
   return results;
+}
+
+const TYPE_PREFIX: Record<string, string> = {
+  node: "N",
+  way: "W",
+  relation: "R",
+};
+
+/**
+ * Lookup a specific OSM element by type+id.
+ * Returns structured name, address, and type information.
+ */
+export async function lookupOsmElement(
+  osmType: string,
+  osmId: number,
+): Promise<NominatimResult> {
+  const cacheKey = `lookup:${osmType}:${osmId}`;
+  const cached = getCached<NominatimResult>(cacheKey);
+  if (cached) return cached;
+
+  const prefix = TYPE_PREFIX[osmType];
+  if (!prefix) throw new Error(`Unknown osm_type: ${osmType}`);
+
+  const url = new URL(`${NOMINATIM_BASE}/lookup`, window.location.origin);
+  url.searchParams.set("osm_ids", `${prefix}${osmId}`);
+  url.searchParams.set("format", "json");
+  url.searchParams.set("addressdetails", "1");
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
+
+  const data = await res.json();
+  if (!data.length) {
+    const empty: NominatimResult = {
+      osm_type: osmType,
+      osm_id: osmId,
+      name: null,
+      display_name: "",
+      type: null,
+      category: null,
+      address: {},
+    };
+    setCache(cacheKey, empty);
+    return empty;
+  }
+
+  const r = data[0];
+  const result: NominatimResult = {
+    osm_type: r.osm_type || osmType,
+    osm_id: r.osm_id ? Number(r.osm_id) : osmId,
+    name: r.name || null,
+    display_name: r.display_name || "",
+    type: r.type || null,
+    category: r.category || r.class || null,
+    address: r.address ?? {},
+  };
+
+  setCache(cacheKey, result);
+  return result;
 }

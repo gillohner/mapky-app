@@ -28,6 +28,12 @@ export default defineConfig({
         target: "http://localhost:8080",
         changeOrigin: true,
       },
+      "/nominatim": {
+        target: "https://nominatim.openstreetmap.org",
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/nominatim/, ""),
+        headers: { "User-Agent": "Mapky/1.0 (https://mapky.app)" },
+      },
     },
   },
 });
