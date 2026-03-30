@@ -3,7 +3,11 @@ import { QueryProvider } from "@/components/providers/QueryProvider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { MapView } from "@/components/map/MapView";
 import { MapkyPlacesLayer } from "@/components/map/MapkyPlacesLayer";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { PoiClickHandler } from "@/components/map/PoiClickHandler";
+import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
+import { IconRail } from "@/components/sidebar/IconRail";
+import { SearchBar } from "@/components/sidebar/SearchBar";
+import { Menu } from "@/components/menu/Menu";
 import { Toaster } from "sonner";
 
 export const Route = createRootRoute({
@@ -14,13 +18,17 @@ function RootLayout() {
   return (
     <QueryProvider>
       <AuthProvider>
-        <div style={{ position: "relative", width: "100vw", height: "100dvh" }}>
+        <div className="relative h-dvh w-screen overflow-hidden">
           <MapView />
           <MapkyPlacesLayer />
+          <PoiClickHandler />
+          <SelectedPlaceMarker />
+          <IconRail />
+          <SearchBar />
           <div className="pointer-events-none absolute inset-0 z-10">
             <Outlet />
           </div>
-          <ThemeToggle />
+          <Menu />
         </div>
         <Toaster position="bottom-center" />
       </AuthProvider>

@@ -1,38 +1,24 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import type maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useViewportPlaces } from "@/lib/api/hooks";
-import type { PlaceDetails } from "@/types/mapky";
+import { encodeFeatureId, sourceLayersForType } from "@/lib/map/feature-id";
 import type { ViewportBounds } from "@/types/mapky";
 
-const SOURCE_ID = "mapky-places";
-const LAYER_ID = "mapky-places-circles";
-
-function placesToGeoJSON(
-  places: PlaceDetails[],
-): GeoJSON.FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: places.map((p) => ({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [p.lon, p.lat] },
-      properties: {
-        osm_canonical: p.osm_canonical,
-        osm_type: p.osm_type,
-        osm_id: p.osm_id,
-        review_count: p.review_count,
-        avg_rating: p.avg_rating,
-        tag_count: p.tag_count,
-        photo_count: p.photo_count,
-      },
-    })),
-  };
+interface IndexedEntry {
+  featureId: number;
+  sourceLayers: string[];
 }
 
+/**
+ * Marks Mapky-indexed places on the actual tile features via feature-state.
+ * No separate GeoJSON layer — the tile POIs/buildings themselves get highlighted.
+ */
 export function MapkyPlacesLayer() {
   const map = useMapStore((s) => s.map);
+
   const [bounds, setBounds] = useState<ViewportBounds | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const prevIndexed = useRef<IndexedEntry[]>([]);
 
   const updateBounds = useCallback(() => {
     if (!map) return;
@@ -54,7 +40,6 @@ export function MapkyPlacesLayer() {
       debounceRef.current = setTimeout(updateBounds, 500);
     };
 
-    // Initial load
     if (map.loaded()) {
       updateBounds();
     } else {
@@ -70,74 +55,50 @@ export function MapkyPlacesLayer() {
 
   const { data: places } = useViewportPlaces(bounds);
 
-  // Update map source when places change
+  // Set feature-state "indexed" on matching tile features
   useEffect(() => {
-    if (!map || !places) return;
+    if (!map) return;
 
-    const geojson = placesToGeoJSON(places);
-
-    const addSourceAndLayer = () => {
-      if (map.getSource(SOURCE_ID)) {
-        (
-          map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource
-        ).setData(geojson);
-        return;
-      }
-
-      map.addSource(SOURCE_ID, {
-        type: "geojson",
-        data: geojson,
-      });
-
-      map.addLayer({
-        id: LAYER_ID,
-        type: "circle",
-        source: SOURCE_ID,
-        paint: {
-          "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["get", "review_count"],
-            0, 6,
-            5, 10,
-            20, 16,
-          ],
-          "circle-color": [
-            "interpolate",
-            ["linear"],
-            ["get", "avg_rating"],
-            0, "#94a3b8",
-            3, "#f59e0b",
-            6, "#22c55e",
-            9, "#2563eb",
-          ],
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
-          "circle-opacity": 0.9,
-        },
-      });
-
-      map.on("click", LAYER_ID, (e) => {
-        const feature = e.features?.[0];
-        if (feature) {
-          console.log("Mapky place clicked:", feature.properties);
+    // Clear previous indexed states
+    for (const entry of prevIndexed.current) {
+      for (const sl of entry.sourceLayers) {
+        try {
+          map.removeFeatureState(
+            { source: "protomaps", sourceLayer: sl, id: entry.featureId },
+            "indexed",
+          );
+        } catch {
+          /* layer may not exist */
         }
-      });
-
-      map.on("mouseenter", LAYER_ID, () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-
-      map.on("mouseleave", LAYER_ID, () => {
-        map.getCanvas().style.cursor = "";
-      });
-    };
-
-    if (map.isStyleLoaded()) {
-      addSourceAndLayer();
-    } else {
-      map.once("style.load", addSourceAndLayer);
+      }
     }
+
+    if (!places?.length) {
+      prevIndexed.current = [];
+      return;
+    }
+
+    const entries: IndexedEntry[] = [];
+
+    for (const p of places) {
+      const fid = encodeFeatureId(p.osm_type, p.osm_id);
+      if (!fid) continue;
+
+      const sls = sourceLayersForType(p.osm_type);
+      for (const sl of sls) {
+        try {
+          map.setFeatureState(
+            { source: "protomaps", sourceLayer: sl, id: fid },
+            { indexed: true },
+          );
+        } catch {
+          /* source layer may not exist */
+        }
+      }
+      entries.push({ featureId: fid, sourceLayers: sls });
+    }
+
+    prevIndexed.current = entries;
   }, [map, places]);
 
   return null;

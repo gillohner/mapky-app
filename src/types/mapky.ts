@@ -36,3 +36,13 @@ export interface ViewportBounds {
   maxLat: number;
   maxLon: number;
 }
+
+export interface NexusUserDetails {
+  id: string;
+  name: string;
+  bio: string | null;
+  status: string | null;
+  image: string | null;
+  links: Array<{ title: string; url: string }> | null;
+  indexed_at: number;
+}

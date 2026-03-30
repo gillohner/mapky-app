@@ -78,3 +78,25 @@ html, body, #root {
 .dark .maplibregl-ctrl-attrib a {
   color: #94a3b8;
 }
+
+/* Hover tooltip on map features — pass clicks through to the map */
+.mapky-hover-tooltip {
+  pointer-events: none;
+}
+
+.mapky-hover-tooltip .maplibregl-popup-content {
+  background: var(--raw-bg);
+  color: var(--raw-fg);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--raw-border);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.mapky-hover-tooltip .maplibregl-popup-tip {
+  display: none;
+}
