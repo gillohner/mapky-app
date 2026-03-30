@@ -146,7 +146,23 @@ function pickFeature(
  */
 function expandPoiFilter(map: maplibregl.Map) {
   if (!map.getLayer("pois")) return;
+  // Show all POI kinds — min_zoom controls density
   map.setFilter("pois", [">=", ["zoom"], ["+", ["get", "min_zoom"], 0]]);
+  // Use the kind as icon name, fall back to "building" for kinds without a sprite
+  map.setLayoutProperty("pois", "icon-image", [
+    "coalesce",
+    [
+      "image",
+      [
+        "match",
+        ["get", "kind"],
+        "station",
+        "train_station",
+        ["get", "kind"],
+      ],
+    ],
+    ["image", "building"],
+  ]);
 }
 
 /** Add highlight layers that respond to feature-state on the protomaps source. */
