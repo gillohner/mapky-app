@@ -2,6 +2,7 @@ import { User, LogIn } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserProfile } from "@/lib/api/hooks";
+import { useUiStore } from "@/stores/ui-store";
 import {
   getPubkyAvatarUrl,
   getInitials,
@@ -21,6 +22,7 @@ export function UserProfileSection() {
       <div className="p-4">
         <Link
           to="/login"
+          onClick={() => useUiStore.getState().setMenuOpen(false)}
           className="flex items-center gap-3 rounded-lg bg-accent px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
         >
           <LogIn className="h-5 w-5" />

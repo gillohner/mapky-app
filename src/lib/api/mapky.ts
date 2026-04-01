@@ -1,5 +1,10 @@
 import { nexusClient } from "./client";
-import type { PlaceDetails, PostDetails, ViewportBounds } from "@/types/mapky";
+import type {
+  PlaceDetails,
+  PostDetails,
+  ResourceTagsResponse,
+  ViewportBounds,
+} from "@/types/mapky";
 
 export async function fetchViewportPlaces(
   bounds: ViewportBounds,
@@ -44,6 +49,16 @@ export async function fetchPlacePosts(
         reviews_only: options?.reviewsOnly ?? false,
       },
     },
+  );
+  return data;
+}
+
+export async function fetchResourceTagsByUri(
+  uri: string,
+): Promise<ResourceTagsResponse> {
+  const { data } = await nexusClient.get<ResourceTagsResponse>(
+    "/v0/resource/by-uri",
+    { params: { uri } },
   );
   return data;
 }

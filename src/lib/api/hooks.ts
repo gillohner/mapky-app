@@ -1,5 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchViewportPlaces, fetchPlaceDetail, fetchPlacePosts } from "./mapky";
+import {
+  fetchViewportPlaces,
+  fetchPlaceDetail,
+  fetchPlacePosts,
+  fetchResourceTagsByUri,
+} from "./mapky";
 import { fetchUserProfile } from "./user";
 import { reverseGeocode, searchPlaces, lookupOsmElement } from "./nominatim";
 import type { ViewportBounds } from "@/types/mapky";
@@ -28,6 +33,15 @@ export function usePlacePosts(
   return useQuery({
     queryKey: ["mapky", "place", osmType, osmId, "posts", options],
     queryFn: () => fetchPlacePosts(osmType, osmId, options),
+  });
+}
+
+export function usePlaceTags(osmType: string, osmId: number) {
+  const uri = `https://www.openstreetmap.org/${osmType}/${osmId}`;
+  return useQuery({
+    queryKey: ["resource", "tags", uri],
+    queryFn: () => fetchResourceTagsByUri(uri),
+    enabled: !!osmType && !!osmId,
   });
 }
 

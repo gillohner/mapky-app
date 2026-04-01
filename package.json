@@ -19,6 +19,7 @@
     "axios": "^1.13.6",
     "clsx": "^2.1.1",
     "lucide-react": "^1.7.0",
+    "mapky-app-specs": "file:../mapky-app-specs/pkg",
     "maplibre-gl": "^5.21.1",
     "pmtiles": "^4.4.0",
     "qrcode": "^1.5.4",

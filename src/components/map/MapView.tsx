@@ -144,7 +144,7 @@ function pickFeature(
  * tiles are rendered. The min_zoom property on each feature already controls
  * density — prominent POIs appear at lower zooms, minor ones only at high zoom.
  */
-function expandPoiFilter(map: maplibregl.Map) {
+function expandPoiFilter(map: maplibregl.Map, theme: "light" | "dark") {
   if (!map.getLayer("pois")) return;
   // Show all POI kinds — min_zoom controls density
   map.setFilter("pois", [">=", ["zoom"], ["+", ["get", "min_zoom"], 0]]);
@@ -163,6 +163,39 @@ function expandPoiFilter(map: maplibregl.Map) {
     ],
     ["image", "building"],
   ]);
+  // Fix text colors — Protomaps sets the fallback color identical to the halo,
+  // making unlisted kinds invisible. Override with readable fallback + halo.
+  const nature = ["beach", "forest", "marina", "park", "peak", "zoo", "garden", "bench"];
+  const transit = ["aerodrome", "station", "bus_stop", "ferry_terminal"];
+  const civic = ["stadium", "university", "library", "school", "animal", "toilets", "drinking_water", "post_office", "building", "townhall"];
+  const shopping = ["supermarket", "convenience", "books", "beauty", "electronics", "clothes"];
+  const food = ["restaurant", "fast_food", "cafe", "bar"];
+  const culture = ["attraction", "museum", "theatre", "artwork"];
+
+  const isDark = theme === "dark";
+  map.setPaintProperty("pois", "text-color", [
+    "case",
+    ["in", ["get", "kind"], ["literal", nature]],
+    isDark ? "#30C573" : "#20834D",
+    ["in", ["get", "kind"], ["literal", transit]],
+    isDark ? "#2B5CEA" : "#315BCF",
+    ["in", ["get", "kind"], ["literal", civic]],
+    isDark ? "#93939F" : "#6A5B8F",
+    ["in", ["get", "kind"], ["literal", shopping]],
+    isDark ? "#4299BB" : "#1A8CBD",
+    ["in", ["get", "kind"], ["literal", food]],
+    isDark ? "#F19B6E" : "#CB6704",
+    ["in", ["get", "kind"], ["literal", culture]],
+    "#EF56BA",
+    // Readable fallback for all other kinds
+    isDark ? "#b0b0b0" : "#555555",
+  ]);
+  map.setPaintProperty(
+    "pois",
+    "text-halo-color",
+    isDark ? "#1f1f1f" : "#e2dfda",
+  );
+  map.setPaintProperty("pois", "text-halo-width", 1.5);
 }
 
 /** Add highlight layers that respond to feature-state on the protomaps source. */
@@ -315,7 +348,7 @@ export function MapView() {
 
     map.on("load", () => {
       initializedRef.current = true;
-      expandPoiFilter(map);
+      expandPoiFilter(map, theme);
       addHighlightLayers(map);
     });
 
@@ -390,7 +423,7 @@ export function MapView() {
     mapRef.current.setStyle(createMapStyle(theme));
     mapRef.current.once("idle", () => {
       if (mapRef.current) {
-        expandPoiFilter(mapRef.current);
+        expandPoiFilter(mapRef.current, theme);
         addHighlightLayers(mapRef.current);
       }
     });

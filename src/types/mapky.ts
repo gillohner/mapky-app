@@ -37,6 +37,18 @@ export interface ViewportBounds {
   maxLon: number;
 }
 
+export interface ResourceDetails {
+  id: string;
+  uri: string;
+  scheme: string;
+  indexed_at: number;
+}
+
+export interface ResourceTagsResponse {
+  resource: ResourceDetails;
+  tags: PostTagDetails[];
+}
+
 export interface NexusUserDetails {
   id: string;
   name: string;

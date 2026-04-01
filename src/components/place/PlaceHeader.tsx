@@ -13,9 +13,9 @@ function formatType(type: string | null, category: string | null): string | null
 }
 
 function RatingStars({ rating }: { rating: number }) {
-  const stars = (rating / 10) * 5;
-  const full = Math.floor(stars);
-  const hasHalf = stars - full >= 0.5;
+  const display = rating / 2; // 1-10 internal → 1-5 display
+  const full = Math.floor(display);
+  const hasHalf = display - full >= 0.5;
 
   return (
     <div className="flex items-center gap-0.5">
@@ -31,7 +31,7 @@ function RatingStars({ rating }: { rating: number }) {
           }`}
         />
       ))}
-      <span className="ml-1 text-xs text-muted">{rating.toFixed(1)}</span>
+      <span className="ml-1 text-xs text-muted">{display.toFixed(1)}</span>
     </div>
   );
 }

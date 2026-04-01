@@ -10,6 +10,7 @@ import {
 import { PlaceHeader } from "./PlaceHeader";
 import { PlacePosts } from "./PlacePosts";
 import { PlaceActions } from "./PlaceActions";
+import { PlaceTags } from "./PlaceTags";
 
 interface PlacePanelProps {
   osmType: string;
@@ -138,7 +139,7 @@ export function PlacePanel({
           <div className="flex-1 overflow-y-auto border-t border-border px-4 py-3">
             {place && (
               <div className="space-y-4">
-                <PlaceActions />
+                <PlaceActions osmType={osmType} osmId={osmId} />
                 <div className="border-t border-border pt-4">
                   <h3 className="mb-2 text-sm font-medium text-foreground">
                     Posts & Reviews
@@ -149,7 +150,7 @@ export function PlacePanel({
             )}
             {error && (
               <div className="space-y-3">
-                <PlaceActions />
+                <PlaceActions osmType={osmType} osmId={osmId} />
                 <p className="text-center text-sm text-muted">
                   Be the first to review this place on Mapky!
                 </p>
@@ -185,8 +186,9 @@ function PlaceContent({
     <div className="space-y-4">
       <PlaceHeader place={place} />
       <div className="border-t border-border pt-4">
-        <PlaceActions />
+        <PlaceActions osmType={osmType} osmId={osmId} />
       </div>
+      <PlaceTags osmType={osmType} osmId={osmId} />
       <div className="border-t border-border pt-4">
         <h3 className="mb-2 text-sm font-medium text-foreground">
           Posts & Reviews
@@ -292,7 +294,7 @@ function NotIndexedContent({
     <div className="space-y-4">
       <NotIndexedHeader osmType={osmType} osmId={osmId} tileName={tileName} tileKind={tileKind} />
       <div className="border-t border-border pt-4">
-        <PlaceActions />
+        <PlaceActions osmType={osmType} osmId={osmId} />
       </div>
       <p className="text-center text-sm text-muted">
         Be the first to review this place on Mapky!

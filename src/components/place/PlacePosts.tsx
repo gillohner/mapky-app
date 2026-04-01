@@ -54,17 +54,24 @@ function PostCard({ post }: { post: PostDetails }) {
         </div>
         {post.kind === "review" && post.rating != null && (
           <div className="mt-0.5 flex items-center gap-0.5">
-            {Array.from({ length: 5 }, (_, i) => (
-              <Star
-                key={i}
-                className={`h-3 w-3 ${
-                  i < Math.round((post.rating! / 10) * 5)
-                    ? "fill-amber-400 text-amber-400"
-                    : "text-border"
-                }`}
-              />
-            ))}
-            <span className="ml-1 text-xs text-muted">{post.rating}/10</span>
+            {Array.from({ length: 5 }, (_, i) => {
+              const display = post.rating! / 2;
+              const isFull = i < Math.floor(display);
+              const isHalf = !isFull && i < display;
+              return (
+                <Star
+                  key={i}
+                  className={`h-3 w-3 ${
+                    isFull
+                      ? "fill-amber-400 text-amber-400"
+                      : isHalf
+                        ? "fill-amber-400/50 text-amber-400"
+                        : "text-border"
+                  }`}
+                />
+              );
+            })}
+            <span className="ml-1 text-xs text-muted">{(post.rating / 2).toFixed(1)}</span>
           </div>
         )}
         {post.content && (

@@ -86,6 +86,7 @@ Session persistence: Zustand `persist` stores `publicKey` + `sessionExport` + `s
 
 ## Related Repos
 
-- `../mapky-app-specs/` — Rust data models (MapkyAppPost, OsmRef, etc.)
+- `../mapky-app-specs/` — Rust data models (MapkyAppPost, Collection, etc.)
 - `../mapky-nexus-plugin/` — Neo4j indexer plugin (Rust, implements NexusPlugin)
-- `../../pubky-nexus/` — Host indexer with plugin system
+- `../../pubky/pubky-nexus/` — Host indexer with plugin system
+- `../../pubky/pubky-docker/` — Docker dev infrastructure
