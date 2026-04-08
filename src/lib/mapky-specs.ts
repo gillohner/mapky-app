@@ -24,6 +24,7 @@ export function createPost(
     kind: "review" | "post";
     content?: string;
     rating?: number;
+    attachments?: string[];
   },
 ): CreatePostResult {
   const builder = new MapkySpecsBuilder(pubkyId);
@@ -36,7 +37,7 @@ export function createPost(
     place,
     opts.content || null,
     opts.rating ?? null,
-    null, // attachments
+    opts.attachments?.length ? opts.attachments : null,
     null, // parent
   );
 
@@ -67,6 +68,25 @@ export function createPlaceTag(
   const osmUrl = makeOsmUrl(osmType, osmId);
 
   const result = builder.createPlaceTag(osmUrl, label);
+  const json = JSON.stringify(result.tag.toJson());
+  const path = result.meta.path;
+
+  result.free();
+  builder.free();
+
+  return { path, json };
+}
+
+export function createPostTag(
+  pubkyId: string,
+  authorId: string,
+  postId: string,
+  label: string,
+): CreateTagResult {
+  const builder = new MapkySpecsBuilder(pubkyId);
+  const postUri = `pubky://${authorId}/pub/mapky.app/posts/${postId}`;
+
+  const result = builder.createPlaceTag(postUri, label);
   const json = JSON.stringify(result.tag.toJson());
   const path = result.meta.path;
 

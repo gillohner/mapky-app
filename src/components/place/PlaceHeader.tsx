@@ -1,19 +1,30 @@
 import { ExternalLink, Star, MessageSquare, Tag, Camera } from "lucide-react";
 import type { PlaceDetails } from "@/types/mapky";
-import { useNominatimReverse } from "@/lib/api/hooks";
+import { useOsmLookup } from "@/lib/api/hooks";
 
 function formatType(type: string | null, category: string | null): string | null {
   if (!type && !category) return null;
   const t = type?.replace(/_/g, " ") ?? "";
   const c = category?.replace(/_/g, " ") ?? "";
-  // Avoid showing redundant "yes" type (Nominatim returns this for some features)
   if (t === "yes" || t === "unclassified") return c || null;
   if (c && c !== t) return `${t} · ${c}`;
   return t || null;
 }
 
+/** Build a display name from Nominatim address fields. */
+function buildAddressName(address: Record<string, string>): string | null {
+  const num = address.house_number;
+  const road = address.road;
+  if (num && road) return `${num} ${road}`;
+  if (road) return road;
+  for (const key of ["hamlet", "village", "suburb", "town", "city"]) {
+    if (address[key]) return address[key];
+  }
+  return null;
+}
+
 function RatingStars({ rating }: { rating: number }) {
-  const display = rating / 2; // 1-10 internal → 1-5 display
+  const display = rating / 2;
   const full = Math.floor(display);
   const hasHalf = display - full >= 0.5;
 
@@ -37,27 +48,41 @@ function RatingStars({ rating }: { rating: number }) {
 }
 
 interface PlaceHeaderProps {
-  place: PlaceDetails;
+  place?: PlaceDetails;
+  /** Fallback name from tile click (used before Nominatim loads) */
+  tileName?: string;
+  /** Fallback kind from tile click */
+  tileKind?: string;
 }
 
-export function PlaceHeader({ place }: PlaceHeaderProps) {
-  const { data: nominatim, isLoading: nameLoading } = useNominatimReverse(
-    place.lat,
-    place.lon,
+export function PlaceHeader({ place, tileName, tileKind }: PlaceHeaderProps) {
+  const osmType = place?.osm_type ?? "node";
+  const osmId = place?.osm_id ?? 0;
+  const needsLookup = !tileName || !!place;
+  const { data: nominatim, isLoading: nameLoading } = useOsmLookup(
+    osmType,
+    osmId,
+    needsLookup,
   );
 
   const placeName =
     nominatim?.name ||
+    tileName ||
+    (nominatim?.address && buildAddressName(nominatim.address)) ||
     nominatim?.display_name?.split(",")[0] ||
-    `${place.osm_type}/${place.osm_id}`;
+    `${osmType}/${osmId}`;
 
-  const locationType = formatType(nominatim?.type ?? null, nominatim?.category ?? null);
-  const osmUrl = `https://www.openstreetmap.org/${place.osm_type}/${place.osm_id}`;
+  const locationType =
+    formatType(nominatim?.type ?? null, nominatim?.category ?? null) ||
+    (tileKind ? tileKind.replace(/_/g, " ") : null);
+
+  const osmUrl = `https://www.openstreetmap.org/${osmType}/${osmId}`;
+  const isIndexed = !!place;
 
   return (
     <div>
       <h2 className="pr-16 text-lg font-semibold text-foreground">
-        {nameLoading ? (
+        {nameLoading && !tileName ? (
           <span className="inline-block h-5 w-40 animate-pulse rounded bg-border" />
         ) : (
           placeName
@@ -77,25 +102,32 @@ export function PlaceHeader({ place }: PlaceHeaderProps) {
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        {place.review_count > 0 && <RatingStars rating={place.avg_rating} />}
+        {isIndexed && place.review_count > 0 && (
+          <RatingStars rating={place.avg_rating} />
+        )}
 
         <div className="flex items-center gap-2.5 text-xs text-muted">
-          {place.review_count > 0 && (
+          {isIndexed && place.review_count > 0 && (
             <span className="flex items-center gap-1">
               <MessageSquare className="h-3 w-3" />
               {place.review_count}
             </span>
           )}
-          {place.tag_count > 0 && (
+          {isIndexed && place.tag_count > 0 && (
             <span className="flex items-center gap-1">
               <Tag className="h-3 w-3" />
               {place.tag_count}
             </span>
           )}
-          {place.photo_count > 0 && (
+          {isIndexed && place.photo_count > 0 && (
             <span className="flex items-center gap-1">
               <Camera className="h-3 w-3" />
               {place.photo_count}
+            </span>
+          )}
+          {!isIndexed && (
+            <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">
+              Not yet on Mapky
             </span>
           )}
           <a
@@ -110,7 +142,7 @@ export function PlaceHeader({ place }: PlaceHeaderProps) {
         </div>
       </div>
 
-      {place.review_count === 0 && place.tag_count === 0 && (
+      {isIndexed && place.review_count === 0 && place.tag_count === 0 && (
         <p className="mt-2 text-xs text-muted">No reviews or tags yet</p>
       )}
     </div>

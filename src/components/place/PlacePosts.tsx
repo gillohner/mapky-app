@@ -1,8 +1,9 @@
-import { Star, User } from "lucide-react";
+import { Star } from "lucide-react";
 import { usePlacePosts } from "@/lib/api/hooks";
-import { getPubkyAvatarUrl, truncatePublicKey } from "@/lib/api/user";
-import { useState } from "react";
+import { truncatePublicKey } from "@/lib/api/user";
 import type { PostDetails } from "@/types/mapky";
+import { UserAvatar } from "@/components/shared/UserAvatar";
+import { PostTags } from "./PostTags";
 
 function timeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -17,32 +18,11 @@ function timeAgo(timestamp: number): string {
   return `${months}mo ago`;
 }
 
-function PostAvatar({ authorId }: { authorId: string }) {
-  const [imgError, setImgError] = useState(false);
-  const url = getPubkyAvatarUrl(authorId);
-
-  if (imgError) {
-    return (
-      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-subtle">
-        <User className="h-4 w-4 text-accent" />
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={url}
-      alt=""
-      className="h-8 w-8 rounded-full object-cover"
-      onError={() => setImgError(true)}
-    />
-  );
-}
 
 function PostCard({ post }: { post: PostDetails }) {
   return (
     <div className="flex gap-3 rounded-lg p-2 transition-colors hover:bg-surface">
-      <PostAvatar authorId={post.author_id} />
+      <UserAvatar userId={post.author_id} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate font-mono text-xs text-muted">
@@ -77,6 +57,7 @@ function PostCard({ post }: { post: PostDetails }) {
         {post.content && (
           <p className="mt-1 text-sm text-foreground">{post.content}</p>
         )}
+        <PostTags authorId={post.author_id} postId={post.id} />
       </div>
     </div>
   );

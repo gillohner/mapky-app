@@ -62,3 +62,13 @@ export async function fetchPlaceTags(
   );
   return data;
 }
+
+export async function fetchPostTags(
+  authorId: string,
+  postId: string,
+): Promise<PostTagDetails[]> {
+  const { data } = await nexusClient.get<PostTagDetails[]>(
+    `/v0/mapky/posts/${authorId}/${postId}/tags`,
+  );
+  return data;
+}

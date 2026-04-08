@@ -24,6 +24,9 @@ interface FeatureHit {
   name: string;
   kind: string;
   sourceLayer: string;
+  /** Feature's actual coordinates (if point geometry). */
+  lng?: number;
+  lat?: number;
 }
 
 /** Try to decode a Protomaps tile feature into an OSM reference. */
@@ -31,12 +34,18 @@ function tryDecode(f: maplibregl.MapGeoJSONFeature): FeatureHit | null {
   if (typeof f.id !== "number" || f.id <= 0) return null;
   const decoded = decodeFeatureId(f.id);
   if (!decoded) return null;
-  return {
+  const hit: FeatureHit = {
     ...decoded,
     name: f.properties?.name ? String(f.properties.name) : "",
     kind: f.properties?.kind ? String(f.properties.kind) : "",
     sourceLayer: f.sourceLayer ?? "",
   };
+  if (f.geometry.type === "Point") {
+    const [lng, lat] = f.geometry.coordinates as [number, number];
+    hit.lng = lng;
+    hit.lat = lat;
+  }
+  return hit;
 }
 
 /** Among features, return the one whose point geometry is nearest to clickPx. */
@@ -260,8 +269,8 @@ export function MapView() {
       const hit = pickFeature(map, e.point);
       if (hit) {
         useUiStore.getState().setPendingPoiClick({
-          lng: e.lngLat.lng,
-          lat: e.lngLat.lat,
+          lng: hit.lng ?? e.lngLat.lng,
+          lat: hit.lat ?? e.lngLat.lat,
           name: hit.name,
           kind: hit.kind,
           osmType: hit.osmType,

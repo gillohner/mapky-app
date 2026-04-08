@@ -1,7 +1,9 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import type maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
+import { useUiStore } from "@/stores/ui-store";
 import { useViewportPlaces } from "@/lib/api/hooks";
+import { decodeFeatureId } from "@/lib/map/feature-id";
 import type { PlaceDetails, ViewportBounds } from "@/types/mapky";
 
 const SOURCE = "mapky-places";
@@ -160,6 +162,7 @@ function ensureLayers(map: maplibregl.Map, theme: "light" | "dark") {
 export function MapkyPlacesLayer() {
   const map = useMapStore((s) => s.map);
   const theme = useMapStore((s) => s.theme);
+  const visible = useUiStore((s) => s.placesLayerVisible);
 
   const [bounds, setBounds] = useState<ViewportBounds | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -239,11 +242,20 @@ export function MapkyPlacesLayer() {
     }
   }, [map, places, theme]);
 
+  // Toggle layer visibility
+  useEffect(() => {
+    if (!map || !layerReady.current) return;
+    const vis = visible ? "visible" : "none";
+    for (const id of [CLUSTER_LAYER, CLUSTER_COUNT, POINT_RING, POINT_DOT]) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
+    }
+  }, [map, visible]);
+
   // Click on cluster → zoom in
   useEffect(() => {
     if (!map) return;
 
-    const onClick = (e: maplibregl.MapMouseEvent) => {
+    const onClusterClick = (e: maplibregl.MapMouseEvent) => {
       const features = map.queryRenderedFeatures(e.point, {
         layers: [CLUSTER_LAYER],
       });
@@ -264,9 +276,45 @@ export function MapkyPlacesLayer() {
       });
     };
 
-    map.on("click", CLUSTER_LAYER, onClick);
+    // Click on individual place dot → navigate using the exact place data
+    const onPointClick = (e: maplibregl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(e.point, {
+        layers: [POINT_RING, POINT_DOT],
+      });
+      if (!features.length) return;
+
+      const props = features[0].properties;
+      const osmType = props?.osm_type;
+      const osmId = props?.osm_id;
+      if (!osmType || !osmId) return;
+
+      // Use the GeoJSON feature coordinates (actual place location), not click coords
+      const geom = features[0].geometry;
+      const [lon, lat] =
+        geom.type === "Point"
+          ? (geom.coordinates as [number, number])
+          : [e.lngLat.lng, e.lngLat.lat];
+
+      // Stop the event from propagating to MapView's general click handler
+      e.originalEvent.stopPropagation();
+
+      useUiStore.getState().setPendingPoiClick({
+        lng: lon,
+        lat: lat,
+        name: "",
+        kind: "",
+        osmType,
+        osmId: Number(osmId),
+      });
+    };
+
+    map.on("click", CLUSTER_LAYER, onClusterClick);
+    map.on("click", POINT_RING, onPointClick);
+    map.on("click", POINT_DOT, onPointClick);
     return () => {
-      map.off("click", CLUSTER_LAYER, onClick);
+      map.off("click", CLUSTER_LAYER, onClusterClick);
+      map.off("click", POINT_RING, onPointClick);
+      map.off("click", POINT_DOT, onPointClick);
     };
   }, [map]);
 

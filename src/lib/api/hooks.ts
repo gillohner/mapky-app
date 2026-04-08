@@ -4,6 +4,7 @@ import {
   fetchPlaceDetail,
   fetchPlacePosts,
   fetchPlaceTags,
+  fetchPostTags,
 } from "./mapky";
 import { fetchUserProfile } from "./user";
 import { reverseGeocode, searchPlaces, lookupOsmElement } from "./nominatim";
@@ -41,6 +42,14 @@ export function usePlaceTags(osmType: string, osmId: number) {
     queryKey: ["mapky", "place", osmType, osmId, "tags"],
     queryFn: () => fetchPlaceTags(osmType, osmId),
     enabled: !!osmType && !!osmId,
+  });
+}
+
+export function usePostTags(authorId: string, postId: string) {
+  return useQuery({
+    queryKey: ["mapky", "posts", authorId, postId, "tags"],
+    queryFn: () => fetchPostTags(authorId, postId),
+    enabled: !!authorId && !!postId,
   });
 }
 
