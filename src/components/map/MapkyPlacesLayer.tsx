@@ -2,19 +2,15 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import type maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useViewportPlaces } from "@/lib/api/hooks";
-import { encodeFeatureId, HIGHLIGHT_SOURCE_LAYERS } from "@/lib/map/feature-id";
 import type { PlaceDetails, ViewportBounds } from "@/types/mapky";
 
-const DOT_SOURCE = "mapky-indexed-dots";
-const DOT_LAYER = "mapky-indexed-dots-layer";
+const SOURCE = "mapky-places";
+const CLUSTER_LAYER = "mapky-clusters";
+const CLUSTER_COUNT = "mapky-cluster-count";
+const POINT_RING = "mapky-point-ring";
+const POINT_DOT = "mapky-point-dot";
 
-interface IndexedEntry {
-  featureId: number;
-}
-
-function placesToGeoJSON(
-  places: PlaceDetails[],
-): GeoJSON.FeatureCollection {
+function placesToGeoJSON(places: PlaceDetails[]): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
     features: places.map((p) => ({
@@ -23,59 +19,143 @@ function placesToGeoJSON(
       properties: {
         osm_type: p.osm_type,
         osm_id: p.osm_id,
+        review_count: p.review_count,
+        tag_count: p.tag_count,
       },
     })),
   };
 }
 
-function getAccentColor(theme: "light" | "dark") {
+function getAccent(theme: "light" | "dark") {
   return theme === "dark" ? "#22c55e" : "#16a34a";
 }
 
-/** Add the GeoJSON fallback dot layer if it doesn't exist. */
-function ensureDotLayer(map: maplibregl.Map, theme: "light" | "dark") {
-  if (!map.getSource(DOT_SOURCE)) {
-    map.addSource(DOT_SOURCE, {
+function ensureLayers(map: maplibregl.Map, theme: "light" | "dark") {
+  const accent = getAccent(theme);
+
+  if (!map.getSource(SOURCE)) {
+    map.addSource(SOURCE, {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
+      cluster: true,
+      clusterRadius: 50,
+      clusterMaxZoom: 14,
     });
   }
 
-  if (!map.getLayer(DOT_LAYER)) {
-    const beforeId = map.getLayer("pois") ? "pois" : undefined;
+  // --- Cluster circles (zoom < ~15) ---
+  if (!map.getLayer(CLUSTER_LAYER)) {
+    map.addLayer({
+      id: CLUSTER_LAYER,
+      type: "circle",
+      source: SOURCE,
+      filter: ["has", "point_count"],
+      paint: {
+        "circle-color": accent,
+        "circle-opacity": 0.25,
+        "circle-radius": [
+          "step",
+          ["get", "point_count"],
+          16, // < 5 points
+          5, 22,
+          20, 30,
+          50, 38,
+        ],
+        "circle-stroke-width": 2,
+        "circle-stroke-color": accent,
+        "circle-stroke-opacity": 0.5,
+      },
+    });
+  }
+
+  // --- Cluster count label ---
+  if (!map.getLayer(CLUSTER_COUNT)) {
+    map.addLayer({
+      id: CLUSTER_COUNT,
+      type: "symbol",
+      source: SOURCE,
+      filter: ["has", "point_count"],
+      layout: {
+        "text-field": "{point_count_abbreviated}",
+        "text-size": 12,
+        "text-font": ["Noto Sans Medium"],
+        "text-allow-overlap": true,
+      },
+      paint: {
+        "text-color": theme === "dark" ? "#fff" : "#fff",
+        "text-halo-color": accent,
+        "text-halo-width": 1,
+      },
+    });
+  }
+
+  // --- Individual place: ring behind POI icon ---
+  // Rendered BEFORE (below) the pois layer so the POI icon sits on top
+  const beforePois = map.getLayer("pois") ? "pois" : undefined;
+
+  if (!map.getLayer(POINT_RING)) {
     map.addLayer(
       {
-        id: DOT_LAYER,
+        id: POINT_RING,
         type: "circle",
-        source: DOT_SOURCE,
+        source: SOURCE,
+        filter: ["!", ["has", "point_count"]],
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            10, 5,
+            14, 8,
+            18, 12,
+          ],
+          "circle-color": accent,
+          "circle-opacity": 0.15,
+          "circle-stroke-width": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            10, 1,
+            18, 2,
+          ],
+          "circle-stroke-color": accent,
+          "circle-stroke-opacity": 0.5,
+        },
+      },
+      beforePois,
+    );
+  }
+
+  // --- Small inner dot (always visible, even when tile POI not loaded) ---
+  if (!map.getLayer(POINT_DOT)) {
+    map.addLayer(
+      {
+        id: POINT_DOT,
+        type: "circle",
+        source: SOURCE,
+        filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": [
             "interpolate",
             ["linear"],
             ["zoom"],
             8, 3,
-            14, 5,
-            18, 7,
+            14, 4,
+            18, 5,
           ],
-          "circle-color": getAccentColor(theme),
-          "circle-opacity": 0.6,
-          "circle-stroke-width": 1.5,
-          "circle-stroke-color": getAccentColor(theme),
-          "circle-stroke-opacity": 0.3,
+          "circle-color": accent,
+          "circle-opacity": 0.7,
         },
       },
-      beforeId,
+      beforePois,
     );
   }
 }
 
 /**
- * Marks Mapky-indexed places with two complementary approaches:
- * 1. Feature-state "indexed" on tile features — highlights the actual POI/building
- *    when the tile has the feature loaded (high zoom).
- * 2. GeoJSON fallback dots — small accent circles from Nexus API coordinates,
- *    visible at all zoom levels. At high zoom both show; the dot sits behind the
- *    tile POI icon so the feature-state highlight is the primary indicator.
+ * Shows Mapky-indexed places on the map with:
+ * - Clustered circles at low zoom (shows how many places are in an area)
+ * - Individual rings + dots at high zoom (highlights the POI icon)
  */
 export function MapkyPlacesLayer() {
   const map = useMapStore((s) => s.map);
@@ -83,8 +163,7 @@ export function MapkyPlacesLayer() {
 
   const [bounds, setBounds] = useState<ViewportBounds | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const prevIndexed = useRef<IndexedEntry[]>([]);
-  const dotLayerAdded = useRef(false);
+  const layerReady = useRef(false);
 
   const updateBounds = useCallback(() => {
     if (!map) return;
@@ -119,11 +198,11 @@ export function MapkyPlacesLayer() {
     };
   }, [map, updateBounds]);
 
-  // Re-add dot layer after style changes (theme switch removes all layers)
+  // Recreate layers after style changes (theme toggle removes all layers)
   useEffect(() => {
     if (!map) return;
     const onStyleData = () => {
-      dotLayerAdded.current = false;
+      layerReady.current = false;
     };
     map.on("styledata", onStyleData);
     return () => {
@@ -133,72 +212,63 @@ export function MapkyPlacesLayer() {
 
   const { data: places } = useViewportPlaces(bounds);
 
-  // Update both feature-state and GeoJSON dots
+  // Update GeoJSON source
   useEffect(() => {
     if (!map) return;
 
-    // Ensure dot layer exists
-    const addDots = () => {
-      if (!dotLayerAdded.current) {
-        ensureDotLayer(map, theme);
-        dotLayerAdded.current = true;
+    const setup = () => {
+      if (!layerReady.current) {
+        ensureLayers(map, theme);
+        layerReady.current = true;
       }
     };
 
     if (map.isStyleLoaded()) {
-      addDots();
+      setup();
     } else {
-      map.once("idle", addDots);
+      map.once("idle", setup);
     }
 
-    // Clear previous feature-state
-    for (const entry of prevIndexed.current) {
-      for (const sl of HIGHLIGHT_SOURCE_LAYERS) {
-        try {
-          map.removeFeatureState(
-            { source: "protomaps", sourceLayer: sl, id: entry.featureId },
-            "indexed",
-          );
-        } catch {
-          /* layer may not exist */
-        }
-      }
-    }
-
-    if (!places?.length) {
-      prevIndexed.current = [];
-      // Clear dots
-      const src = map.getSource(DOT_SOURCE) as maplibregl.GeoJSONSource | undefined;
-      if (src) src.setData({ type: "FeatureCollection", features: [] });
-      return;
-    }
-
-    // Set feature-state on tile features
-    const entries: IndexedEntry[] = [];
-    for (const p of places) {
-      const fid = encodeFeatureId(p.osm_type, p.osm_id);
-      if (!fid) continue;
-
-      for (const sl of HIGHLIGHT_SOURCE_LAYERS) {
-        try {
-          map.setFeatureState(
-            { source: "protomaps", sourceLayer: sl, id: fid },
-            { indexed: true },
-          );
-        } catch {
-          /* source layer may not exist */
-        }
-      }
-      entries.push({ featureId: fid });
-    }
-    prevIndexed.current = entries;
-
-    // Update GeoJSON dots
-    const src = map.getSource(DOT_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    const src = map.getSource(SOURCE) as maplibregl.GeoJSONSource | undefined;
     if (src) {
-      src.setData(placesToGeoJSON(places));
+      src.setData(
+        places?.length
+          ? placesToGeoJSON(places)
+          : { type: "FeatureCollection", features: [] },
+      );
     }
   }, [map, places, theme]);
+
+  // Click on cluster → zoom in
+  useEffect(() => {
+    if (!map) return;
+
+    const onClick = (e: maplibregl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(e.point, {
+        layers: [CLUSTER_LAYER],
+      });
+      if (!features.length) return;
+
+      const clusterId = features[0].properties?.cluster_id;
+      if (clusterId == null) return;
+
+      const src = map.getSource(SOURCE) as maplibregl.GeoJSONSource;
+      src.getClusterExpansionZoom(clusterId).then((zoom) => {
+        const geom = features[0].geometry;
+        if (geom.type === "Point") {
+          map.easeTo({
+            center: geom.coordinates as [number, number],
+            zoom: zoom,
+          });
+        }
+      });
+    };
+
+    map.on("click", CLUSTER_LAYER, onClick);
+    return () => {
+      map.off("click", CLUSTER_LAYER, onClick);
+    };
+  }, [map]);
 
   return null;
 }

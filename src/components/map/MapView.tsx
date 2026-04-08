@@ -198,116 +198,15 @@ function expandPoiFilter(map: maplibregl.Map, theme: "light" | "dark") {
   map.setPaintProperty("pois", "text-halo-width", 1.5);
 }
 
-/** Add highlight layers that respond to feature-state on the protomaps source. */
-function addHighlightLayers(map: maplibregl.Map) {
-  const poisBefore = map.getLayer("pois") ? "pois" : undefined;
-
-  for (const srcLayer of ["pois", "places"]) {
-    const selId = `mapky-sel-${srcLayer}`;
-    const idxId = `mapky-idx-${srcLayer}`;
-
-    if (!map.getLayer(selId)) {
-      map.addLayer(
-        {
-          id: selId,
-          type: "circle",
-          source: "protomaps",
-          "source-layer": srcLayer,
-          paint: {
-            "circle-radius": [
-              "case",
-              ["boolean", ["feature-state", "selected"], false],
-              18,
-              0,
-            ],
-            "circle-color": "#22c55e",
-            "circle-opacity": [
-              "case",
-              ["boolean", ["feature-state", "selected"], false],
-              0.25,
-              0,
-            ],
-            "circle-stroke-width": [
-              "case",
-              ["boolean", ["feature-state", "selected"], false],
-              2,
-              0,
-            ],
-            "circle-stroke-color": "#22c55e",
-            "circle-stroke-opacity": [
-              "case",
-              ["boolean", ["feature-state", "selected"], false],
-              0.6,
-              0,
-            ],
-          },
-        },
-        poisBefore,
-      );
-    }
-
-    if (!map.getLayer(idxId)) {
-      map.addLayer(
-        {
-          id: idxId,
-          type: "circle",
-          source: "protomaps",
-          "source-layer": srcLayer,
-          paint: {
-            "circle-radius": [
-              "case",
-              ["boolean", ["feature-state", "indexed"], false],
-              5,
-              0,
-            ],
-            "circle-color": "#22c55e",
-            "circle-opacity": [
-              "case",
-              ["boolean", ["feature-state", "indexed"], false],
-              0.55,
-              0,
-            ],
-            "circle-stroke-width": [
-              "case",
-              ["boolean", ["feature-state", "indexed"], false],
-              1.5,
-              0,
-            ],
-            "circle-stroke-color": "#22c55e",
-            "circle-stroke-opacity": [
-              "case",
-              ["boolean", ["feature-state", "indexed"], false],
-              0.4,
-              0,
-            ],
-          },
-        },
-        poisBefore,
-      );
-    }
-  }
-
-  // Buildings get a fill highlight instead of circles
-  if (!map.getLayer("mapky-sel-buildings")) {
-    map.addLayer({
-      id: "mapky-sel-buildings",
-      type: "fill",
-      source: "protomaps",
-      "source-layer": "buildings",
-      paint: {
-        "fill-color": "#22c55e",
-        "fill-opacity": [
-          "case",
-          ["boolean", ["feature-state", "selected"], false],
-          0.35,
-          ["boolean", ["feature-state", "indexed"], false],
-          0.2,
-          0,
-        ],
-      },
-    });
-  }
-}
+/**
+ * Removed: feature-state-based highlight layers on the "protomaps" vector source.
+ * MapLibre 5.x has a bug in coalesceChanges where it crashes accessing
+ * this.state[sourceLayer][featureId].selected for features with no state set,
+ * spamming errors on every render frame.
+ *
+ * Indexed places are highlighted via the GeoJSON dots layer (MapkyPlacesLayer).
+ * Selected places are highlighted via the GeoJSON marker (SelectedPlaceMarker).
+ */
 
 export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -349,7 +248,6 @@ export function MapView() {
     map.on("load", () => {
       initializedRef.current = true;
       expandPoiFilter(map, theme);
-      addHighlightLayers(map);
     });
 
     map.on("moveend", () => {
@@ -424,7 +322,6 @@ export function MapView() {
     mapRef.current.once("idle", () => {
       if (mapRef.current) {
         expandPoiFilter(mapRef.current, theme);
-        addHighlightLayers(mapRef.current);
       }
     });
   }, [theme]);

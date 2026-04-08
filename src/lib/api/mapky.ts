@@ -2,7 +2,7 @@ import { nexusClient } from "./client";
 import type {
   PlaceDetails,
   PostDetails,
-  ResourceTagsResponse,
+  PostTagDetails,
   ViewportBounds,
 } from "@/types/mapky";
 
@@ -53,12 +53,12 @@ export async function fetchPlacePosts(
   return data;
 }
 
-export async function fetchResourceTagsByUri(
-  uri: string,
-): Promise<ResourceTagsResponse> {
-  const { data } = await nexusClient.get<ResourceTagsResponse>(
-    "/v0/resource/by-uri",
-    { params: { uri } },
+export async function fetchPlaceTags(
+  osmType: string,
+  osmId: number,
+): Promise<PostTagDetails[]> {
+  const { data } = await nexusClient.get<PostTagDetails[]>(
+    `/v0/mapky/place/${osmType}/${osmId}/tags`,
   );
   return data;
 }

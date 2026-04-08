@@ -3,7 +3,7 @@ import {
   fetchViewportPlaces,
   fetchPlaceDetail,
   fetchPlacePosts,
-  fetchResourceTagsByUri,
+  fetchPlaceTags,
 } from "./mapky";
 import { fetchUserProfile } from "./user";
 import { reverseGeocode, searchPlaces, lookupOsmElement } from "./nominatim";
@@ -37,10 +37,9 @@ export function usePlacePosts(
 }
 
 export function usePlaceTags(osmType: string, osmId: number) {
-  const uri = `https://www.openstreetmap.org/${osmType}/${osmId}`;
   return useQuery({
-    queryKey: ["resource", "tags", uri],
-    queryFn: () => fetchResourceTagsByUri(uri),
+    queryKey: ["mapky", "place", osmType, osmId, "tags"],
+    queryFn: () => fetchPlaceTags(osmType, osmId),
     enabled: !!osmType && !!osmId,
   });
 }

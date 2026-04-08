@@ -23,7 +23,7 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
     );
   }
 
-  if (!data || data.tags.length === 0) {
+  if (!data || data.length === 0) {
     return null;
   }
 
@@ -34,7 +34,7 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
         Tags
       </h4>
       <div className="flex flex-wrap gap-1.5">
-        {data.tags.map((tag) => (
+        {data.map((tag) => (
           <span
             key={tag.label}
             className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-xs"
