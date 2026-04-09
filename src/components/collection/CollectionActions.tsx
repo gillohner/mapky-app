@@ -63,11 +63,16 @@ export function CollectionActions({
       const path = `/pub/mapky.app/collections/${collectionId}`;
       await session.storage.delete(path as `/pub/${string}`);
 
-      // Optimistic cache update — remove from user's collection list
+      // Cancel in-flight fetches so they don't overwrite optimistic data
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", authorId] });
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collection", authorId, collectionId] });
+
+      // Optimistic cache update — remove from user's collection list and clear detail cache
       queryClient.setQueryData<CollectionDetails[]>(
         ["mapky", "collections", "user", authorId],
         (old) => old?.filter((c) => { const [, id] = c.id.split(":"); return id !== collectionId; }),
       );
+      queryClient.removeQueries({ queryKey: ["mapky", "collection", authorId, collectionId] });
 
       toast.success("Collection deleted");
       navigate({ to: "/collections" });
