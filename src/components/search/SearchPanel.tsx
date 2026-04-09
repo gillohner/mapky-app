@@ -284,7 +284,7 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
                       {post.kind === "review" && post.rating
                         ? `${(post.rating / 2).toFixed(1)} stars · `
                         : ""}
-                      {post.osm_canonical}
+                      <OsmPlaceName osmCanonical={post.osm_canonical} />
                     </p>
                   </div>
                 </button>
@@ -436,6 +436,16 @@ function PlaceResultList({
       })}
     </div>
   );
+}
+
+function OsmPlaceName({ osmCanonical }: { osmCanonical: string }) {
+  const parsed = parseOsmCanonical(osmCanonical);
+  const { data: nominatim } = useOsmLookup(
+    parsed?.osmType ?? "",
+    parsed?.osmId ?? 0,
+    !!parsed,
+  );
+  return <>{nominatim?.name || nominatim?.display_name?.split(",")[0] || osmCanonical}</>;
 }
 
 function TagPlaceResult({
