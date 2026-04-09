@@ -48,6 +48,8 @@ function RatingStars({ rating }: { rating: number }) {
 }
 
 interface PlaceHeaderProps {
+  osmType: string;
+  osmId: number;
   place?: PlaceDetails;
   /** Fallback name from tile click (used before Nominatim loads) */
   tileName?: string;
@@ -55,9 +57,7 @@ interface PlaceHeaderProps {
   tileKind?: string;
 }
 
-export function PlaceHeader({ place, tileName, tileKind }: PlaceHeaderProps) {
-  const osmType = place?.osm_type ?? "node";
-  const osmId = place?.osm_id ?? 0;
+export function PlaceHeader({ osmType, osmId, place, tileName, tileKind }: PlaceHeaderProps) {
   const needsLookup = !tileName || !!place;
   const { data: nominatim, isLoading: nameLoading } = useOsmLookup(
     osmType,

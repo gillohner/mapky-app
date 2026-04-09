@@ -5,6 +5,7 @@ import { MapView } from "@/components/map/MapView";
 import { MapkyPlacesLayer } from "@/components/map/MapkyPlacesLayer";
 import { PoiClickHandler } from "@/components/map/PoiClickHandler";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
+import { CollectionOverlays } from "@/components/map/CollectionOverlays";
 import { IconRail } from "@/components/sidebar/IconRail";
 import { SearchBar } from "@/components/sidebar/SearchBar";
 import { Menu } from "@/components/menu/Menu";
@@ -21,6 +22,7 @@ function RootLayout() {
         <div className="relative h-dvh w-screen overflow-hidden">
           <MapView />
           <MapkyPlacesLayer />
+          <CollectionOverlays />
           <PoiClickHandler />
           <SelectedPlaceMarker />
           <IconRail />

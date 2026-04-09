@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
-import { X, ChevronUp, ChevronDown, ExternalLink } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, ChevronUp, ChevronDown, ChevronLeft } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { usePlaceDetail, useOsmLookup } from "@/lib/api/hooks";
+import { usePlaceDetail, useCollection } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
+import { useMapStore } from "@/stores/map-store";
 import {
   encodeFeatureId,
   sourceLayersForType,
@@ -11,6 +12,7 @@ import { PlaceHeader } from "./PlaceHeader";
 import { PlacePosts } from "./PlacePosts";
 import { PlaceActions } from "./PlaceActions";
 import { PlaceTags } from "./PlaceTags";
+import { PlaceCollections } from "./PlaceCollections";
 
 interface PlacePanelProps {
   osmType: string;
@@ -21,6 +23,10 @@ interface PlacePanelProps {
   tileName?: string;
   /** Feature kind from the tile */
   tileKind?: string;
+  /** Back-navigation: collection author */
+  fromAuthor?: string;
+  /** Back-navigation: collection ID */
+  fromCollection?: string;
 }
 
 export function PlacePanel({
@@ -30,18 +36,43 @@ export function PlacePanel({
   fallbackLon,
   tileName,
   tileKind,
+  fromAuthor,
+  fromCollection,
 }: PlacePanelProps) {
   const navigate = useNavigate();
   const { data: place, isLoading, error } = usePlaceDetail(osmType, osmId);
+  const { data: parentCollection } = useCollection(
+    fromAuthor ?? "",
+    fromCollection ?? "",
+  );
   const [expanded, setExpanded] = useState(false);
   const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
   const setSelectedFeature = useUiStore((s) => s.setSelectedFeature);
+
+  const map = useMapStore((s) => s.map);
 
   // Signal sidebar open/close for map padding
   useEffect(() => {
     setSidebarOpen(true);
     return () => setSidebarOpen(false);
   }, [setSidebarOpen]);
+
+  // Fly to place when coordinates are available (from search params or API).
+  // Delay past the sidebar padding easeTo (300ms) so it doesn't get cancelled.
+  const flyDone = useRef(false);
+  useEffect(() => {
+    if (!map) return;
+    if (flyDone.current) return;
+    // Use fallback coords first, then place API coords when they load
+    const lat = fallbackLat ?? place?.lat;
+    const lon = fallbackLon ?? place?.lon;
+    if (lat == null || lon == null) return;
+    flyDone.current = true;
+    const t = setTimeout(() => {
+      map.flyTo({ center: [lon, lat], zoom: 17, duration: 1500 });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [map, fallbackLat, fallbackLon, place?.lat, place?.lon]);
 
   // Highlight the selected tile feature
   useEffect(() => {
@@ -69,9 +100,24 @@ export function PlacePanel({
       <div className="pointer-events-auto absolute inset-y-0 left-12 z-10 hidden w-[380px] flex-col border-r border-border bg-background shadow-xl md:flex">
         {/* Close button */}
         <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted">
-            Place
-          </span>
+          {fromCollection && fromAuthor ? (
+            <button
+              onClick={() =>
+                navigate({
+                  to: "/collection/$authorId/$collectionId",
+                  params: { authorId: fromAuthor, collectionId: fromCollection },
+                })
+              }
+              className="flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              {parentCollection?.name ?? "Collection"}
+            </button>
+          ) : (
+            <span className="text-xs font-medium uppercase tracking-wide text-muted">
+              Place
+            </span>
+          )}
           <button
             onClick={close}
             className="rounded-lg p-1 text-muted transition-colors hover:bg-surface hover:text-foreground"
@@ -83,14 +129,27 @@ export function PlacePanel({
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {isLoading && <LoadingSkeleton />}
-          {place && <PlaceContent osmType={osmType} osmId={osmId} place={place} />}
-          {error && (
-            <NotIndexedContent
-              osmType={osmType}
-              osmId={osmId}
-              tileName={tileName}
-              tileKind={tileKind}
-            />
+          {!isLoading && (
+            <div className="space-y-4">
+              <PlaceHeader osmType={osmType} osmId={osmId} place={place ?? undefined} tileName={tileName} tileKind={tileKind} />
+              <div className="border-t border-border pt-4">
+                <PlaceActions osmType={osmType} osmId={osmId} />
+              </div>
+              {(place || !error) && <PlaceTags osmType={osmType} osmId={osmId} />}
+              <div className="border-t border-border pt-4">
+                <h3 className="mb-2 text-sm font-medium text-foreground">
+                  Posts & Reviews
+                </h3>
+                {place ? (
+                  <PlacePosts osmType={osmType} osmId={osmId} />
+                ) : (
+                  <p className="py-4 text-center text-sm text-muted">
+                    Be the first to review this place on Mapky!
+                  </p>
+                )}
+              </div>
+              <PlaceCollections osmType={osmType} osmId={osmId} />
+            </div>
           )}
         </div>
       </div>
@@ -103,16 +162,24 @@ export function PlacePanel({
       >
         <div className="flex-shrink-0 px-4 pt-2 pb-3">
           <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
+          {fromCollection && fromAuthor && (
+            <button
+              onClick={() =>
+                navigate({
+                  to: "/collection/$authorId/$collectionId",
+                  params: { authorId: fromAuthor, collectionId: fromCollection },
+                })
+              }
+              className="mb-1 flex items-center gap-1 text-xs text-muted hover:text-foreground"
+            >
+              <ChevronLeft className="h-3 w-3" />
+              {parentCollection?.name ?? "Collection"}
+            </button>
+          )}
 
           {isLoading && <LoadingSkeleton />}
-          {place && <PlaceHeader place={place} />}
-          {error && (
-            <NotIndexedHeader
-              osmType={osmType}
-              osmId={osmId}
-              tileName={tileName}
-              tileKind={tileKind}
-            />
+          {!isLoading && (
+            <PlaceHeader osmType={osmType} osmId={osmId} place={place ?? undefined} tileName={tileName} tileKind={tileKind} />
           )}
 
           <div className="absolute right-2 top-2 flex items-center gap-1">
@@ -137,25 +204,25 @@ export function PlacePanel({
 
         {expanded && (
           <div className="flex-1 overflow-y-auto border-t border-border px-4 py-3">
-            {place && (
-              <div className="space-y-4">
-                <PlaceActions osmType={osmType} osmId={osmId} />
-                <div className="border-t border-border pt-4">
-                  <h3 className="mb-2 text-sm font-medium text-foreground">
-                    Posts & Reviews
-                  </h3>
-                  <PlacePosts osmType={osmType} osmId={osmId} />
-                </div>
-              </div>
-            )}
-            {error && (
-              <div className="space-y-3">
-                <PlaceActions osmType={osmType} osmId={osmId} />
+            <div className="space-y-4">
+              <PlaceActions osmType={osmType} osmId={osmId} />
+              {place ? (
+                <>
+                  <PlaceTags osmType={osmType} osmId={osmId} />
+                  <div className="border-t border-border pt-4">
+                    <h3 className="mb-2 text-sm font-medium text-foreground">
+                      Posts & Reviews
+                    </h3>
+                    <PlacePosts osmType={osmType} osmId={osmId} />
+                  </div>
+                  <PlaceCollections osmType={osmType} osmId={osmId} />
+                </>
+              ) : (
                 <p className="text-center text-sm text-muted">
                   Be the first to review this place on Mapky!
                 </p>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -173,132 +240,3 @@ function LoadingSkeleton() {
   );
 }
 
-function PlaceContent({
-  osmType,
-  osmId,
-  place,
-}: {
-  osmType: string;
-  osmId: number;
-  place: import("@/types/mapky").PlaceDetails;
-}) {
-  return (
-    <div className="space-y-4">
-      <PlaceHeader place={place} />
-      <div className="border-t border-border pt-4">
-        <PlaceActions osmType={osmType} osmId={osmId} />
-      </div>
-      <PlaceTags osmType={osmType} osmId={osmId} />
-      <div className="border-t border-border pt-4">
-        <h3 className="mb-2 text-sm font-medium text-foreground">
-          Posts & Reviews
-        </h3>
-        <PlacePosts osmType={osmType} osmId={osmId} />
-      </div>
-    </div>
-  );
-}
-
-
-/** Build a display name from Nominatim address fields. */
-function buildAddressName(address: Record<string, string>): string | null {
-  const num = address.house_number;
-  const road = address.road;
-  if (num && road) return `${num} ${road}`;
-  if (road) return road;
-  // Fall back to first meaningful address field
-  for (const key of ["hamlet", "village", "suburb", "town", "city"]) {
-    if (address[key]) return address[key];
-  }
-  return null;
-}
-
-function NotIndexedHeader({
-  osmType,
-  osmId,
-  tileName,
-  tileKind,
-}: {
-  osmType: string;
-  osmId: number;
-  tileName?: string;
-  tileKind?: string;
-}) {
-  // Only fetch from Nominatim if the tile didn't provide a name
-  const needsLookup = !tileName;
-  const { data: lookup, isLoading } = useOsmLookup(osmType, osmId, needsLookup);
-
-  const placeName =
-    tileName ||
-    lookup?.name ||
-    (lookup?.address && buildAddressName(lookup.address)) ||
-    lookup?.display_name?.split(",")[0] ||
-    `${osmType}/${osmId}`;
-
-  const locationType =
-    tileKind?.replace(/_/g, " ") ||
-    lookup?.type?.replace(/_/g, " ") ||
-    null;
-
-  const osmUrl = `https://www.openstreetmap.org/${osmType}/${osmId}`;
-
-  return (
-    <div>
-      <h2 className="pr-16 text-lg font-semibold text-foreground">
-        {isLoading ? (
-          <span className="inline-block h-5 w-40 animate-pulse rounded bg-border" />
-        ) : (
-          placeName
-        )}
-      </h2>
-      {locationType && (
-        <span className="mt-1 inline-block rounded bg-surface px-2 py-0.5 text-xs capitalize text-muted">
-          {locationType}
-        </span>
-      )}
-      {lookup?.display_name && (
-        <p className="mt-1 pr-16 text-xs text-muted line-clamp-1">
-          {lookup.display_name}
-        </p>
-      )}
-      <div className="mt-2 flex items-center gap-2">
-        <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">
-          Not yet on Mapky
-        </span>
-        <a
-          href={osmUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 text-xs text-muted hover:text-foreground"
-        >
-          <ExternalLink className="h-3 w-3" />
-          OSM
-        </a>
-      </div>
-    </div>
-  );
-}
-
-function NotIndexedContent({
-  osmType,
-  osmId,
-  tileName,
-  tileKind,
-}: {
-  osmType: string;
-  osmId: number;
-  tileName?: string;
-  tileKind?: string;
-}) {
-  return (
-    <div className="space-y-4">
-      <NotIndexedHeader osmType={osmType} osmId={osmId} tileName={tileName} tileKind={tileKind} />
-      <div className="border-t border-border pt-4">
-        <PlaceActions osmType={osmType} osmId={osmId} />
-      </div>
-      <p className="text-center text-sm text-muted">
-        Be the first to review this place on Mapky!
-      </p>
-    </div>
-  );
-}

@@ -6,17 +6,28 @@ export const Route = createFileRoute("/place/$osmType/$osmId")({
   component: PlaceDetailRoute,
   validateSearch: (
     search: Record<string, unknown>,
-  ): { lat?: number; lon?: number; name?: string; kind?: string } => ({
+  ): {
+    lat?: number;
+    lon?: number;
+    name?: string;
+    kind?: string;
+    from?: string;
+    fromAuthor?: string;
+    fromCollection?: string;
+  } => ({
     lat: search.lat ? Number(search.lat) : undefined,
     lon: search.lon ? Number(search.lon) : undefined,
     name: search.name ? String(search.name) : undefined,
     kind: search.kind ? String(search.kind) : undefined,
+    from: search.from ? String(search.from) : undefined,
+    fromAuthor: search.fromAuthor ? String(search.fromAuthor) : undefined,
+    fromCollection: search.fromCollection ? String(search.fromCollection) : undefined,
   }),
 });
 
 function PlaceDetailRoute() {
   const { osmType, osmId } = Route.useParams();
-  const { lat, lon, name, kind } = Route.useSearch();
+  const { lat, lon, name, kind, from, fromAuthor, fromCollection } = Route.useSearch();
 
   return (
     <>
@@ -28,6 +39,8 @@ function PlaceDetailRoute() {
         fallbackLon={lon}
         tileName={name}
         tileKind={kind}
+        fromCollection={from === "collection" ? fromCollection : undefined}
+        fromAuthor={from === "collection" ? fromAuthor : undefined}
       />
     </>
   );

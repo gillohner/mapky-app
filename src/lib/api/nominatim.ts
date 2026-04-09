@@ -18,6 +18,8 @@ export interface NominatimResult {
   type: string | null;
   category: string | null;
   address: Record<string, string>;
+  lat: number | null;
+  lon: number | null;
 }
 
 export async function reverseGeocode(
@@ -46,6 +48,8 @@ export async function reverseGeocode(
     type: data.type || null,
     category: data.category || data.class || null,
     address: data.address ?? {},
+    lat: data.lat ? Number(data.lat) : null,
+    lon: data.lon ? Number(data.lon) : null,
   };
 
   setCache(cacheKey, result);
@@ -97,6 +101,8 @@ export async function searchNearby(
     type: r.type || null,
     category: r.category || r.class || null,
     address: r.address ?? {},
+    lat: r.lat ? Number(r.lat) : null,
+    lon: r.lon ? Number(r.lon) : null,
   };
 
   setCache(cacheKey, result);
@@ -189,6 +195,8 @@ export async function lookupOsmElement(
       type: null,
       category: null,
       address: {},
+      lat: null,
+      lon: null,
     };
     setCache(cacheKey, empty);
     return empty;
@@ -203,6 +211,8 @@ export async function lookupOsmElement(
     type: r.type || null,
     category: r.category || r.class || null,
     address: r.address ?? {},
+    lat: r.lat ? Number(r.lat) : null,
+    lon: r.lon ? Number(r.lon) : null,
   };
 
   setCache(cacheKey, result);

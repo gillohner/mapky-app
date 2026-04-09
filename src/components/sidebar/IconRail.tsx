@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Menu as MenuIcon, Sun, Moon, Eye, EyeOff, User } from "lucide-react";
+import { Menu as MenuIcon, Sun, Moon, Eye, EyeOff, User, FolderHeart } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
@@ -27,6 +28,7 @@ function RailButton({
 
 export function IconRail() {
   const { isAuthenticated, publicKey } = useAuth();
+  const navigate = useNavigate();
   const toggleMenu = useUiStore((s) => s.toggleMenu);
   const placesLayerVisible = useUiStore((s) => s.placesLayerVisible);
   const togglePlacesLayer = useUiStore((s) => s.togglePlacesLayer);
@@ -83,6 +85,16 @@ export function IconRail() {
           <EyeOff className="h-5 w-5" />
         )}
       </RailButton>
+
+      {/* Collections */}
+      {isAuthenticated && (
+        <RailButton
+          onClick={() => navigate({ to: "/collections" })}
+          title="Collections"
+        >
+          <FolderHeart className="h-5 w-5" />
+        </RailButton>
+      )}
     </div>
   );
 }

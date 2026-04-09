@@ -5,6 +5,11 @@ import {
   fetchPlacePosts,
   fetchPlaceTags,
   fetchPostTags,
+  fetchCollection,
+  fetchUserCollections,
+  fetchCollectionsForPlace,
+  fetchCollectionTags,
+  searchByTag,
 } from "./mapky";
 import { fetchUserProfile } from "./user";
 import { reverseGeocode, searchPlaces, lookupOsmElement } from "./nominatim";
@@ -83,6 +88,47 @@ export function useOsmLookup(
     enabled,
     staleTime: Infinity,
     gcTime: Infinity,
+  });
+}
+
+export function useCollection(authorId: string, collectionId: string) {
+  return useQuery({
+    queryKey: ["mapky", "collection", authorId, collectionId],
+    queryFn: () => fetchCollection(authorId, collectionId),
+    enabled: !!authorId && !!collectionId,
+  });
+}
+
+export function useUserCollections(userId: string | null) {
+  return useQuery({
+    queryKey: ["mapky", "collections", "user", userId],
+    queryFn: () => fetchUserCollections(userId!),
+    enabled: !!userId,
+  });
+}
+
+export function useCollectionTags(authorId: string, collectionId: string) {
+  return useQuery({
+    queryKey: ["mapky", "collection", authorId, collectionId, "tags"],
+    queryFn: () => fetchCollectionTags(authorId, collectionId),
+    enabled: !!authorId && !!collectionId,
+  });
+}
+
+export function useCollectionsForPlace(osmType: string, osmId: number) {
+  return useQuery({
+    queryKey: ["mapky", "collections", "place", osmType, osmId],
+    queryFn: () => fetchCollectionsForPlace(osmType, osmId),
+    enabled: !!osmType && !!osmId,
+  });
+}
+
+export function useTagSearch(query: string) {
+  return useQuery({
+    queryKey: ["mapky", "search", "tags", query],
+    queryFn: () => searchByTag(query),
+    enabled: query.length >= 2,
+    staleTime: 5 * 60_000,
   });
 }
 

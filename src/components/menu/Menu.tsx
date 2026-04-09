@@ -99,14 +99,17 @@ export function Menu() {
 
           <div className="mx-1 my-2 border-t border-border" />
 
-          {/* Future items */}
+          {/* Collections */}
           <button
-            disabled
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted opacity-50"
+            onClick={() => {
+              setMenuOpen(false);
+              navigate({ to: "/collections" });
+            }}
+            disabled={!isAuthenticated}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-surface disabled:text-muted disabled:opacity-50"
           >
-            <FolderHeart className="h-5 w-5" />
+            <FolderHeart className="h-5 w-5 text-muted" />
             Collections
-            <span className="ml-auto text-xs">Soon</span>
           </button>
 
           <button

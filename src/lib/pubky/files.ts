@@ -50,7 +50,7 @@ function generateTimestampId(): string {
 async function computeBlobId(data: Uint8Array): Promise<string> {
   // Use SubtleCrypto SHA-256 as a fallback since BLAKE3 isn't in Web Crypto.
   // The homeserver doesn't validate blob IDs, so SHA-256 is fine for uniqueness.
-  const hash = await crypto.subtle.digest("SHA-256", data);
+  const hash = await crypto.subtle.digest("SHA-256", data.buffer as ArrayBuffer);
   const halfLen = Math.floor(new Uint8Array(hash).length / 2);
   return crockfordEncode(new Uint8Array(hash).slice(0, halfLen));
 }

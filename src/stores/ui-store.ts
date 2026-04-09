@@ -12,6 +12,24 @@ export interface PendingPoiClick {
   sourceLayer?: string;
 }
 
+export interface CollectionOverlayEntry {
+  authorId: string;
+  collectionId: string;
+  color: string;
+}
+
+const OVERLAY_COLORS = [
+  "#3b82f6", "#a855f7", "#f97316", "#ec4899",
+  "#06b6d4", "#eab308", "#ef4444",
+];
+
+let colorIndex = 0;
+function nextColor(): string {
+  const c = OVERLAY_COLORS[colorIndex % OVERLAY_COLORS.length];
+  colorIndex++;
+  return c;
+}
+
 export interface SelectedFeature {
   osmType: string;
   osmId: number;
@@ -42,6 +60,11 @@ interface UiStore {
 
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+
+  activeCollectionOverlays: Map<string, CollectionOverlayEntry>;
+  addCollectionOverlay: (authorId: string, collectionId: string) => void;
+  removeCollectionOverlay: (collectionId: string) => void;
+  toggleCollectionOverlay: (authorId: string, collectionId: string) => void;
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -63,4 +86,30 @@ export const useUiStore = create<UiStore>((set) => ({
 
   sidebarOpen: false,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+
+  activeCollectionOverlays: new Map(),
+  addCollectionOverlay: (authorId, collectionId) =>
+    set((s) => {
+      if (s.activeCollectionOverlays.has(collectionId)) return s;
+      const next = new Map(s.activeCollectionOverlays);
+      next.set(collectionId, { authorId, collectionId, color: nextColor() });
+      return { activeCollectionOverlays: next };
+    }),
+  removeCollectionOverlay: (collectionId) =>
+    set((s) => {
+      if (!s.activeCollectionOverlays.has(collectionId)) return s;
+      const next = new Map(s.activeCollectionOverlays);
+      next.delete(collectionId);
+      return { activeCollectionOverlays: next };
+    }),
+  toggleCollectionOverlay: (authorId, collectionId) =>
+    set((s) => {
+      const next = new Map(s.activeCollectionOverlays);
+      if (next.has(collectionId)) {
+        next.delete(collectionId);
+      } else {
+        next.set(collectionId, { authorId, collectionId, color: nextColor() });
+      }
+      return { activeCollectionOverlays: next };
+    }),
 }));

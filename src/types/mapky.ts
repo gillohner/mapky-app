@@ -49,6 +49,22 @@ export interface ResourceTagsResponse {
   tags: PostTagDetails[];
 }
 
+export interface CollectionDetails {
+  id: string;
+  author_id: string;
+  name: string;
+  description: string | null;
+  items: string[];
+  image_uri: string | null;
+  indexed_at: number;
+}
+
+export interface TagSearchResult {
+  places: PlaceDetails[];
+  collections: CollectionDetails[];
+  posts: PostDetails[];
+}
+
 export interface NexusUserDetails {
   id: string;
   name: string;

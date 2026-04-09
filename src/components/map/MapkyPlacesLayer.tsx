@@ -3,7 +3,7 @@ import type maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useViewportPlaces } from "@/lib/api/hooks";
-import { decodeFeatureId } from "@/lib/map/feature-id";
+
 import type { PlaceDetails, ViewportBounds } from "@/types/mapky";
 
 const SOURCE = "mapky-places";
@@ -213,7 +213,7 @@ export function MapkyPlacesLayer() {
     };
   }, [map]);
 
-  const { data: places } = useViewportPlaces(bounds);
+  const { data: places } = useViewportPlaces(visible ? bounds : null);
 
   // Update GeoJSON source
   useEffect(() => {
@@ -244,7 +244,7 @@ export function MapkyPlacesLayer() {
 
   // Toggle layer visibility
   useEffect(() => {
-    if (!map || !layerReady.current) return;
+    if (!map) return;
     const vis = visible ? "visible" : "none";
     for (const id of [CLUSTER_LAYER, CLUSTER_COUNT, POINT_RING, POINT_DOT]) {
       if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
