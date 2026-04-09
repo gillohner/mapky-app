@@ -11,6 +11,7 @@ import {
   type UploadedFile,
 } from "@/lib/pubky/files";
 import { toast } from "sonner";
+import { resolveFileUrl } from "@/lib/api/user";
 import type { PostDetails, PlaceDetails } from "@/types/mapky";
 
 interface PostFormProps {
@@ -20,6 +21,8 @@ interface PostFormProps {
   onClose: () => void;
   parentUri?: string;
   parentPreview?: string;
+  /** Pass an existing post to edit it instead of creating a new one */
+  editPost?: PostDetails;
 }
 
 interface PendingImage {
@@ -27,18 +30,19 @@ interface PendingImage {
   previewUrl: string;
 }
 
-export function PostForm({ osmType, osmId, mode, onClose, parentUri, parentPreview }: PostFormProps) {
+export function PostForm({ osmType, osmId, mode, onClose, parentUri, parentPreview, editPost }: PostFormProps) {
   const { session, publicKey } = useAuth();
   const queryClient = useQueryClient();
-  const [content, setContent] = useState("");
-  const [rating, setRating] = useState<number>(0);
+  const [content, setContent] = useState(editPost?.content ?? "");
+  const [rating, setRating] = useState<number>(editPost?.rating ?? 0);
   const [hoverRating, setHoverRating] = useState(0);
   const [images, setImages] = useState<PendingImage[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<string[]>(editPost?.attachments ?? []);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const hasContent = content.trim().length > 0 || images.length > 0;
+  const hasContent = content.trim().length > 0 || images.length > 0 || existingAttachments.length > 0;
   const canSubmit = mode === "review" ? rating > 0 : hasContent;
 
   const addImages = (files: FileList | null) => {
@@ -72,33 +76,39 @@ export function PostForm({ osmType, osmId, mode, onClose, parentUri, parentPrevi
     setSubmitting(true);
 
     try {
-      // Upload images first
-      const attachments: string[] = [];
+      // Upload new images
+      const newAttachments: string[] = [];
       for (const img of images) {
         const uploaded: UploadedFile = await uploadFile(
           session,
           publicKey,
           img.file,
         );
-        attachments.push(uploaded.fileUri);
+        newAttachments.push(uploaded.fileUri);
       }
+
+      const allAttachments = [...existingAttachments, ...newAttachments];
 
       const result = createPost(publicKey, osmType, osmId, {
         kind: mode,
         content: content.trim() || undefined,
         rating: mode === "review" ? rating : undefined,
-        attachments: attachments.length > 0 ? attachments : undefined,
-        parent: parentUri,
+        attachments: allAttachments.length > 0 ? allAttachments : undefined,
+        parent: parentUri ?? editPost?.parent_uri ?? undefined,
       });
 
-      await session.storage.putText(result.path as `/pub/${string}`, result.json);
+      // When editing, write to the existing path; when creating, use the generated path
+      const writePath = editPost
+        ? `/pub/mapky.app/posts/${editPost.id}`
+        : result.path;
+      await session.storage.putText(writePath as `/pub/${string}`, result.json);
 
       // Cancel in-flight fetches so they don't overwrite optimistic data
       await queryClient.cancelQueries({ queryKey: ["mapky", "place", osmType, osmId, "posts"] });
       await queryClient.cancelQueries({ queryKey: ["mapky", "place", osmType, osmId] });
 
       // Optimistic cache update
-      const postId = result.path.split("/").pop()!;
+      const postId = editPost?.id ?? result.path.split("/").pop()!;
       const optimisticPost: PostDetails = {
         id: postId,
         author_id: publicKey,
@@ -106,27 +116,37 @@ export function PostForm({ osmType, osmId, mode, onClose, parentUri, parentPrevi
         content: content.trim() || null,
         rating: mode === "review" ? rating : null,
         kind: mode,
-        parent_uri: parentUri ?? null,
-        attachments,
-        indexed_at: Math.floor(Date.now() / 1000),
+        parent_uri: parentUri ?? editPost?.parent_uri ?? null,
+        attachments: allAttachments,
+        indexed_at: editPost?.indexed_at ?? Math.floor(Date.now() / 1000),
       };
-      queryClient.setQueryData<PostDetails[]>(
-        ["mapky", "place", osmType, osmId, "posts", undefined],
-        (old) => (old ? [optimisticPost, ...old] : [optimisticPost]),
-      );
-      queryClient.setQueryData<PlaceDetails>(
-        ["mapky", "place", osmType, osmId],
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            review_count: mode === "review" ? old.review_count + 1 : old.review_count,
-            photo_count: old.photo_count + attachments.length,
-          };
-        },
-      );
 
-      toast.success(mode === "review" ? "Review published" : "Post published");
+      if (editPost) {
+        // Replace existing post in cache
+        queryClient.setQueryData<PostDetails[]>(
+          ["mapky", "place", osmType, osmId, "posts", undefined],
+          (old) => old?.map((p) => p.id === editPost.id && p.author_id === editPost.author_id ? optimisticPost : p),
+        );
+      } else {
+        // Prepend new post
+        queryClient.setQueryData<PostDetails[]>(
+          ["mapky", "place", osmType, osmId, "posts", undefined],
+          (old) => (old ? [optimisticPost, ...old] : [optimisticPost]),
+        );
+        queryClient.setQueryData<PlaceDetails>(
+          ["mapky", "place", osmType, osmId],
+          (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              review_count: mode === "review" ? old.review_count + 1 : old.review_count,
+              photo_count: old.photo_count + newAttachments.length,
+            };
+          },
+        );
+      }
+
+      toast.success(editPost ? "Post updated" : mode === "review" ? "Review published" : "Post published");
       // Cleanup preview URLs
       for (const img of images) URL.revokeObjectURL(img.previewUrl);
       onClose();
@@ -148,7 +168,7 @@ export function PostForm({ osmType, osmId, mode, onClose, parentUri, parentPrevi
     <div className="space-y-3 rounded-lg border border-border bg-surface p-3">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-foreground">
-          {parentUri ? "Reply" : mode === "review" ? "Write a Review" : "Write a Post"}
+          {editPost ? "Edit" : parentUri ? "Reply" : mode === "review" ? "Write a Review" : "Write a Post"}
         </h4>
         <button
           onClick={onClose}
@@ -223,7 +243,31 @@ export function PostForm({ osmType, osmId, mode, onClose, parentUri, parentPrevi
         className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
       />
 
-      {/* Image previews */}
+      {/* Existing attachments (editing) */}
+      {existingAttachments.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {existingAttachments.map((uri, i) => {
+            const url = resolveFileUrl(uri);
+            return (
+              <div key={uri} className="group relative">
+                {url ? (
+                  <img src={url} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-surface ring-1 ring-border text-[10px] text-muted">file</div>
+                )}
+                <button
+                  onClick={() => setExistingAttachments((prev) => prev.filter((_, j) => j !== i))}
+                  className="absolute -right-1.5 -top-1.5 rounded-full bg-background p-0.5 text-muted shadow-sm ring-1 ring-border opacity-0 group-hover:opacity-100 transition-opacity hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* New image previews */}
       {images.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {images.map((img, i) => (
@@ -280,7 +324,7 @@ export function PostForm({ osmType, osmId, mode, onClose, parentUri, parentPrevi
           ) : (
             <Send className="h-3.5 w-3.5" />
           )}
-          {submitting ? "Uploading..." : "Publish"}
+          {submitting ? "Uploading..." : editPost ? "Save" : "Publish"}
         </button>
       </div>
     </div>

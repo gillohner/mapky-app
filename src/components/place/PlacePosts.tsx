@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { Star, FileDown, ImageOff, Reply, MessageSquare, ChevronLeft } from "lucide-react";
+import { Star, FileDown, ImageOff, Reply, MessageSquare, ChevronLeft, Pencil } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { usePlacePosts } from "@/lib/api/hooks";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -38,14 +38,14 @@ function Thumbnail({ item, onClick }: { item: MediaItem; onClick: () => void }) 
 
   if (failed) {
     return (
-      <button onClick={onClick} className="flex h-20 w-20 items-center justify-center rounded-lg bg-surface ring-1 ring-border">
+      <button onClick={(e) => { e.stopPropagation(); onClick(); }} className="flex h-20 w-20 items-center justify-center rounded-lg bg-surface ring-1 ring-border">
         <ImageOff className="h-5 w-5 text-muted" />
       </button>
     );
   }
 
   return (
-    <button onClick={onClick} className="overflow-hidden rounded-lg ring-1 ring-border transition-shadow hover:ring-accent">
+    <button onClick={(e) => { e.stopPropagation(); onClick(); }} className="overflow-hidden rounded-lg ring-1 ring-border transition-shadow hover:ring-accent">
       {item.type === "image" ? (
         <img src={item.url} alt="" className="h-20 w-20 object-cover" loading="lazy" onError={onError} />
       ) : (
@@ -88,6 +88,7 @@ function PostAttachments({ attachments }: { attachments: string[] }) {
               key={i}
               href={item.url}
               download
+              onClick={(e) => e.stopPropagation()}
               className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
             >
               <FileDown className="h-3 w-3" />
@@ -146,14 +147,30 @@ function PostContent({
   replyMap: Map<string, PostDetails[]>;
   onOpenThread: (key: string) => void;
 }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, publicKey } = useAuth();
   const [replyOpen, setReplyOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const preview = post.content
     ? post.content.slice(0, 60) + (post.content.length > 60 ? "..." : "")
     : post.kind === "review" ? "Review" : "Post";
 
   const replyCount = countDescendants(ck(post), replyMap);
+  const isOwner = publicKey === post.author_id;
+
+  if (editOpen) {
+    return (
+      <div className={depth > 0 ? "ml-5 border-l-2 border-border pl-2.5" : ""} onClick={(e) => e.stopPropagation()}>
+        <PostForm
+          osmType={osmType}
+          osmId={osmId}
+          mode={post.kind}
+          onClose={() => setEditOpen(false)}
+          editPost={post}
+        />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -196,12 +213,19 @@ function PostContent({
             <p className="mt-1 text-sm text-foreground">{post.content}</p>
           )}
           {post.attachments.length > 0 && (
-            <div onClick={(e) => e.stopPropagation()}>
-              <PostAttachments attachments={post.attachments} />
-            </div>
+            <PostAttachments attachments={post.attachments} />
           )}
           <div className="mt-1 flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
             <PostTags authorId={post.author_id} postId={post.id} />
+            {isOwner && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setEditOpen(true); }}
+                className="flex items-center gap-1 text-[11px] text-muted transition-colors hover:text-accent"
+              >
+                <Pencil className="h-3 w-3" />
+                Edit
+              </button>
+            )}
             {isAuthenticated && !replyOpen && (
               <button
                 onClick={(e) => { e.stopPropagation(); setReplyOpen(true); }}
@@ -225,7 +249,7 @@ function PostContent({
       </div>
 
       {replyOpen && (
-        <div className={depth > 0 ? "ml-5 border-l-2 border-border pl-2.5" : "ml-11"}>
+        <div className={depth > 0 ? "ml-5 border-l-2 border-border pl-2.5" : "ml-11"} onClick={(e) => e.stopPropagation()}>
           <PostForm
             osmType={osmType}
             osmId={osmId}
