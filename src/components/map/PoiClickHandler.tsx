@@ -29,6 +29,13 @@ export function PoiClickHandler() {
           lon: lng,
           name: pendingClick.name || undefined,
           kind: pendingClick.kind || undefined,
+          ...(pendingClick.fromSearch
+            ? {
+                from: "search",
+                fromSearchQuery: pendingClick.fromSearch.query,
+                fromSearchMode: pendingClick.fromSearch.mode,
+              }
+            : {}),
         },
       });
     }

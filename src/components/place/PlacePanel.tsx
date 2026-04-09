@@ -27,6 +27,10 @@ interface PlacePanelProps {
   fromAuthor?: string;
   /** Back-navigation: collection ID */
   fromCollection?: string;
+  /** Back-navigation: search query */
+  fromSearchQuery?: string;
+  /** Back-navigation: search mode */
+  fromSearchMode?: string;
 }
 
 export function PlacePanel({
@@ -38,6 +42,8 @@ export function PlacePanel({
   tileKind,
   fromAuthor,
   fromCollection,
+  fromSearchQuery,
+  fromSearchMode,
 }: PlacePanelProps) {
   const navigate = useNavigate();
   const { data: place, isLoading, error } = usePlaceDetail(osmType, osmId);
@@ -100,7 +106,20 @@ export function PlacePanel({
       <div className="pointer-events-auto absolute inset-y-0 left-12 z-10 hidden w-[380px] flex-col border-r border-border bg-background shadow-xl md:flex">
         {/* Close button */}
         <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          {fromCollection && fromAuthor ? (
+          {fromSearchQuery ? (
+            <button
+              onClick={() =>
+                navigate({
+                  to: "/search",
+                  search: { q: fromSearchQuery, mode: (fromSearchMode as "places" | "tags") ?? "places" },
+                })
+              }
+              className="flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Search results
+            </button>
+          ) : fromCollection && fromAuthor ? (
             <button
               onClick={() =>
                 navigate({
@@ -162,7 +181,20 @@ export function PlacePanel({
       >
         <div className="flex-shrink-0 px-4 pt-2 pb-3">
           <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
-          {fromCollection && fromAuthor && (
+          {fromSearchQuery ? (
+            <button
+              onClick={() =>
+                navigate({
+                  to: "/search",
+                  search: { q: fromSearchQuery, mode: (fromSearchMode as "places" | "tags") ?? "places" },
+                })
+              }
+              className="mb-1 flex items-center gap-1 text-xs text-muted hover:text-foreground"
+            >
+              <ChevronLeft className="h-3 w-3" />
+              Search results
+            </button>
+          ) : fromCollection && fromAuthor ? (
             <button
               onClick={() =>
                 navigate({
@@ -175,7 +207,7 @@ export function PlacePanel({
               <ChevronLeft className="h-3 w-3" />
               {parentCollection?.name ?? "Collection"}
             </button>
-          )}
+          ) : null}
 
           {isLoading && <LoadingSkeleton />}
           {!isLoading && (

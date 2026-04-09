@@ -156,6 +156,63 @@ export async function searchPlaces(
   return results;
 }
 
+function parseSearchResults(data: Record<string, unknown>[]): NominatimSearchResult[] {
+  return data.map(
+    (r) =>
+      ({
+        osm_type: String(r.osm_type),
+        osm_id: Number(r.osm_id),
+        name: String(r.name || String(r.display_name).split(",")[0]),
+        display_name: String(r.display_name),
+        type: String(r.type || ""),
+        category: String(r.category || r.class || ""),
+        lat: Number(r.lat),
+        lon: Number(r.lon),
+      }) satisfies NominatimSearchResult,
+  );
+}
+
+/**
+ * Search places strictly within a viewport bounding box (bounded=1).
+ * Results sorted by distance from viewport center.
+ * Used for the "In this area" section — re-fires on map move.
+ */
+export async function searchPlacesBounded(
+  query: string,
+  viewbox: { west: number; north: number; east: number; south: number },
+  limit = 20,
+): Promise<NominatimSearchResult[]> {
+  const vb = `${viewbox.west.toFixed(4)},${viewbox.north.toFixed(4)},${viewbox.east.toFixed(4)},${viewbox.south.toFixed(4)}`;
+  const cacheKey = `search-bd:${query.toLowerCase().trim()}:${viewbox.west.toFixed(2)},${viewbox.north.toFixed(2)},${viewbox.east.toFixed(2)},${viewbox.south.toFixed(2)}`;
+  const cached = getCached<NominatimSearchResult[]>(cacheKey);
+  if (cached) return cached;
+
+  const url = new URL(`${NOMINATIM_BASE}/search`, window.location.origin);
+  url.searchParams.set("q", query);
+  url.searchParams.set("format", "json");
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("dedupe", "1");
+  url.searchParams.set("addressdetails", "0");
+  url.searchParams.set("viewbox", vb);
+  url.searchParams.set("bounded", "1");
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
+
+  const data = await res.json();
+  const results = parseSearchResults(data);
+
+  // Sort by distance from viewport center
+  const centerLat = (viewbox.north + viewbox.south) / 2;
+  const centerLon = (viewbox.west + viewbox.east) / 2;
+  const dist = (r: NominatimSearchResult) =>
+    (r.lat - centerLat) ** 2 + (r.lon - centerLon) ** 2;
+  results.sort((a, b) => dist(a) - dist(b));
+
+  setCache(cacheKey, results);
+  return results;
+}
+
 const TYPE_PREFIX: Record<string, string> = {
   node: "N",
   way: "W",

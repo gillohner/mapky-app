@@ -10,6 +10,8 @@ export interface PendingPoiClick {
   osmId?: number;
   /** Tile source-layer the click hit (for feature-state highlighting) */
   sourceLayer?: string;
+  /** Back-navigation context from search results */
+  fromSearch?: { query: string; mode: string };
 }
 
 export interface CollectionOverlayEntry {

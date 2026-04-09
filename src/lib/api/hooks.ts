@@ -12,7 +12,7 @@ import {
   searchByTag,
 } from "./mapky";
 import { fetchUserProfile } from "./user";
-import { reverseGeocode, searchPlaces, lookupOsmElement } from "./nominatim";
+import { reverseGeocode, searchPlaces, searchPlacesBounded, lookupOsmElement } from "./nominatim";
 import type { ViewportBounds } from "@/types/mapky";
 
 export function useViewportPlaces(bounds: ViewportBounds | null) {
@@ -137,6 +137,26 @@ export function useNominatimSearch(query: string) {
     queryKey: ["nominatim", "search", query],
     queryFn: () => searchPlaces(query),
     enabled: query.length >= 2,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
+  });
+}
+
+/**
+ * Bounded viewport search — re-fires when the viewbox changes (map move).
+ * Only fetches results within the viewport (bounded=1). Single Nominatim request.
+ */
+export function useBoundedNominatimSearch(
+  query: string,
+  viewbox: { west: number; north: number; east: number; south: number } | null,
+) {
+  const vbKey = viewbox
+    ? `${viewbox.west.toFixed(2)},${viewbox.north.toFixed(2)},${viewbox.east.toFixed(2)},${viewbox.south.toFixed(2)}`
+    : null;
+  return useQuery({
+    queryKey: ["nominatim", "search-bounded", query, vbKey],
+    queryFn: () => searchPlacesBounded(query, viewbox!),
+    enabled: query.length >= 2 && viewbox !== null,
     staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,
   });

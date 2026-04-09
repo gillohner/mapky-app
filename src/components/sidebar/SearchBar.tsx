@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Search, X, MapPin, Tag, FolderHeart, MessageSquare } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useNominatimSearch, useTagSearch, useOsmLookup } from "@/lib/api/hooks";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
@@ -21,6 +21,9 @@ export function SearchBar() {
   const navigate = useNavigate();
   const map = useMapStore((s) => s.map);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
+  const currentPath = useRouterState({ select: (s) => s.location.pathname });
+  const searchParams = useRouterState({ select: (s) => s.location.search });
+  const isOnSearchRoute = currentPath === "/search";
 
   const { data: placeResults, isLoading: placesLoading } =
     useNominatimSearch(mode === "places" ? query : "");
@@ -54,6 +57,18 @@ export function SearchBar() {
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
+
+  // Sync SearchBar input with /search route query param
+  useEffect(() => {
+    if (isOnSearchRoute && typeof searchParams === "object" && searchParams !== null) {
+      const sp = searchParams as Record<string, unknown>;
+      const q = sp.q ? String(sp.q) : "";
+      const m = sp.mode === "tags" ? "tags" : "places";
+      if (q && q !== input) setInput(q);
+      if (m !== mode) setMode(m as SearchMode);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnSearchRoute, searchParams]);
 
   const handleSelectPlace = (result: NominatimSearchResult) => {
     setInput("");
@@ -119,6 +134,10 @@ export function SearchBar() {
       setShowResults(false);
       inputRef.current?.blur();
     }
+    if (e.key === "Enter" && input.length >= 2) {
+      setShowResults(false);
+      navigate({ to: "/search", search: { q: input, mode } });
+    }
   };
 
   const switchMode = (newMode: SearchMode) => {
@@ -132,9 +151,9 @@ export function SearchBar() {
     mode === "places"
       ? placeResults && placeResults.length > 0
       : tagResults &&
-        (tagResults.places.length > 0 ||
-          tagResults.collections.length > 0 ||
-          tagResults.posts.length > 0);
+        ((tagResults.places?.length ?? 0) > 0 ||
+          (tagResults.collections?.length ?? 0) > 0 ||
+          (tagResults.posts?.length ?? 0) > 0);
 
   return (
     <div
@@ -203,7 +222,7 @@ export function SearchBar() {
       </div>
 
       {/* Results dropdown */}
-      {showResults && query.length >= 2 && (
+      {showResults && query.length >= 2 && !isOnSearchRoute && (
         <div className="mt-1 max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-background shadow-xl">
           {isLoading && (
             <div className="px-4 py-3 text-sm text-muted">Searching...</div>
@@ -252,7 +271,7 @@ export function SearchBar() {
           {/* Tags mode results */}
           {mode === "tags" && tagResults && (
             <>
-              {tagResults.places.length > 0 && (
+              {tagResults.places?.length > 0 && (
                 <div>
                   <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
                     Places
@@ -269,7 +288,7 @@ export function SearchBar() {
                 </div>
               )}
 
-              {tagResults.collections.length > 0 && (
+              {tagResults.collections?.length > 0 && (
                 <div>
                   <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
                     Collections
@@ -299,7 +318,7 @@ export function SearchBar() {
                 </div>
               )}
 
-              {tagResults.posts.length > 0 && (
+              {tagResults.posts?.length > 0 && (
                 <div>
                   <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
                     Posts
