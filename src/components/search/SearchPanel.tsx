@@ -423,7 +423,7 @@ function PlaceResultList({
                   </span>
                 )}
               </div>
-              <p className="truncate text-xs text-muted">
+              <p className="text-xs leading-relaxed text-muted">
                 {result.display_name}
               </p>
             </div>

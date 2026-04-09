@@ -96,7 +96,7 @@ export function PlaceHeader({ osmType, osmId, place, tileName, tileKind }: Place
       )}
 
       {nominatim?.display_name && (
-        <p className="mt-1 pr-16 text-xs text-muted line-clamp-1">
+        <p className="mt-1 pr-16 text-xs leading-relaxed text-muted">
           {nominatim.display_name}
         </p>
       )}
