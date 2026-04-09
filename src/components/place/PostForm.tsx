@@ -18,6 +18,8 @@ interface PostFormProps {
   osmId: number;
   mode: "review" | "post";
   onClose: () => void;
+  parentUri?: string;
+  parentPreview?: string;
 }
 
 interface PendingImage {
@@ -25,7 +27,7 @@ interface PendingImage {
   previewUrl: string;
 }
 
-export function PostForm({ osmType, osmId, mode, onClose }: PostFormProps) {
+export function PostForm({ osmType, osmId, mode, onClose, parentUri, parentPreview }: PostFormProps) {
   const { session, publicKey } = useAuth();
   const queryClient = useQueryClient();
   const [content, setContent] = useState("");
@@ -86,6 +88,7 @@ export function PostForm({ osmType, osmId, mode, onClose }: PostFormProps) {
         content: content.trim() || undefined,
         rating: mode === "review" ? rating : undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
+        parent: parentUri,
       });
 
       await session.storage.putText(result.path as `/pub/${string}`, result.json);
@@ -103,7 +106,7 @@ export function PostForm({ osmType, osmId, mode, onClose }: PostFormProps) {
         content: content.trim() || null,
         rating: mode === "review" ? rating : null,
         kind: mode,
-        parent_uri: null,
+        parent_uri: parentUri ?? null,
         attachments,
         indexed_at: Math.floor(Date.now() / 1000),
       };
@@ -145,7 +148,7 @@ export function PostForm({ osmType, osmId, mode, onClose }: PostFormProps) {
     <div className="space-y-3 rounded-lg border border-border bg-surface p-3">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-foreground">
-          {mode === "review" ? "Write a Review" : "Write a Post"}
+          {parentUri ? "Reply" : mode === "review" ? "Write a Review" : "Write a Post"}
         </h4>
         <button
           onClick={onClose}
@@ -154,6 +157,12 @@ export function PostForm({ osmType, osmId, mode, onClose }: PostFormProps) {
           <X className="h-4 w-4" />
         </button>
       </div>
+
+      {parentPreview && (
+        <div className="rounded-md border-l-2 border-accent/40 bg-background px-2.5 py-1.5 text-xs text-muted">
+          {parentPreview}
+        </div>
+      )}
 
       {mode === "review" && (
         <div className="flex items-center gap-0.5">

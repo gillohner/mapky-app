@@ -9,6 +9,7 @@ import {
   fetchUserCollections,
   fetchCollectionsForPlace,
   fetchCollectionTags,
+  fetchUserPosts,
   searchByTag,
 } from "./mapky";
 import { fetchUserProfile } from "./user";
@@ -104,6 +105,14 @@ export function useUserCollections(userId: string | null) {
   return useQuery({
     queryKey: ["mapky", "collections", "user", userId],
     queryFn: () => fetchUserCollections(userId!),
+    enabled: !!userId,
+  });
+}
+
+export function useUserPosts(userId: string | null) {
+  return useQuery({
+    queryKey: ["mapky", "posts", "user", userId],
+    queryFn: () => fetchUserPosts(userId!),
     enabled: !!userId,
   });
 }

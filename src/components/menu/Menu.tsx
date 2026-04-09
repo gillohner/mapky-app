@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Sun, Moon, Eye, EyeOff, LogOut, FolderHeart, Settings } from "lucide-react";
+import { Sun, Moon, Eye, EyeOff, LogOut, FolderHeart, MessageSquare, Settings } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -110,6 +110,19 @@ export function Menu() {
           >
             <FolderHeart className="h-5 w-5 text-muted" />
             Collections
+          </button>
+
+          {/* My Posts */}
+          <button
+            onClick={() => {
+              setMenuOpen(false);
+              navigate({ to: "/my-posts" });
+            }}
+            disabled={!isAuthenticated}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-surface disabled:text-muted disabled:opacity-50"
+          >
+            <MessageSquare className="h-5 w-5 text-muted" />
+            My Posts
           </button>
 
           <button

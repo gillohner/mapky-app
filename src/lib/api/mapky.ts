@@ -121,6 +121,22 @@ export async function fetchCollectionTags(
   return data;
 }
 
+export async function fetchUserPosts(
+  userId: string,
+  options?: { skip?: number; limit?: number },
+): Promise<PostDetails[]> {
+  const { data } = await nexusClient.get<PostDetails[]>(
+    `/v0/mapky/posts/user/${userId}`,
+    {
+      params: {
+        skip: options?.skip ?? 0,
+        limit: options?.limit ?? 100,
+      },
+    },
+  );
+  return data;
+}
+
 export async function searchByTag(
   query: string,
   limit = 20,

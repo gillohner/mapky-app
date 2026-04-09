@@ -31,6 +31,8 @@ interface PlacePanelProps {
   fromSearchQuery?: string;
   /** Back-navigation: search mode */
   fromSearchMode?: string;
+  /** Back-navigation: source view */
+  from?: string;
 }
 
 export function PlacePanel({
@@ -44,6 +46,7 @@ export function PlacePanel({
   fromCollection,
   fromSearchQuery,
   fromSearchMode,
+  from,
 }: PlacePanelProps) {
   const navigate = useNavigate();
   const { data: place, isLoading, error } = usePlaceDetail(osmType, osmId);
@@ -132,6 +135,14 @@ export function PlacePanel({
               <ChevronLeft className="h-3.5 w-3.5" />
               {parentCollection?.name ?? "Collection"}
             </button>
+          ) : from === "my-posts" ? (
+            <button
+              onClick={() => navigate({ to: "/my-posts" })}
+              className="flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              My Posts
+            </button>
           ) : (
             <span className="text-xs font-medium uppercase tracking-wide text-muted">
               Place
@@ -200,6 +211,14 @@ export function PlacePanel({
             >
               <ChevronLeft className="h-3 w-3" />
               {parentCollection?.name ?? "Collection"}
+            </button>
+          ) : from === "my-posts" ? (
+            <button
+              onClick={() => navigate({ to: "/my-posts" })}
+              className="mb-1 flex items-center gap-1 text-xs text-muted hover:text-foreground"
+            >
+              <ChevronLeft className="h-3 w-3" />
+              My Posts
             </button>
           ) : null}
 

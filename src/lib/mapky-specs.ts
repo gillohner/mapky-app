@@ -25,6 +25,7 @@ export function createPost(
     content?: string;
     rating?: number;
     attachments?: string[];
+    parent?: string;
   },
 ): CreatePostResult {
   const builder = new MapkySpecsBuilder(pubkyId);
@@ -38,7 +39,7 @@ export function createPost(
     opts.content || null,
     opts.rating ?? null,
     opts.attachments?.length ? opts.attachments : null,
-    null, // parent
+    opts.parent ?? null,
   );
 
   const json = JSON.stringify(result.post.toJson());

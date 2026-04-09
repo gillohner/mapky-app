@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Menu as MenuIcon, Sun, Moon, Eye, EyeOff, User, FolderHeart } from "lucide-react";
+import { Menu as MenuIcon, Sun, Moon, Eye, EyeOff, User, FolderHeart, MessageSquare } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUiStore } from "@/stores/ui-store";
@@ -93,6 +93,16 @@ export function IconRail() {
           title="Collections"
         >
           <FolderHeart className="h-5 w-5" />
+        </RailButton>
+      )}
+
+      {/* My Posts */}
+      {isAuthenticated && (
+        <RailButton
+          onClick={() => navigate({ to: "/my-posts" })}
+          title="My Posts"
+        >
+          <MessageSquare className="h-5 w-5" />
         </RailButton>
       )}
     </div>

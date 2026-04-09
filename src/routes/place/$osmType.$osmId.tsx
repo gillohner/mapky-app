@@ -16,6 +16,7 @@ export const Route = createFileRoute("/place/$osmType/$osmId")({
     fromCollection?: string;
     fromSearchQuery?: string;
     fromSearchMode?: string;
+    thread?: string;
   } => ({
     lat: search.lat ? Number(search.lat) : undefined,
     lon: search.lon ? Number(search.lon) : undefined,
@@ -26,12 +27,13 @@ export const Route = createFileRoute("/place/$osmType/$osmId")({
     fromCollection: search.fromCollection ? String(search.fromCollection) : undefined,
     fromSearchQuery: search.fromSearchQuery ? String(search.fromSearchQuery) : undefined,
     fromSearchMode: search.fromSearchMode ? String(search.fromSearchMode) : undefined,
+    thread: search.thread ? String(search.thread) : undefined,
   }),
 });
 
 function PlaceDetailRoute() {
   const { osmType, osmId } = Route.useParams();
-  const { lat, lon, name, kind, from, fromAuthor, fromCollection, fromSearchQuery, fromSearchMode } = Route.useSearch();
+  const { lat, lon, name, kind, from, fromAuthor, fromCollection, fromSearchQuery, fromSearchMode, thread } = Route.useSearch();
 
   return (
     <>
@@ -43,6 +45,7 @@ function PlaceDetailRoute() {
         fallbackLon={lon}
         tileName={name}
         tileKind={kind}
+        from={from}
         fromCollection={from === "collection" ? fromCollection : undefined}
         fromAuthor={from === "collection" ? fromAuthor : undefined}
         fromSearchQuery={from === "search" ? fromSearchQuery : undefined}
