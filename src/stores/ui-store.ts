@@ -12,6 +12,8 @@ export interface PendingPoiClick {
   sourceLayer?: string;
   /** Back-navigation context from search results */
   fromSearch?: { query: string; mode: string };
+  /** Back-navigation context from collection overlay */
+  fromCollection?: { authorId: string; collectionId: string };
 }
 
 export interface CollectionOverlayEntry {
@@ -64,9 +66,10 @@ interface UiStore {
   setSidebarOpen: (open: boolean) => void;
 
   activeCollectionOverlays: Map<string, CollectionOverlayEntry>;
-  addCollectionOverlay: (authorId: string, collectionId: string) => void;
+  addCollectionOverlay: (authorId: string, collectionId: string, color?: string) => void;
   removeCollectionOverlay: (collectionId: string) => void;
-  toggleCollectionOverlay: (authorId: string, collectionId: string) => void;
+  toggleCollectionOverlay: (authorId: string, collectionId: string, color?: string) => void;
+  clearAllCollectionOverlays: () => void;
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -90,11 +93,14 @@ export const useUiStore = create<UiStore>((set) => ({
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
   activeCollectionOverlays: new Map(),
-  addCollectionOverlay: (authorId, collectionId) =>
+  addCollectionOverlay: (authorId, collectionId, color) =>
     set((s) => {
-      if (s.activeCollectionOverlays.has(collectionId)) return s;
+      const existing = s.activeCollectionOverlays.get(collectionId);
+      // Reuse existing color if no new color provided
+      const resolvedColor = color || existing?.color || nextColor();
+      if (existing && existing.color === resolvedColor) return s;
       const next = new Map(s.activeCollectionOverlays);
-      next.set(collectionId, { authorId, collectionId, color: nextColor() });
+      next.set(collectionId, { authorId, collectionId, color: resolvedColor });
       return { activeCollectionOverlays: next };
     }),
   removeCollectionOverlay: (collectionId) =>
@@ -104,14 +110,15 @@ export const useUiStore = create<UiStore>((set) => ({
       next.delete(collectionId);
       return { activeCollectionOverlays: next };
     }),
-  toggleCollectionOverlay: (authorId, collectionId) =>
+  toggleCollectionOverlay: (authorId, collectionId, color) =>
     set((s) => {
       const next = new Map(s.activeCollectionOverlays);
       if (next.has(collectionId)) {
         next.delete(collectionId);
       } else {
-        next.set(collectionId, { authorId, collectionId, color: nextColor() });
+        next.set(collectionId, { authorId, collectionId, color: color || nextColor() });
       }
       return { activeCollectionOverlays: next };
     }),
+  clearAllCollectionOverlays: () => set({ activeCollectionOverlays: new Map() }),
 }));

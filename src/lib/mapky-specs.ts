@@ -89,6 +89,7 @@ export function createCollection(
   description?: string,
   items?: string[],
   imageUri?: string,
+  color?: string,
 ): CreateCollectionResult {
   const builder = new MapkySpecsBuilder(pubkyId);
   const result = builder.createCollection(
@@ -98,7 +99,10 @@ export function createCollection(
     imageUri || null,
   );
 
-  const json = JSON.stringify(result.collection.toJson());
+  // Inject color into the JSON (WASM builder doesn't know about it yet)
+  const obj = result.collection.toJson() as Record<string, unknown>;
+  if (color) obj.color = color;
+  const json = JSON.stringify(obj);
   const path = result.meta.path;
   const url = result.meta.url;
 
@@ -114,12 +118,14 @@ export function updateCollectionJson(
   description?: string,
   items?: string[],
   imageUri?: string,
+  color?: string,
 ): string {
   return JSON.stringify({
     name,
     description: description || null,
     items: items || [],
     image_uri: imageUri || null,
+    color: color || null,
   });
 }
 

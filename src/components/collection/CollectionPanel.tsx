@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { X, ChevronUp, ChevronDown, ChevronLeft } from "lucide-react";
 import { useState } from "react";
+import type { CollectionOverlayEntry } from "@/stores/ui-store";
 import { useNavigate } from "@tanstack/react-router";
 import { useCollection } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
@@ -26,10 +27,45 @@ export function CollectionPanel({ authorId, collectionId }: CollectionPanelProps
     return () => setSidebarOpen(false);
   }, [setSidebarOpen]);
 
-  // Auto-show collection overlay on map
+  // On mount: save current state, hide everything, show only this collection.
+  // On unmount: restore previous state.
+  const savedOverlays = useRef<Map<string, CollectionOverlayEntry> | null>(null);
+  const savedPlacesVisible = useRef<boolean>(true);
+
   useEffect(() => {
-    addOverlay(authorId, collectionId);
-  }, [authorId, collectionId, addOverlay]);
+    const store = useUiStore.getState();
+
+    // Save current state
+    savedOverlays.current = new Map(store.activeCollectionOverlays);
+    savedPlacesVisible.current = store.placesLayerVisible;
+
+    // Hide everything
+    store.clearAllCollectionOverlays();
+    if (store.placesLayerVisible) store.setPlacesLayerVisible(false);
+
+    // Show only this collection
+    store.addCollectionOverlay(authorId, collectionId, collection?.color ?? undefined);
+
+    return () => {
+      // Restore previous state
+      const s = useUiStore.getState();
+      s.clearAllCollectionOverlays();
+      if (savedOverlays.current) {
+        for (const entry of savedOverlays.current.values()) {
+          s.addCollectionOverlay(entry.authorId, entry.collectionId, entry.color);
+        }
+      }
+      if (savedPlacesVisible.current) s.setPlacesLayerVisible(true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authorId, collectionId]);
+
+  // Keep overlay forced on if color updates from API
+  useEffect(() => {
+    if (collection?.color) {
+      addOverlay(authorId, collectionId, collection.color);
+    }
+  }, [collection?.color, authorId, collectionId, addOverlay]);
 
   const close = () => navigate({ to: "/" });
   const back = () => navigate({ to: "/collections" });

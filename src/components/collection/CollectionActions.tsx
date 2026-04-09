@@ -265,6 +265,7 @@ function EditInline({
   const [description, setDescription] = useState(
     collection.description ?? "",
   );
+  const [color, setColor] = useState(collection.color ?? "#3B82F6");
   const [submitting, setSubmitting] = useState(false);
 
   const handleSave = async () => {
@@ -276,6 +277,7 @@ function EditInline({
         description.trim() || undefined,
         collection.items,
         collection.image_uri ?? undefined,
+        color,
       );
       const path = `/pub/mapky.app/collections/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
@@ -319,6 +321,16 @@ function EditInline({
         rows={2}
         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none resize-none"
       />
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-muted">Map color</label>
+        <input
+          type="color"
+          value={color}
+          onChange={(e) => setColor(e.target.value.toUpperCase())}
+          className="h-8 w-10 cursor-pointer rounded border border-border bg-background p-0.5"
+        />
+        <span className="text-xs font-mono text-muted">{color}</span>
+      </div>
       <div className="flex justify-end gap-2">
         <button
           onClick={onClose}
@@ -405,6 +417,7 @@ function AddPlaceInline({
         collection.description ?? undefined,
         [...collection.items, osmUrl],
         collection.image_uri ?? undefined,
+        collection.color ?? undefined,
       );
       const path = `/pub/mapky.app/collections/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);

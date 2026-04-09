@@ -35,7 +35,13 @@ export function PoiClickHandler() {
                 fromSearchQuery: pendingClick.fromSearch.query,
                 fromSearchMode: pendingClick.fromSearch.mode,
               }
-            : {}),
+            : pendingClick.fromCollection
+              ? {
+                  from: "collection",
+                  fromAuthor: pendingClick.fromCollection.authorId,
+                  fromCollection: pendingClick.fromCollection.collectionId,
+                }
+              : {}),
         },
       });
     }

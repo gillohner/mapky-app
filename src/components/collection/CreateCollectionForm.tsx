@@ -17,6 +17,7 @@ export function CreateCollectionForm({ onClose }: CreateCollectionFormProps) {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [color, setColor] = useState("#3B82F6");
   const [submitting, setSubmitting] = useState(false);
 
   const canSubmit = name.trim().length > 0;
@@ -29,6 +30,9 @@ export function CreateCollectionForm({ onClose }: CreateCollectionFormProps) {
         publicKey,
         name.trim(),
         description.trim() || undefined,
+        undefined,
+        undefined,
+        color,
       );
       await session.storage.putText(
         result.path as `/pub/${string}`,
@@ -85,6 +89,17 @@ export function CreateCollectionForm({ onClose }: CreateCollectionFormProps) {
         rows={2}
         className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none resize-none"
       />
+
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-muted">Map color</label>
+        <input
+          type="color"
+          value={color}
+          onChange={(e) => setColor(e.target.value.toUpperCase())}
+          className="h-8 w-10 cursor-pointer rounded border border-border bg-surface p-0.5"
+        />
+        <span className="text-xs font-mono text-muted">{color}</span>
+      </div>
 
       <button
         onClick={handleSubmit}

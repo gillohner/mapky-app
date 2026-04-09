@@ -58,6 +58,7 @@ export function CollectionPicker({
         collection.description ?? undefined,
         newItems,
         collection.image_uri ?? undefined,
+        collection.color ?? undefined,
       );
       const path = `/pub/mapky.app/collections/${cId}`;
       await session.storage.putText(path as `/pub/${string}`, json);

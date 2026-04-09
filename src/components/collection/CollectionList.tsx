@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { X, Plus, FolderHeart, MapPin, Eye, EyeOff } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { X, Plus, FolderHeart, MapPin, Eye, EyeOff, Layers } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserCollections } from "@/lib/api/hooks";
@@ -12,7 +12,22 @@ export function CollectionList() {
   const { isAuthenticated, publicKey } = useAuth();
   const { data: collections, isLoading } = useUserCollections(publicKey);
   const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
+  const overlays = useUiStore((s) => s.activeCollectionOverlays);
+  const addOverlay = useUiStore((s) => s.addCollectionOverlay);
+  const clearAllOverlays = useUiStore((s) => s.clearAllCollectionOverlays);
   const [creating, setCreating] = useState(false);
+
+  const anyVisible = overlays.size > 0;
+  const toggleAll = () => {
+    if (anyVisible) {
+      clearAllOverlays();
+    } else if (collections) {
+      for (const c of collections) {
+        const [authorId, collectionId] = c.id.split(":");
+        addOverlay(authorId, collectionId, c.color ?? undefined);
+      }
+    }
+  };
 
   useEffect(() => {
     setSidebarOpen(true);
@@ -29,12 +44,27 @@ export function CollectionList() {
           <span className="text-xs font-medium uppercase tracking-wide text-muted">
             Collections
           </span>
-          <button
-            onClick={close}
-            className="rounded-lg p-1 text-muted transition-colors hover:bg-surface hover:text-foreground"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            {collections && collections.length > 0 && (
+              <button
+                onClick={toggleAll}
+                title={anyVisible ? "Hide all on map" : "Show all on map"}
+                className="rounded-lg p-1 text-muted transition-colors hover:bg-surface hover:text-foreground"
+              >
+                {anyVisible ? (
+                  <Layers className="h-4 w-4 text-accent" />
+                ) : (
+                  <Layers className="h-4 w-4" />
+                )}
+              </button>
+            )}
+            <button
+              onClick={close}
+              className="rounded-lg p-1 text-muted transition-colors hover:bg-surface hover:text-foreground"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -161,7 +191,7 @@ function CollectionCard({ collection }: { collection: CollectionDetails }) {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            toggleOverlay(authorId, collectionId);
+            toggleOverlay(authorId, collectionId, collection.color ?? undefined);
           }}
           title={isVisible ? "Hide on map" : "Show on map"}
           className="flex-shrink-0 rounded-lg p-1.5 text-muted transition-colors hover:bg-background hover:text-foreground"

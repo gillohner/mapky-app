@@ -56,6 +56,7 @@ export interface CollectionDetails {
   description: string | null;
   items: string[];
   image_uri: string | null;
+  color: string | null;
   indexed_at: number;
 }
 

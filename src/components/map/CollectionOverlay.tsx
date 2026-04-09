@@ -303,6 +303,7 @@ export function CollectionOverlay({
         kind: "",
         osmType,
         osmId: Number(osmId),
+        fromCollection: { authorId, collectionId },
       });
     };
 
@@ -314,7 +315,7 @@ export function CollectionOverlay({
       if (map.getLayer(ringId)) map.off("click", ringId, onPointClick);
       if (map.getLayer(dotId)) map.off("click", dotId, onPointClick);
     };
-  }, [map, sourceId, clusterId, ringId, dotId]);
+  }, [map, sourceId, clusterId, ringId, dotId, authorId, collectionId]);
 
   // Cleanup on unmount
   const cleanupLayers = useCallback(() => {
