@@ -20,12 +20,17 @@ export function CollectionTags({ authorId, collectionId }: CollectionTagsProps) 
   const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState<string | null>(null);
 
-  const handleTagClick = async (label: string) => {
+  const handleTagClick = async (label: string, alreadyTagged: boolean) => {
     if (!session || !publicKey) return;
     setSubmitting(label);
     try {
       const result = createCollectionTag(publicKey, authorId, collectionId, label);
-      await session.storage.putText(result.path as `/pub/${string}`, result.json);
+
+      if (alreadyTagged) {
+        await session.storage.delete(result.path as `/pub/${string}`);
+      } else {
+        await session.storage.putText(result.path as `/pub/${string}`, result.json);
+      }
 
       // Cancel in-flight fetches so they don't overwrite optimistic data
       await queryClient.cancelQueries({ queryKey: ["mapky", "collection", authorId, collectionId, "tags"] });
@@ -35,6 +40,13 @@ export function CollectionTags({ authorId, collectionId }: CollectionTagsProps) 
         ["mapky", "collection", authorId, collectionId, "tags"],
         (old) => {
           if (!old) return old;
+          if (alreadyTagged) {
+            return old
+              .map((t) => t.label === label
+                ? { ...t, taggers: t.taggers.filter((id) => id !== publicKey), taggers_count: t.taggers_count - 1 }
+                : t)
+              .filter((t) => t.taggers_count > 0);
+          }
           return old.map((t) =>
             t.label === label && !t.taggers.includes(publicKey)
               ? { ...t, taggers: [...t.taggers, publicKey], taggers_count: t.taggers_count + 1 }
@@ -43,14 +55,14 @@ export function CollectionTags({ authorId, collectionId }: CollectionTagsProps) 
         },
       );
 
-      toast.success(`Tagged with "${label}"`);
+      toast.success(alreadyTagged ? `Removed "${label}" tag` : `Tagged with "${label}"`);
 
       // Background reconciliation — delay to let server finish indexing
       ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["mapky", "collection", authorId, collectionId, "tags"] });
       }, 5000));
     } catch {
-      toast.error("Failed to add tag");
+      toast.error(alreadyTagged ? "Failed to remove tag" : "Failed to add tag");
     } finally {
       setSubmitting(null);
     }
@@ -92,11 +104,11 @@ export function CollectionTags({ authorId, collectionId }: CollectionTagsProps) 
               className="flex items-center justify-between gap-2"
             >
               <button
-                onClick={() => handleTagClick(tag.label)}
-                disabled={!isAuthenticated || submitting === tag.label || alreadyTagged}
+                onClick={() => handleTagClick(tag.label, alreadyTagged)}
+                disabled={!isAuthenticated || submitting === tag.label}
                 className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
                   alreadyTagged
-                    ? "border-accent/30 bg-accent/10 text-accent"
+                    ? "border-accent/30 bg-accent/10 text-accent hover:border-red-400 hover:bg-red-500/10 hover:text-red-500 cursor-pointer"
                     : isAuthenticated
                       ? "border-border bg-surface text-foreground hover:border-accent hover:text-accent cursor-pointer"
                       : "border-border bg-surface text-foreground"

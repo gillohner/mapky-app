@@ -20,12 +20,18 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
   const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState<string | null>(null);
 
-  const handleTagClick = async (label: string) => {
+  const handleTagClick = async (label: string, alreadyTagged: boolean) => {
     if (!session || !publicKey) return;
     setSubmitting(label);
     try {
+      // createPlaceTag uses HashId — same inputs always produce the same path
       const result = createPlaceTag(publicKey, osmType, osmId, label);
-      await session.storage.putText(result.path as `/pub/${string}`, result.json);
+
+      if (alreadyTagged) {
+        await session.storage.delete(result.path as `/pub/${string}`);
+      } else {
+        await session.storage.putText(result.path as `/pub/${string}`, result.json);
+      }
 
       // Cancel in-flight fetches so they don't overwrite optimistic data
       await queryClient.cancelQueries({ queryKey: ["mapky", "place", osmType, osmId, "tags"] });
@@ -36,6 +42,15 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
         ["mapky", "place", osmType, osmId, "tags"],
         (old) => {
           if (!old) return old;
+          if (alreadyTagged) {
+            return old
+              .map((t) =>
+                t.label === label
+                  ? { ...t, taggers: t.taggers.filter((id) => id !== publicKey), taggers_count: t.taggers_count - 1 }
+                  : t,
+              )
+              .filter((t) => t.taggers_count > 0);
+          }
           return old.map((t) =>
             t.label === label && !t.taggers.includes(publicKey)
               ? { ...t, taggers: [...t.taggers, publicKey], taggers_count: t.taggers_count + 1 }
@@ -45,10 +60,10 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
       );
       queryClient.setQueryData<PlaceDetails>(
         ["mapky", "place", osmType, osmId],
-        (old) => (old ? { ...old, tag_count: old.tag_count + 1 } : old),
+        (old) => (old ? { ...old, tag_count: old.tag_count + (alreadyTagged ? -1 : 1) } : old),
       );
 
-      toast.success(`Tagged with "${label}"`);
+      toast.success(alreadyTagged ? `Removed "${label}" tag` : `Tagged with "${label}"`);
 
       // Background reconciliation — delay to let server finish indexing
       ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
@@ -56,7 +71,7 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
         queryClient.invalidateQueries({ queryKey: ["mapky", "place", osmType, osmId] });
       }, 5000));
     } catch {
-      toast.error("Failed to add tag");
+      toast.error(alreadyTagged ? "Failed to remove tag" : "Failed to add tag");
     } finally {
       setSubmitting(null);
     }
@@ -100,18 +115,18 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
               className="flex items-center justify-between gap-2"
             >
               <button
-                onClick={() => handleTagClick(tag.label)}
-                disabled={!isAuthenticated || submitting === tag.label || alreadyTagged}
+                onClick={() => handleTagClick(tag.label, alreadyTagged)}
+                disabled={!isAuthenticated || submitting === tag.label}
                 className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
                   alreadyTagged
-                    ? "border-accent/30 bg-accent/10 text-accent"
+                    ? "border-accent/30 bg-accent/10 text-accent hover:border-red-400 hover:bg-red-500/10 hover:text-red-500 cursor-pointer"
                     : isAuthenticated
                       ? "border-border bg-surface text-foreground hover:border-accent hover:text-accent cursor-pointer"
                       : "border-border bg-surface text-foreground"
                 } ${submitting === tag.label ? "opacity-50" : ""}`}
                 title={
                   alreadyTagged
-                    ? "You already tagged this"
+                    ? `Click to remove "${tag.label}" tag`
                     : isAuthenticated
                       ? `Click to tag with "${tag.label}"`
                       : "Sign in to tag"

@@ -24,12 +24,17 @@ export function PostTags({ authorId, postId }: PostTagsProps) {
 
   const isAuthenticated = !!session && !!publicKey;
 
-  const handleTag = async (tagLabel: string) => {
+  const handleTag = async (tagLabel: string, removing = false) => {
     if (!session || !publicKey || !tagLabel) return;
     setSubmitting(tagLabel);
     try {
       const result = createPostTag(publicKey, authorId, postId, tagLabel);
-      await session.storage.putText(result.path as `/pub/${string}`, result.json);
+
+      if (removing) {
+        await session.storage.delete(result.path as `/pub/${string}`);
+      } else {
+        await session.storage.putText(result.path as `/pub/${string}`, result.json);
+      }
 
       // Cancel in-flight fetches so they don't overwrite optimistic data
       await queryClient.cancelQueries({ queryKey: ["mapky", "posts", authorId, postId, "tags"] });
@@ -38,6 +43,14 @@ export function PostTags({ authorId, postId }: PostTagsProps) {
       queryClient.setQueryData<PostTagDetails[]>(
         ["mapky", "posts", authorId, postId, "tags"],
         (old) => {
+          if (removing) {
+            if (!old) return old;
+            return old
+              .map((t) => t.label === tagLabel
+                ? { ...t, taggers: t.taggers.filter((id) => id !== publicKey), taggers_count: t.taggers_count - 1 }
+                : t)
+              .filter((t) => t.taggers_count > 0);
+          }
           if (!old) return [{ label: tagLabel, taggers: [publicKey], taggers_count: 1 }];
           const existing = old.find((t) => t.label === tagLabel);
           if (existing) {
@@ -52,7 +65,7 @@ export function PostTags({ authorId, postId }: PostTagsProps) {
         },
       );
 
-      toast.success(`Tagged with "${tagLabel}"`);
+      toast.success(removing ? `Removed "${tagLabel}" tag` : `Tagged with "${tagLabel}"`);
       setLabel("");
       setShowInput(false);
 
@@ -61,7 +74,7 @@ export function PostTags({ authorId, postId }: PostTagsProps) {
         queryClient.invalidateQueries({ queryKey: ["mapky", "posts", authorId, postId, "tags"] });
       }, 5000));
     } catch {
-      toast.error("Failed to add tag");
+      toast.error(removing ? "Failed to remove tag" : "Failed to add tag");
     } finally {
       setSubmitting(null);
     }
@@ -81,16 +94,16 @@ export function PostTags({ authorId, postId }: PostTagsProps) {
         return (
           <button
             key={tag.label}
-            onClick={() => handleTag(tag.label)}
-            disabled={!isAuthenticated || submitting === tag.label || alreadyTagged}
+            onClick={() => handleTag(tag.label, alreadyTagged)}
+            disabled={!isAuthenticated || submitting === tag.label}
             className={`group inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
               alreadyTagged
-                ? "border-accent/30 bg-accent/10 text-accent"
+                ? "border-accent/30 bg-accent/10 text-accent hover:border-red-400 hover:bg-red-500/10 hover:text-red-500"
                 : isAuthenticated
                   ? "border-border bg-surface text-muted hover:border-accent hover:text-accent"
                   : "border-border bg-surface text-muted"
             } ${submitting === tag.label ? "opacity-50" : ""}`}
-            title={tag.taggers.length > 0 ? `Tagged by ${tag.taggers_count} user${tag.taggers_count !== 1 ? "s" : ""}` : ""}
+            title={alreadyTagged ? `Click to remove "${tag.label}" tag` : tag.taggers.length > 0 ? `Tagged by ${tag.taggers_count} user${tag.taggers_count !== 1 ? "s" : ""}` : ""}
           >
             <span>{tag.label}</span>
             <span className="text-[10px] opacity-60">{tag.taggers_count}</span>
