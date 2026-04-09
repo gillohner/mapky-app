@@ -7,6 +7,7 @@ import { createPlaceTag } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { toast } from "sonner";
 import { useState } from "react";
+import type { PostTagDetails, PlaceDetails } from "@/types/mapky";
 
 interface PlaceTagsProps {
   osmType: string;
@@ -25,14 +26,35 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
     try {
       const result = createPlaceTag(publicKey, osmType, osmId, label);
       await session.storage.putText(result.path as `/pub/${string}`, result.json);
-      await ingestUserIntoNexus(publicKey);
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "place", osmType, osmId, "tags"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "place", osmType, osmId],
-      });
+
+      // Cancel in-flight fetches so they don't overwrite optimistic data
+      await queryClient.cancelQueries({ queryKey: ["mapky", "place", osmType, osmId, "tags"] });
+      await queryClient.cancelQueries({ queryKey: ["mapky", "place", osmType, osmId] });
+
+      // Optimistic cache update
+      queryClient.setQueryData<PostTagDetails[]>(
+        ["mapky", "place", osmType, osmId, "tags"],
+        (old) => {
+          if (!old) return old;
+          return old.map((t) =>
+            t.label === label && !t.taggers.includes(publicKey)
+              ? { ...t, taggers: [...t.taggers, publicKey], taggers_count: t.taggers_count + 1 }
+              : t,
+          );
+        },
+      );
+      queryClient.setQueryData<PlaceDetails>(
+        ["mapky", "place", osmType, osmId],
+        (old) => (old ? { ...old, tag_count: old.tag_count + 1 } : old),
+      );
+
       toast.success(`Tagged with "${label}"`);
+
+      // Background reconciliation — delay to let server finish indexing
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["mapky", "place", osmType, osmId, "tags"] });
+        queryClient.invalidateQueries({ queryKey: ["mapky", "place", osmType, osmId] });
+      }, 5000));
     } catch {
       toast.error("Failed to add tag");
     } finally {
@@ -58,6 +80,7 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
   }
 
   const isAuthenticated = !!session && !!publicKey;
+  const sorted = [...data].sort((a, b) => b.taggers_count - a.taggers_count || a.label.localeCompare(b.label));
 
   return (
     <div className="space-y-2">
@@ -66,7 +89,7 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
         Tags
       </h4>
       <div className="space-y-1.5">
-        {data.map((tag) => {
+        {sorted.map((tag) => {
           const alreadyTagged = publicKey
             ? tag.taggers.includes(publicKey)
             : false;

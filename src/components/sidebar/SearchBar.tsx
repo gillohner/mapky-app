@@ -108,6 +108,10 @@ export function SearchBar() {
     navigate({
       to: "/collection/$authorId/$collectionId",
       params: { authorId, collectionId },
+      search: {
+        fromSearchQuery: input,
+        fromSearchMode: mode,
+      },
     });
   };
 

@@ -31,6 +31,7 @@ export function PlaceCollections({ osmType, osmId }: PlaceCollectionsProps) {
                 navigate({
                   to: "/collection/$authorId/$collectionId",
                   params: { authorId, collectionId },
+                  search: { fromPlaceType: osmType, fromPlaceId: osmId },
                 })
               }
               className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-surface"

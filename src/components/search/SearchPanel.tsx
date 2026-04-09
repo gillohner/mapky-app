@@ -146,6 +146,10 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
     navigate({
       to: "/collection/$authorId/$collectionId",
       params: { authorId, collectionId },
+      search: {
+        fromSearchQuery: query,
+        fromSearchMode: mode,
+      },
     });
   };
 

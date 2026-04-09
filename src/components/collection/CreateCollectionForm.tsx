@@ -6,6 +6,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { createCollection } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { toast } from "sonner";
+import type { CollectionDetails } from "@/types/mapky";
 
 interface CreateCollectionFormProps {
   onClose: () => void;
@@ -38,18 +39,37 @@ export function CreateCollectionForm({ onClose }: CreateCollectionFormProps) {
         result.path as `/pub/${string}`,
         result.json,
       );
-      await ingestUserIntoNexus(publicKey);
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "collections", "user", publicKey],
-      });
-      toast.success("Collection created");
 
-      // Extract collection ID from the path
+      // Cancel in-flight fetches so they don't overwrite optimistic data
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
+
+      // Extract collection ID and optimistically add to cache
       const collectionId = result.path.split("/").pop()!;
+      const optimistic: CollectionDetails = {
+        id: `${publicKey}:${collectionId}`,
+        author_id: publicKey,
+        name: name.trim(),
+        description: description.trim() || null,
+        items: [],
+        image_uri: null,
+        color,
+        indexed_at: Date.now() / 1000,
+      };
+      queryClient.setQueryData<CollectionDetails[]>(
+        ["mapky", "collections", "user", publicKey],
+        (old) => [...(old ?? []), optimistic],
+      );
+
+      toast.success("Collection created");
       navigate({
         to: "/collection/$authorId/$collectionId",
         params: { authorId: publicKey, collectionId },
       });
+
+      // Background reconciliation — delay to let server finish indexing
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
+      }, 5000));
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to create collection",

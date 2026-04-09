@@ -154,18 +154,12 @@ export function PlacePanel({
               <div className="border-t border-border pt-4">
                 <PlaceActions osmType={osmType} osmId={osmId} />
               </div>
-              {(place || !error) && <PlaceTags osmType={osmType} osmId={osmId} />}
+              <PlaceTags osmType={osmType} osmId={osmId} />
               <div className="border-t border-border pt-4">
                 <h3 className="mb-2 text-sm font-medium text-foreground">
                   Posts & Reviews
                 </h3>
-                {place ? (
-                  <PlacePosts osmType={osmType} osmId={osmId} />
-                ) : (
-                  <p className="py-4 text-center text-sm text-muted">
-                    Be the first to review this place on Mapky!
-                  </p>
-                )}
+                <PlacePosts osmType={osmType} osmId={osmId} />
               </div>
               <PlaceCollections osmType={osmType} osmId={osmId} />
             </div>
@@ -238,22 +232,14 @@ export function PlacePanel({
           <div className="flex-1 overflow-y-auto border-t border-border px-4 py-3">
             <div className="space-y-4">
               <PlaceActions osmType={osmType} osmId={osmId} />
-              {place ? (
-                <>
-                  <PlaceTags osmType={osmType} osmId={osmId} />
-                  <div className="border-t border-border pt-4">
-                    <h3 className="mb-2 text-sm font-medium text-foreground">
-                      Posts & Reviews
-                    </h3>
-                    <PlacePosts osmType={osmType} osmId={osmId} />
-                  </div>
-                  <PlaceCollections osmType={osmType} osmId={osmId} />
-                </>
-              ) : (
-                <p className="text-center text-sm text-muted">
-                  Be the first to review this place on Mapky!
-                </p>
-              )}
+              <PlaceTags osmType={osmType} osmId={osmId} />
+              <div className="border-t border-border pt-4">
+                <h3 className="mb-2 text-sm font-medium text-foreground">
+                  Posts & Reviews
+                </h3>
+                <PlacePosts osmType={osmType} osmId={osmId} />
+              </div>
+              <PlaceCollections osmType={osmType} osmId={osmId} />
             </div>
           </div>
         )}

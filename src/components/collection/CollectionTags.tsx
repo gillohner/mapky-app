@@ -7,6 +7,7 @@ import { createCollectionTag } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { toast } from "sonner";
 import { useState } from "react";
+import type { PostTagDetails } from "@/types/mapky";
 
 interface CollectionTagsProps {
   authorId: string;
@@ -25,11 +26,29 @@ export function CollectionTags({ authorId, collectionId }: CollectionTagsProps) 
     try {
       const result = createCollectionTag(publicKey, authorId, collectionId, label);
       await session.storage.putText(result.path as `/pub/${string}`, result.json);
-      await ingestUserIntoNexus(publicKey);
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "collection", authorId, collectionId, "tags"],
-      });
+
+      // Cancel in-flight fetches so they don't overwrite optimistic data
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collection", authorId, collectionId, "tags"] });
+
+      // Optimistic cache update
+      queryClient.setQueryData<PostTagDetails[]>(
+        ["mapky", "collection", authorId, collectionId, "tags"],
+        (old) => {
+          if (!old) return old;
+          return old.map((t) =>
+            t.label === label && !t.taggers.includes(publicKey)
+              ? { ...t, taggers: [...t.taggers, publicKey], taggers_count: t.taggers_count + 1 }
+              : t,
+          );
+        },
+      );
+
       toast.success(`Tagged with "${label}"`);
+
+      // Background reconciliation — delay to let server finish indexing
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["mapky", "collection", authorId, collectionId, "tags"] });
+      }, 5000));
     } catch {
       toast.error("Failed to add tag");
     } finally {
@@ -53,6 +72,7 @@ export function CollectionTags({ authorId, collectionId }: CollectionTagsProps) 
   if (!data || data.length === 0) return null;
 
   const isAuthenticated = !!session && !!publicKey;
+  const sorted = [...data].sort((a, b) => b.taggers_count - a.taggers_count || a.label.localeCompare(b.label));
 
   return (
     <div className="space-y-2">
@@ -61,7 +81,7 @@ export function CollectionTags({ authorId, collectionId }: CollectionTagsProps) 
         Tags
       </h4>
       <div className="space-y-1.5">
-        {data.map((tag) => {
+        {sorted.map((tag) => {
           const alreadyTagged = publicKey
             ? tag.taggers.includes(publicKey)
             : false;

@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { createPlaceTag } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { toast } from "sonner";
+import type { PostTagDetails, PlaceDetails } from "@/types/mapky";
 
 interface TagFormProps {
   osmType: string;
@@ -58,17 +59,41 @@ export function TagForm({ osmType, osmId, onClose }: TagFormProps) {
     try {
       const result = createPlaceTag(publicKey, osmType, osmId, finalLabel);
       await session.storage.putText(result.path as `/pub/${string}`, result.json);
-      await ingestUserIntoNexus(publicKey);
 
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "place", osmType, osmId, "tags"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "place", osmType, osmId],
-      });
+      // Cancel in-flight fetches so they don't overwrite optimistic data
+      await queryClient.cancelQueries({ queryKey: ["mapky", "place", osmType, osmId, "tags"] });
+      await queryClient.cancelQueries({ queryKey: ["mapky", "place", osmType, osmId] });
+
+      // Optimistic cache update
+      queryClient.setQueryData<PostTagDetails[]>(
+        ["mapky", "place", osmType, osmId, "tags"],
+        (old) => {
+          if (!old) return [{ label: finalLabel, taggers: [publicKey], taggers_count: 1 }];
+          const existing = old.find((t) => t.label === finalLabel);
+          if (existing) {
+            if (existing.taggers.includes(publicKey)) return old;
+            return old.map((t) =>
+              t.label === finalLabel
+                ? { ...t, taggers: [...t.taggers, publicKey], taggers_count: t.taggers_count + 1 }
+                : t,
+            );
+          }
+          return [...old, { label: finalLabel, taggers: [publicKey], taggers_count: 1 }];
+        },
+      );
+      queryClient.setQueryData<PlaceDetails>(
+        ["mapky", "place", osmType, osmId],
+        (old) => (old ? { ...old, tag_count: old.tag_count + 1 } : old),
+      );
 
       toast.success(`Tagged with "${finalLabel}"`);
-      setLabel("");
+      onClose();
+
+      // Background reconciliation — delay to let server finish indexing
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["mapky", "place", osmType, osmId, "tags"] });
+        queryClient.invalidateQueries({ queryKey: ["mapky", "place", osmType, osmId] });
+      }, 5000));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);

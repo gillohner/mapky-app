@@ -1,12 +1,16 @@
-import { Star } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Star, FileDown, ImageOff } from "lucide-react";
 import { usePlacePosts } from "@/lib/api/hooks";
-import { truncatePublicKey } from "@/lib/api/user";
+import { truncatePublicKey, resolveFileUrl } from "@/lib/api/user";
 import type { PostDetails } from "@/types/mapky";
 import { UserAvatar } from "@/components/shared/UserAvatar";
+import { MediaViewer, type MediaItem } from "@/components/shared/MediaViewer";
 import { PostTags } from "./PostTags";
 
 function timeAgo(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  // indexed_at from API is in seconds; detect and convert to ms
+  const ms = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+  const seconds = Math.floor((Date.now() - ms) / 1000);
   if (seconds < 60) return "just now";
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
@@ -16,6 +20,91 @@ function timeAgo(timestamp: number): string {
   if (days < 30) return `${days}d ago`;
   const months = Math.floor(days / 30);
   return `${months}mo ago`;
+}
+
+function classifyAttachment(uri: string): MediaItem["type"] {
+  const lower = uri.toLowerCase();
+  if (/\.(jpe?g|png|gif|webp|avif|svg|bmp|ico)$/i.test(lower)) return "image";
+  if (/\.(mp4|webm|mov|avi|mkv|ogv)$/i.test(lower)) return "video";
+  // Default to image for pubky file URIs (uploaded via image picker)
+  if (uri.startsWith("pubky://")) return "image";
+  return "other";
+}
+
+function Thumbnail({ item, onClick }: { item: MediaItem; onClick: () => void }) {
+  const [failed, setFailed] = useState(false);
+  const onError = useCallback(() => setFailed(true), []);
+
+  if (failed) {
+    return (
+      <button onClick={onClick} className="flex h-20 w-20 items-center justify-center rounded-lg bg-surface ring-1 ring-border">
+        <ImageOff className="h-5 w-5 text-muted" />
+      </button>
+    );
+  }
+
+  return (
+    <button onClick={onClick} className="overflow-hidden rounded-lg ring-1 ring-border transition-shadow hover:ring-accent">
+      {item.type === "image" ? (
+        <img src={item.url} alt="" className="h-20 w-20 object-cover" loading="lazy" onError={onError} />
+      ) : (
+        <video src={item.url} className="h-20 w-20 object-cover" muted preload="metadata" onError={onError} />
+      )}
+    </button>
+  );
+}
+
+function PostAttachments({ attachments }: { attachments: string[] }) {
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+
+  const resolved: MediaItem[] = attachments
+    .map((uri) => {
+      const url = resolveFileUrl(uri);
+      if (!url) return null;
+      return { url, type: classifyAttachment(uri) } as MediaItem;
+    })
+    .filter((item): item is MediaItem => item !== null);
+
+  if (resolved.length === 0) return null;
+
+  const images = resolved.filter((r) => r.type === "image" || r.type === "video");
+  const files = resolved.filter((r) => r.type === "other");
+
+  return (
+    <>
+      {images.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {images.map((item, i) => (
+            <Thumbnail key={i} item={item} onClick={() => setViewerIndex(i)} />
+          ))}
+        </div>
+      )}
+
+      {files.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {files.map((item, i) => (
+            <a
+              key={i}
+              href={item.url}
+              download
+              className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
+            >
+              <FileDown className="h-3 w-3" />
+              File {i + 1}
+            </a>
+          ))}
+        </div>
+      )}
+
+      {viewerIndex !== null && (
+        <MediaViewer
+          items={images}
+          initialIndex={viewerIndex}
+          onClose={() => setViewerIndex(null)}
+        />
+      )}
+    </>
+  );
 }
 
 
@@ -56,6 +145,9 @@ function PostCard({ post }: { post: PostDetails }) {
         )}
         {post.content && (
           <p className="mt-1 text-sm text-foreground">{post.content}</p>
+        )}
+        {post.attachments.length > 0 && (
+          <PostAttachments attachments={post.attachments} />
         )}
         <PostTags authorId={post.author_id} postId={post.id} />
       </div>

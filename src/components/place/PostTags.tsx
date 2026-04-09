@@ -7,6 +7,7 @@ import { UserAvatar } from "@/components/shared/UserAvatar";
 import { createPostTag } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { toast } from "sonner";
+import type { PostTagDetails } from "@/types/mapky";
 
 interface PostTagsProps {
   authorId: string;
@@ -29,13 +30,36 @@ export function PostTags({ authorId, postId }: PostTagsProps) {
     try {
       const result = createPostTag(publicKey, authorId, postId, tagLabel);
       await session.storage.putText(result.path as `/pub/${string}`, result.json);
-      await ingestUserIntoNexus(publicKey);
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "posts", authorId, postId, "tags"],
-      });
+
+      // Cancel in-flight fetches so they don't overwrite optimistic data
+      await queryClient.cancelQueries({ queryKey: ["mapky", "posts", authorId, postId, "tags"] });
+
+      // Optimistic cache update
+      queryClient.setQueryData<PostTagDetails[]>(
+        ["mapky", "posts", authorId, postId, "tags"],
+        (old) => {
+          if (!old) return [{ label: tagLabel, taggers: [publicKey], taggers_count: 1 }];
+          const existing = old.find((t) => t.label === tagLabel);
+          if (existing) {
+            if (existing.taggers.includes(publicKey)) return old;
+            return old.map((t) =>
+              t.label === tagLabel
+                ? { ...t, taggers: [...t.taggers, publicKey], taggers_count: t.taggers_count + 1 }
+                : t,
+            );
+          }
+          return [...old, { label: tagLabel, taggers: [publicKey], taggers_count: 1 }];
+        },
+      );
+
       toast.success(`Tagged with "${tagLabel}"`);
       setLabel("");
       setShowInput(false);
+
+      // Background reconciliation — delay to let server finish indexing
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["mapky", "posts", authorId, postId, "tags"] });
+      }, 5000));
     } catch {
       toast.error("Failed to add tag");
     } finally {
@@ -45,9 +69,11 @@ export function PostTags({ authorId, postId }: PostTagsProps) {
 
   const normalizedLabel = label.trim().toLowerCase().replace(/\s+/g, "-");
 
+  const sorted = tags ? [...tags].sort((a, b) => b.taggers_count - a.taggers_count || a.label.localeCompare(b.label)) : undefined;
+
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1">
-      {tags?.map((tag) => {
+      {sorted?.map((tag) => {
         const alreadyTagged = publicKey
           ? tag.taggers.includes(publicKey)
           : false;

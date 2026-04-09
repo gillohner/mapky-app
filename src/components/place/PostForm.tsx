@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { Star, Send, X, ImagePlus, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { createPost } from "@/lib/mapky-specs";
+import { createPost, makeOsmUrl } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import {
   uploadFile,
@@ -11,6 +11,7 @@ import {
   type UploadedFile,
 } from "@/lib/pubky/files";
 import { toast } from "sonner";
+import type { PostDetails, PlaceDetails } from "@/types/mapky";
 
 interface PostFormProps {
   osmType: string;
@@ -88,19 +89,50 @@ export function PostForm({ osmType, osmId, mode, onClose }: PostFormProps) {
       });
 
       await session.storage.putText(result.path as `/pub/${string}`, result.json);
-      await ingestUserIntoNexus(publicKey);
 
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "place", osmType, osmId, "posts"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "place", osmType, osmId],
-      });
+      // Cancel in-flight fetches so they don't overwrite optimistic data
+      await queryClient.cancelQueries({ queryKey: ["mapky", "place", osmType, osmId, "posts"] });
+      await queryClient.cancelQueries({ queryKey: ["mapky", "place", osmType, osmId] });
+
+      // Optimistic cache update
+      const postId = result.path.split("/").pop()!;
+      const optimisticPost: PostDetails = {
+        id: postId,
+        author_id: publicKey,
+        osm_canonical: makeOsmUrl(osmType, osmId),
+        content: content.trim() || null,
+        rating: mode === "review" ? rating : null,
+        kind: mode,
+        parent_uri: null,
+        attachments,
+        indexed_at: Math.floor(Date.now() / 1000),
+      };
+      queryClient.setQueryData<PostDetails[]>(
+        ["mapky", "place", osmType, osmId, "posts", undefined],
+        (old) => (old ? [optimisticPost, ...old] : [optimisticPost]),
+      );
+      queryClient.setQueryData<PlaceDetails>(
+        ["mapky", "place", osmType, osmId],
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            review_count: mode === "review" ? old.review_count + 1 : old.review_count,
+            photo_count: old.photo_count + attachments.length,
+          };
+        },
+      );
 
       toast.success(mode === "review" ? "Review published" : "Post published");
       // Cleanup preview URLs
       for (const img of images) URL.revokeObjectURL(img.previewUrl);
       onClose();
+
+      // Background reconciliation — delay to let server finish indexing
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["mapky", "place", osmType, osmId, "posts"] });
+        queryClient.invalidateQueries({ queryKey: ["mapky", "place", osmType, osmId] });
+      }, 5000));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);

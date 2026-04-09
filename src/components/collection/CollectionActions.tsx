@@ -21,7 +21,7 @@ import {
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { searchPlaces } from "@/lib/api/nominatim";
 import { toast } from "sonner";
-import type { CollectionDetails } from "@/types/mapky";
+import type { CollectionDetails, PostTagDetails } from "@/types/mapky";
 
 interface CollectionActionsProps {
   authorId: string;
@@ -63,10 +63,20 @@ export function CollectionActions({
     try {
       const path = `/pub/mapky.app/collections/${collectionId}`;
       await session.storage.delete(path as `/pub/${string}`);
-      await ingestUserIntoNexus(publicKey!);
-      invalidate();
+
+      // Optimistic cache update — remove from user's collection list
+      queryClient.setQueryData<CollectionDetails[]>(
+        ["mapky", "collections", "user", authorId],
+        (old) => old?.filter((c) => { const [, id] = c.id.split(":"); return id !== collectionId; }),
+      );
+
       toast.success("Collection deleted");
       navigate({ to: "/collections" });
+
+      // Background reconciliation — delay to let server finish indexing
+      ingestUserIntoNexus(publicKey!).then(() => setTimeout(() => {
+        invalidate();
+      }, 5000));
     } catch {
       toast.error("Failed to delete");
     }
@@ -200,12 +210,37 @@ function TagInline({
         result.path as `/pub/${string}`,
         result.json,
       );
-      await ingestUserIntoNexus(publicKey);
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "collection", authorId, collectionId],
-      });
+
+      // Cancel in-flight fetches so they don't overwrite optimistic data
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collection", authorId, collectionId, "tags"] });
+
+      // Optimistic cache update
+      queryClient.setQueryData<PostTagDetails[]>(
+        ["mapky", "collection", authorId, collectionId, "tags"],
+        (old) => {
+          const entry = { label: normalized, taggers: [publicKey], taggers_count: 1 };
+          if (!old) return [entry];
+          const existing = old.find((t) => t.label === normalized);
+          if (existing) {
+            if (existing.taggers.includes(publicKey)) return old;
+            return old.map((t) =>
+              t.label === normalized
+                ? { ...t, taggers: [...t.taggers, publicKey], taggers_count: t.taggers_count + 1 }
+                : t,
+            );
+          }
+          return [...old, entry];
+        },
+      );
+
       toast.success(`Tagged with "${normalized}"`);
       onClose();
+
+      // Background reconciliation — delay to let server finish indexing
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["mapky", "collection", authorId, collectionId, "tags"] });
+        queryClient.invalidateQueries({ queryKey: ["mapky", "collection", authorId, collectionId] });
+      }, 5000));
     } catch {
       toast.error("Failed to tag");
     } finally {
@@ -281,10 +316,31 @@ function EditInline({
       );
       const path = `/pub/mapky.app/collections/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
-      await ingestUserIntoNexus(publicKey);
-      onSaved();
+
+      // Cancel in-flight fetches so they don't overwrite optimistic data
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, collectionId] });
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
+
+      // Optimistic cache update
+      queryClient.setQueryData<CollectionDetails>(
+        ["mapky", "collection", publicKey, collectionId],
+        (old) => old ? { ...old, name: name.trim(), description: description.trim() || null, color } : old,
+      );
+      queryClient.setQueryData<CollectionDetails[]>(
+        ["mapky", "collections", "user", publicKey],
+        (old) => old?.map((c) => {
+          const [, id] = c.id.split(":");
+          return id === collectionId ? { ...c, name: name.trim(), description: description.trim() || null, color } : c;
+        }),
+      );
+
       toast.success("Collection updated");
       onClose();
+
+      // Background reconciliation — delay to let server finish indexing
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
+        onSaved();
+      }, 5000));
     } catch {
       toast.error("Failed to update");
     } finally {
@@ -368,6 +424,7 @@ function AddPlaceInline({
   onSaved: () => void;
 }) {
   const { session, publicKey } = useAuth();
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<
     Array<{ name: string; osmType: string; osmId: number; display: string }>
@@ -412,20 +469,41 @@ function AddPlaceInline({
     }
     setSubmitting(true);
     try {
+      const newItems = [...collection.items, osmUrl];
       const json = updateCollectionJson(
         collection.name,
         collection.description ?? undefined,
-        [...collection.items, osmUrl],
+        newItems,
         collection.image_uri ?? undefined,
         collection.color ?? undefined,
       );
       const path = `/pub/mapky.app/collections/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
-      await ingestUserIntoNexus(publicKey);
-      onSaved();
+
+      // Cancel in-flight fetches so they don't overwrite optimistic data
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, collectionId] });
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
+
+      // Optimistic cache update
+      queryClient.setQueryData<CollectionDetails>(
+        ["mapky", "collection", publicKey, collectionId],
+        (old) => (old ? { ...old, items: newItems } : old),
+      );
+      queryClient.setQueryData<CollectionDetails[]>(
+        ["mapky", "collections", "user", publicKey],
+        (old) => old?.map((c) => {
+          const [, id] = c.id.split(":");
+          return id === collectionId ? { ...c, items: newItems } : c;
+        }),
+      );
+
       toast.success("Place added");
-      setQuery("");
-      setResults([]);
+      onClose();
+
+      // Background reconciliation — delay to let server finish indexing
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
+        onSaved();
+      }, 5000));
     } catch {
       toast.error("Failed to add place");
     } finally {

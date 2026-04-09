@@ -48,11 +48,11 @@ function generateTimestampId(): string {
 
 /** Compute BLAKE3 hash → Crockford Base32 blob ID (first half of hash). */
 async function computeBlobId(data: Uint8Array): Promise<string> {
-  // Use SubtleCrypto SHA-256 as a fallback since BLAKE3 isn't in Web Crypto.
-  // The homeserver doesn't validate blob IDs, so SHA-256 is fine for uniqueness.
-  const hash = await crypto.subtle.digest("SHA-256", data.buffer as ArrayBuffer);
-  const halfLen = Math.floor(new Uint8Array(hash).length / 2);
-  return crockfordEncode(new Uint8Array(hash).slice(0, halfLen));
+  const { hash } = await import("blake3/browser");
+  const digest = hash(data);
+  const bytes = new Uint8Array(digest);
+  const halfLen = Math.floor(bytes.length / 2);
+  return crockfordEncode(bytes.slice(0, halfLen));
 }
 
 export interface UploadedFile {

@@ -16,6 +16,7 @@ import {
 } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { toast } from "sonner";
+import type { CollectionDetails } from "@/types/mapky";
 
 interface CollectionPickerProps {
   osmType: string;
@@ -62,21 +63,41 @@ export function CollectionPicker({
       );
       const path = `/pub/mapky.app/collections/${cId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
-      await ingestUserIntoNexus(publicKey);
 
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "collections", "user", publicKey],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "collection", publicKey, cId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "collections", "place", osmType, osmId],
-      });
+      // Cancel in-flight fetches so they don't overwrite optimistic data
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, cId] });
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "place", osmType, osmId] });
 
-      toast.success(
-        hasPlace ? "Removed from collection" : "Added to collection",
+      // Optimistic cache updates
+      queryClient.setQueryData<CollectionDetails[]>(
+        ["mapky", "collections", "user", publicKey],
+        (old) => old?.map((c) => {
+          const [, id] = c.id.split(":");
+          return id === cId ? { ...c, items: newItems } : c;
+        }),
       );
+      queryClient.setQueryData<CollectionDetails>(
+        ["mapky", "collection", publicKey, cId],
+        (old) => (old ? { ...old, items: newItems } : old),
+      );
+      queryClient.setQueryData<CollectionDetails[]>(
+        ["mapky", "collections", "place", osmType, osmId],
+        (old) => {
+          if (hasPlace) return old?.filter((c) => { const [, id] = c.id.split(":"); return id !== cId; });
+          return [...(old ?? []), { ...collection, items: newItems }];
+        },
+      );
+
+      toast.success(hasPlace ? "Removed from collection" : "Added to collection");
+      onClose();
+
+      // Background reconciliation — delay to let server finish indexing
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
+        queryClient.invalidateQueries({ queryKey: ["mapky", "collection", publicKey, cId] });
+        queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "place", osmType, osmId] });
+      }, 5000));
     } catch {
       toast.error("Failed to update collection");
     } finally {
@@ -98,18 +119,40 @@ export function CollectionPicker({
         result.path as `/pub/${string}`,
         result.json,
       );
-      await ingestUserIntoNexus(publicKey);
 
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "collections", "user", publicKey],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["mapky", "collections", "place", osmType, osmId],
-      });
+      // Cancel in-flight fetches so they don't overwrite optimistic data
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "place", osmType, osmId] });
+
+      // Optimistic cache update — add new collection to user's list and place's collections
+      const collectionId = result.path.split("/").pop()!;
+      const optimistic: CollectionDetails = {
+        id: `${publicKey}:${collectionId}`,
+        author_id: publicKey,
+        name: newName.trim(),
+        description: null,
+        items: [osmUrl],
+        image_uri: null,
+        color: null,
+        indexed_at: Date.now() / 1000,
+      };
+      queryClient.setQueryData<CollectionDetails[]>(
+        ["mapky", "collections", "user", publicKey],
+        (old) => [...(old ?? []), optimistic],
+      );
+      queryClient.setQueryData<CollectionDetails[]>(
+        ["mapky", "collections", "place", osmType, osmId],
+        (old) => [...(old ?? []), optimistic],
+      );
 
       toast.success(`Created "${newName.trim()}" with this place`);
-      setNewName("");
-      setCreating(false);
+      onClose();
+
+      // Background reconciliation — delay to let server finish indexing
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
+        queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "place", osmType, osmId] });
+      }, 5000));
     } catch {
       toast.error("Failed to create collection");
     } finally {

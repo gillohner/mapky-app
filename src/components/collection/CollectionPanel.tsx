@@ -13,9 +13,13 @@ import { CollectionPlaces } from "./CollectionPlaces";
 interface CollectionPanelProps {
   authorId: string;
   collectionId: string;
+  fromSearchQuery?: string;
+  fromSearchMode?: string;
+  fromPlaceType?: string;
+  fromPlaceId?: number;
 }
 
-export function CollectionPanel({ authorId, collectionId }: CollectionPanelProps) {
+export function CollectionPanel({ authorId, collectionId, fromSearchQuery, fromSearchMode, fromPlaceType, fromPlaceId }: CollectionPanelProps) {
   const navigate = useNavigate();
   const { data: collection, isLoading } = useCollection(authorId, collectionId);
   const [expanded, setExpanded] = useState(false);
@@ -68,7 +72,22 @@ export function CollectionPanel({ authorId, collectionId }: CollectionPanelProps
   }, [collection?.color, authorId, collectionId, addOverlay]);
 
   const close = () => navigate({ to: "/" });
-  const back = () => navigate({ to: "/collections" });
+  const back = () => {
+    if (fromPlaceType && fromPlaceId) {
+      navigate({
+        to: "/place/$osmType/$osmId",
+        params: { osmType: fromPlaceType, osmId: String(fromPlaceId) },
+      });
+    } else if (fromSearchQuery) {
+      navigate({
+        to: "/search",
+        search: { q: fromSearchQuery, mode: (fromSearchMode as "places" | "tags") ?? "places" },
+      });
+    } else {
+      navigate({ to: "/collections" });
+    }
+  };
+  const backLabel = fromPlaceType ? "Place" : fromSearchQuery ? "Search results" : "Collections";
 
   return (
     <>
@@ -80,7 +99,7 @@ export function CollectionPanel({ authorId, collectionId }: CollectionPanelProps
             className="flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
-            Collections
+            {backLabel}
           </button>
           <button
             onClick={close}
@@ -131,7 +150,7 @@ export function CollectionPanel({ authorId, collectionId }: CollectionPanelProps
             className="mb-1 flex items-center gap-1 text-xs text-muted hover:text-foreground"
           >
             <ChevronLeft className="h-3 w-3" />
-            Collections
+            {backLabel}
           </button>
           {isLoading && <LoadingSkeleton />}
           {!isLoading && (
