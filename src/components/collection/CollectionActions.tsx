@@ -29,7 +29,7 @@ interface CollectionActionsProps {
   collection?: CollectionDetails;
 }
 
-type Mode = null | "tag" | "edit" | "add-place";
+type Mode = null | "tag" | "edit" | "add-place" | "confirm-delete";
 
 export function CollectionActions({
   authorId,
@@ -59,7 +59,6 @@ export function CollectionActions({
 
   const handleDelete = async () => {
     if (!session || !collection) return;
-    if (!confirm("Delete this collection?")) return;
     try {
       const path = `/pub/mapky.app/collections/${collectionId}`;
       await session.storage.delete(path as `/pub/${string}`);
@@ -116,6 +115,30 @@ export function CollectionActions({
     );
   }
 
+  if (mode === "confirm-delete") {
+    return (
+      <div className="space-y-3 rounded-lg border border-red-500/30 bg-surface p-3">
+        <p className="text-sm text-foreground">
+          Delete <span className="font-medium">{collection?.name}</span>? This cannot be undone.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => setMode(null)}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:bg-background"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            className="rounded-lg bg-red-500 px-3 py-1.5 text-sm text-white hover:bg-red-600"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-wrap gap-2">
       <ActionButton
@@ -147,7 +170,7 @@ export function CollectionActions({
         <ActionButton
           icon={<Trash2 className="h-4 w-4" />}
           label="Delete"
-          onClick={handleDelete}
+          onClick={() => setMode("confirm-delete")}
           className="text-red-500 hover:border-red-500"
         />
       )}
@@ -296,6 +319,7 @@ function EditInline({
   onSaved: () => void;
 }) {
   const { session, publicKey } = useAuth();
+  const queryClient = useQueryClient();
   const [name, setName] = useState(collection.name);
   const [description, setDescription] = useState(
     collection.description ?? "",
