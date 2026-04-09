@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   fetchViewportPlaces,
   fetchPlaceDetail,
@@ -13,6 +13,7 @@ import {
 } from "./mapky";
 import { fetchUserProfile } from "./user";
 import { reverseGeocode, searchPlaces, searchPlacesBounded, lookupOsmElement } from "./nominatim";
+import type { NominatimSearchResult } from "./nominatim";
 import type { ViewportBounds } from "@/types/mapky";
 
 export function useViewportPlaces(bounds: ViewportBounds | null) {
@@ -159,5 +160,19 @@ export function useBoundedNominatimSearch(
     enabled: query.length >= 2 && viewbox !== null,
     staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,
+    placeholderData: keepPreviousData,
   });
+}
+
+type Viewbox = { west: number; north: number; east: number; south: number };
+
+/**
+ * Bounded search — wraps useBoundedNominatimSearch with a stable return type.
+ */
+export function useBoundedSearch(
+  query: string,
+  viewbox: Viewbox | null,
+): { data: NominatimSearchResult[]; isLoading: boolean } {
+  const nominatim = useBoundedNominatimSearch(query, viewbox);
+  return { data: nominatim.data ?? [], isLoading: nominatim.isLoading };
 }

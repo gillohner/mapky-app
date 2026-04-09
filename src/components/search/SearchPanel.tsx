@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { X, ChevronUp, ChevronDown, MapPin, FolderHeart, MessageSquare } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useBoundedNominatimSearch, useNominatimSearch, useTagSearch, useOsmLookup } from "@/lib/api/hooks";
+import { useBoundedSearch, useNominatimSearch, useTagSearch, useOsmLookup } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { parseOsmCanonical } from "@/lib/map/osm-url";
@@ -39,14 +39,13 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
 
   useEffect(() => {
     if (!map) return;
-    // Set initial viewbox
     setViewbox(getViewbox(map));
 
     const onMoveEnd = () => {
       clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         setViewbox(getViewbox(map));
-      }, 500);
+      }, 800);
     };
 
     map.on("moveend", onMoveEnd);
@@ -56,9 +55,9 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
     };
   }, [map]);
 
-  // Bounded search: re-fires on viewport change (single Nominatim request)
-  const { data: nearbyResults = [], isLoading: nearbyLoading } =
-    useBoundedNominatimSearch(mode === "places" ? query : "", viewbox);
+  // Bounded search: Overpass for category queries, Nominatim for name queries
+  const { data: latestNearby = [], isLoading: nearbyLoading } =
+    useBoundedSearch(mode === "places" ? query : "", viewbox);
 
   // Global search: fires once per query (reuses existing searchPlaces, cached)
   const { data: globalResultsRaw = [], isLoading: globalLoading } =
@@ -70,9 +69,41 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
 
   const isLoading = mode === "places" ? (nearbyLoading || globalLoading) : tagsLoading;
 
-  // Dedupe global results against nearby
-  const nearbyIds = new Set(nearbyResults.map((r) => `${r.osm_type}:${r.osm_id}`));
-  const globalResults = globalResultsRaw.filter((r) => !nearbyIds.has(`${r.osm_type}:${r.osm_id}`));
+  // Accumulate nearby results across viewport moves within the same query.
+  // Reset when query changes. New viewport results merge into the accumulated set.
+  const accumulatedRef = useRef<Map<string, NominatimSearchResult>>(new Map());
+  const lastQueryRef = useRef(query);
+
+  if (lastQueryRef.current !== query) {
+    accumulatedRef.current = new Map();
+    lastQueryRef.current = query;
+  }
+
+  // Merge latest nearby results into accumulator
+  for (const r of latestNearby) {
+    const key = `${r.osm_type}:${r.osm_id}`;
+    if (!accumulatedRef.current.has(key)) {
+      accumulatedRef.current.set(key, r);
+    }
+  }
+
+  // Filter accumulated results to those currently in viewport + latest results
+  const currentViewbox = viewbox;
+  const nearbyResults = currentViewbox
+    ? Array.from(accumulatedRef.current.values()).filter(
+        (r) =>
+          r.lat >= currentViewbox.south &&
+          r.lat <= currentViewbox.north &&
+          r.lon >= currentViewbox.west &&
+          r.lon <= currentViewbox.east,
+      )
+    : latestNearby;
+
+  // Dedupe global results against accumulated nearby
+  const nearbyIds = new Set(accumulatedRef.current.keys());
+  const globalResults = globalResultsRaw.filter(
+    (r) => !nearbyIds.has(`${r.osm_type}:${r.osm_id}`),
+  );
   const allPlaceResults = [...nearbyResults, ...globalResults];
 
   useEffect(() => {
@@ -263,10 +294,10 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
 
   return (
     <>
-      {/* Map overlay for search results (nearby only — they're in view) */}
-      {mode === "places" && allPlaceResults.length > 0 && (
+      {/* Map overlay — show ALL accumulated results so markers persist across pans */}
+      {mode === "places" && accumulatedRef.current.size > 0 && (
         <SearchResultsOverlay
-          results={allPlaceResults}
+          results={Array.from(accumulatedRef.current.values())}
           searchQuery={query}
           searchMode={mode}
         />

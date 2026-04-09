@@ -180,7 +180,7 @@ function parseSearchResults(data: Record<string, unknown>[]): NominatimSearchRes
 export async function searchPlacesBounded(
   query: string,
   viewbox: { west: number; north: number; east: number; south: number },
-  limit = 20,
+  limit = 40,
 ): Promise<NominatimSearchResult[]> {
   const vb = `${viewbox.west.toFixed(4)},${viewbox.north.toFixed(4)},${viewbox.east.toFixed(4)},${viewbox.south.toFixed(4)}`;
   const cacheKey = `search-bd:${query.toLowerCase().trim()}:${viewbox.west.toFixed(2)},${viewbox.north.toFixed(2)},${viewbox.east.toFixed(2)},${viewbox.south.toFixed(2)}`;
