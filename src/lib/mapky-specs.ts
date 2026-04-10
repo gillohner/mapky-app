@@ -1,10 +1,82 @@
 import {
   MapkySpecsBuilder,
   MapkyAppPostKind,
+  PubkySpecsBuilder,
 } from "mapky-app-specs";
 
 export function makeOsmUrl(osmType: string, osmId: number): string {
   return `https://www.openstreetmap.org/${osmType}/${osmId}`;
+}
+
+export interface CreateUserProfileResult {
+  /** Homeserver path: /pub/pubky.app/profile.json */
+  path: string;
+  /** Serialized profile JSON */
+  json: string;
+}
+
+const TEST_FIRST_NAMES = [
+  "Alex", "Sam", "Jordan", "Casey", "Morgan", "Riley", "Quinn", "Avery",
+  "Skyler", "Drew", "Reese", "Sage", "Rowan", "Finley", "Phoenix", "River",
+  "Luna", "Atlas", "Nova", "Wren", "Indigo", "Juniper", "Sora", "Kai",
+];
+
+const TEST_LAST_NAMES = [
+  "Walker", "Rivers", "Stone", "Vale", "Fox", "Wren", "Hart", "Lane",
+  "Park", "Reed", "Ash", "Frost", "Brook", "Sky", "Wolf", "Moon",
+];
+
+const TEST_BIOS = [
+  "Wandering through cities one café at a time.",
+  "Always on the lookout for hidden gems.",
+  "Map nerd. Coffee enthusiast. Casual hiker.",
+  "Documenting the world, one place at a time.",
+  "Finding stories in unexpected corners.",
+  "Local explorer with global curiosity.",
+  "Just here to discover good places and tag them.",
+  "Mountains > beaches. Maybe.",
+];
+
+function pick<T>(arr: T[], seed: string, offset = 0): T {
+  let hash = offset;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return arr[hash % arr.length];
+}
+
+/** Generate a randomized but deterministic test profile (testnet only). */
+export function randomTestProfile(publicKey: string): {
+  name: string;
+  bio: string;
+} {
+  const first = pick(TEST_FIRST_NAMES, publicKey, 0);
+  const last = pick(TEST_LAST_NAMES, publicKey, 7);
+  const bio = pick(TEST_BIOS, publicKey, 13);
+  return { name: `${first} ${last}`, bio };
+}
+
+/** Build a sanitized & validated PubkyAppUser profile JSON. */
+export function createUserProfile(
+  pubkyId: string,
+  opts: {
+    name: string;
+    bio?: string;
+    image?: string;
+    status?: string;
+  },
+): CreateUserProfileResult {
+  const builder = new PubkySpecsBuilder(pubkyId);
+  const result = builder.createUser(
+    opts.name,
+    opts.bio ?? null,
+    opts.image ?? null,
+    null,
+    opts.status ?? null,
+  );
+  const json = JSON.stringify(result.user.toJson());
+  const path = result.meta.path;
+  result.free();
+  builder.free();
+  return { path, json };
 }
 
 export interface CreatePostResult {
