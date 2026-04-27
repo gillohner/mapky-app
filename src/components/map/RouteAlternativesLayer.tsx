@@ -15,6 +15,7 @@ const LAYER_INACTIVE_HALO = "mapky-routes-alts-inactive-halo";
 const LAYER_INACTIVE_LINE = "mapky-routes-alts-inactive-line";
 const LAYER_ACTIVE_HALO = "mapky-routes-alts-active-halo";
 const LAYER_ACTIVE_LINE = "mapky-routes-alts-active-line";
+const LAYER_FALLBACK_LINE = "mapky-routes-alts-fallback-line";
 const LAYER_LABELS = "mapky-routes-alts-labels";
 
 const COLOR_ACTIVE = "#1A73E8";
@@ -138,6 +139,15 @@ export function RouteAlternativesLayer({
     }
   };
 
+  // Hold the latest computed data in a ref so `ensure()` (which can run
+  // asynchronously via style.load) populates the sources with the
+  // current values rather than the empty defaults that were captured
+  // when the effect first scheduled.
+  const lineFCRef = useRef<GeoJSON.FeatureCollection>(lineFC);
+  const labelFCRef = useRef<GeoJSON.FeatureCollection>(labelFC);
+  lineFCRef.current = lineFC;
+  labelFCRef.current = labelFC;
+
   // Mount sources + layers once.
   useEffect(() => {
     if (!map) return;
@@ -146,13 +156,13 @@ export function RouteAlternativesLayer({
       if (!map.getSource(SOURCE_LINES)) {
         map.addSource(SOURCE_LINES, {
           type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
+          data: lineFCRef.current,
         });
       }
       if (!map.getSource(SOURCE_LABELS)) {
         map.addSource(SOURCE_LABELS, {
           type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
+          data: labelFCRef.current,
         });
       }
 
@@ -212,22 +222,36 @@ export function RouteAlternativesLayer({
           layout: { "line-cap": "round", "line-join": "round" },
         });
       }
+      // Snapped active line: solid blue. We split snap-vs-fallback into
+      // two layers because MapLibre's `line-dasharray` doesn't support
+      // feature-data expressions — silently failing or dropping the
+      // entire layer in some builds.
       if (!map.getLayer(LAYER_ACTIVE_LINE)) {
         map.addLayer({
           id: LAYER_ACTIVE_LINE,
           type: "line",
           source: SOURCE_LINES,
-          filter: ["==", ["get", "isActive"], true],
+          filter: [
+            "all",
+            ["==", ["get", "isActive"], true],
+            ["!=", ["get", "isFallback"], true],
+          ],
+          paint: { "line-color": COLOR_ACTIVE, "line-width": 6 },
+          layout: { "line-cap": "round", "line-join": "round" },
+        });
+      }
+      // Fallback (pre-snap): dashed gray line connecting waypoints in order.
+      if (!map.getLayer(LAYER_FALLBACK_LINE)) {
+        map.addLayer({
+          id: LAYER_FALLBACK_LINE,
+          type: "line",
+          source: SOURCE_LINES,
+          filter: ["==", ["get", "isFallback"], true],
           paint: {
             "line-color": COLOR_ACTIVE,
-            "line-width": 6,
-            // Dashed for fallback (no snap yet).
-            "line-dasharray": [
-              "case",
-              ["==", ["get", "isFallback"], true],
-              ["literal", [2, 2]],
-              ["literal", [1, 0]],
-            ],
+            "line-width": 4,
+            "line-opacity": 0.7,
+            "line-dasharray": [2, 2],
           },
           layout: { "line-cap": "round", "line-join": "round" },
         });
@@ -282,6 +306,7 @@ export function RouteAlternativesLayer({
       map.off("mouseleave", LAYER_LABELS, onLeave);
       for (const id of [
         LAYER_LABELS,
+        LAYER_FALLBACK_LINE,
         LAYER_ACTIVE_LINE,
         LAYER_ACTIVE_HALO,
         LAYER_INACTIVE_LINE,
