@@ -55,6 +55,14 @@ interface UiStore {
   setPlacesLayerVisible: (visible: boolean) => void;
   togglePlacesLayer: () => void;
 
+  capturesLayerVisible: boolean;
+  setCapturesLayerVisible: (visible: boolean) => void;
+  toggleCapturesLayer: () => void;
+
+  routesLayerVisible: boolean;
+  setRoutesLayerVisible: (visible: boolean) => void;
+  toggleRoutesLayer: () => void;
+
   pendingPoiClick: PendingPoiClick | null;
   setPendingPoiClick: (click: PendingPoiClick) => void;
   clearPendingPoiClick: () => void;
@@ -70,6 +78,14 @@ interface UiStore {
   removeCollectionOverlay: (collectionId: string) => void;
   toggleCollectionOverlay: (authorId: string, collectionId: string, color?: string) => void;
   clearAllCollectionOverlays: () => void;
+
+  streetViewActive: boolean;
+  setStreetViewActive: (active: boolean) => void;
+  /** When true, sphere is fullscreen + map is corner. When false, map is fullscreen + sphere is corner. */
+  streetViewExpanded: boolean;
+  toggleStreetViewExpanded: () => void;
+  streetViewCenter: [number, number] | null;
+  setStreetViewCenter: (center: [number, number] | null) => void;
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -81,6 +97,16 @@ export const useUiStore = create<UiStore>((set) => ({
   setPlacesLayerVisible: (visible) => set({ placesLayerVisible: visible }),
   togglePlacesLayer: () =>
     set((s) => ({ placesLayerVisible: !s.placesLayerVisible })),
+
+  capturesLayerVisible: true,
+  setCapturesLayerVisible: (visible) => set({ capturesLayerVisible: visible }),
+  toggleCapturesLayer: () =>
+    set((s) => ({ capturesLayerVisible: !s.capturesLayerVisible })),
+
+  routesLayerVisible: false,
+  setRoutesLayerVisible: (visible) => set({ routesLayerVisible: visible }),
+  toggleRoutesLayer: () =>
+    set((s) => ({ routesLayerVisible: !s.routesLayerVisible })),
 
   pendingPoiClick: null,
   setPendingPoiClick: (click) => set({ pendingPoiClick: click }),
@@ -121,4 +147,11 @@ export const useUiStore = create<UiStore>((set) => ({
       return { activeCollectionOverlays: next };
     }),
   clearAllCollectionOverlays: () => set({ activeCollectionOverlays: new Map() }),
+
+  streetViewActive: false,
+  setStreetViewActive: (active) => set({ streetViewActive: active, streetViewExpanded: active }),
+  streetViewExpanded: true,
+  toggleStreetViewExpanded: () => set((s) => ({ streetViewExpanded: !s.streetViewExpanded })),
+  streetViewCenter: null,
+  setStreetViewCenter: (center) => set({ streetViewCenter: center }),
 }));

@@ -4,8 +4,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserPosts, useOsmLookup } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
-import { UserAvatar } from "@/components/shared/UserAvatar";
-import { truncatePublicKey } from "@/lib/api/user";
 import { parseOsmCanonical } from "@/lib/map/osm-url";
 import type { PostDetails } from "@/types/mapky";
 

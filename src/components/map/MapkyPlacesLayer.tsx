@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import type maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
+import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useViewportPlaces } from "@/lib/api/hooks";
 
 import type { PlaceDetails, ViewportBounds } from "@/types/mapky";
@@ -256,6 +257,7 @@ export function MapkyPlacesLayer() {
     if (!map) return;
 
     const onClusterClick = (e: maplibregl.MapMouseEvent) => {
+      if (useRouteCreationStore.getState().isOpen) return;
       const features = map.queryRenderedFeatures(e.point, {
         layers: [CLUSTER_LAYER],
       });
@@ -278,6 +280,9 @@ export function MapkyPlacesLayer() {
 
     // Click on individual place dot → navigate using the exact place data
     const onPointClick = (e: maplibregl.MapMouseEvent) => {
+      // Skip place navigation while route creation owns map clicks.
+      if (useRouteCreationStore.getState().isOpen) return;
+
       const features = map.queryRenderedFeatures(e.point, {
         layers: [POINT_RING, POINT_DOT],
       });

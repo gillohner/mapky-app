@@ -1,9 +1,11 @@
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
+import { Maximize2 } from "lucide-react";
 import { createMapStyle } from "@/lib/map/style";
 import { decodeFeatureId } from "@/lib/map/feature-id";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
+import { useRouteCreationStore } from "@/stores/route-creation-store";
 
 // Style layer IDs from @protomaps/basemaps
 const POI_LAYERS = ["pois"];
@@ -219,11 +221,16 @@ function expandPoiFilter(map: maplibregl.Map, theme: "light" | "dark") {
 
 export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const initializedRef = useRef(false);
   const hoverPopupRef = useRef<maplibregl.Popup | null>(null);
   const { center, zoom, theme, setMap, setView } = useMapStore();
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
+  const streetViewActive = useUiStore((s) => s.streetViewActive);
+  const streetViewExpanded = useUiStore((s) => s.streetViewExpanded);
+  const streetViewCenter = useUiStore((s) => s.streetViewCenter);
+  const toggleStreetViewExpanded = useUiStore((s) => s.toggleStreetViewExpanded);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -266,6 +273,21 @@ export function MapView() {
 
     // Click: layered queries — POI (exact) → place → POI (nearby) → building
     map.on("click", (e) => {
+      // Route-creation owns map clicks while open; skip POI navigation.
+      if (useRouteCreationStore.getState().isOpen) return;
+
+      // If the click landed on a GeoCapture marker, let CaptureMarkersLayer handle it.
+      const captureLayers = existingLayers(map, [
+        "mapky-capture-point-dot",
+        "mapky-capture-point-arrow",
+      ]);
+      if (captureLayers.length) {
+        const captureHits = map.queryRenderedFeatures(e.point, {
+          layers: captureLayers,
+        });
+        if (captureHits.length > 0) return;
+      }
+
       const hit = pickFeature(map, e.point);
       if (hit) {
         useUiStore.getState().setPendingPoiClick({
@@ -351,10 +373,47 @@ export function MapView() {
     });
   }, [sidebarOpen]);
 
+  // Resize map when switching between fullscreen and mini-map
+  const isMiniMap = streetViewActive && streetViewExpanded;
+  useEffect(() => {
+    if (!mapRef.current || !initializedRef.current) return;
+    setTimeout(() => mapRef.current?.resize(), 50);
+  }, [isMiniMap]);
+
+  // Sync map to current street-view capture location (both mini and full modes)
+  useEffect(() => {
+    if (!mapRef.current || !initializedRef.current) return;
+    if (!streetViewActive || !streetViewCenter) return;
+    mapRef.current.easeTo({
+      center: streetViewCenter as [number, number],
+      zoom: isMiniMap ? 16 : 17,
+      duration: 400,
+    });
+  }, [streetViewActive, streetViewCenter, isMiniMap]);
+
   return (
     <div
-      ref={containerRef}
-      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-    />
+      ref={wrapperRef}
+      className={
+        isMiniMap
+          ? "pointer-events-auto absolute bottom-20 right-4 z-[10] h-[140px] w-[200px] overflow-hidden rounded-2xl shadow-2xl ring-2 ring-white/20 md:h-[200px] md:w-[280px]"
+          : "absolute inset-0"
+      }
+    >
+      <div
+        ref={containerRef}
+        style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+      />
+      {streetViewActive && (
+        <button
+          type="button"
+          onClick={toggleStreetViewExpanded}
+          className="absolute right-2 top-2 z-10 rounded-lg bg-black/50 p-1.5 text-white/80 backdrop-blur transition-colors hover:bg-black/70 hover:text-white"
+          aria-label={isMiniMap ? "Expand map" : "Expand street view"}
+        >
+          <Maximize2 className="h-4 w-4" />
+        </button>
+      )}
+    </div>
   );
 }

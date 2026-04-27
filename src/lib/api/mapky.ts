@@ -4,6 +4,8 @@ import type {
   PostDetails,
   PostTagDetails,
   CollectionDetails,
+  GeoCaptureDetails,
+  RouteDetails,
   TagSearchResult,
   ViewportBounds,
 } from "@/types/mapky";
@@ -137,6 +139,91 @@ export async function fetchUserPosts(
   return data;
 }
 
+export async function fetchViewportCaptures(
+  bounds: ViewportBounds,
+  limit = 200,
+): Promise<GeoCaptureDetails[]> {
+  const { data } = await nexusClient.get<GeoCaptureDetails[]>(
+    "/v0/mapky/geo_captures/viewport",
+    {
+      params: {
+        min_lat: bounds.minLat,
+        min_lon: bounds.minLon,
+        max_lat: bounds.maxLat,
+        max_lon: bounds.maxLon,
+        limit,
+      },
+    },
+  );
+  return data;
+}
+
+export async function fetchGeoCaptureDetail(
+  authorId: string,
+  captureId: string,
+): Promise<GeoCaptureDetails> {
+  const { data } = await nexusClient.get<GeoCaptureDetails>(
+    `/v0/mapky/geo_captures/${authorId}/${captureId}`,
+  );
+  return data;
+}
+
+export async function fetchGeoCaptureTags(
+  authorId: string,
+  captureId: string,
+): Promise<PostTagDetails[]> {
+  const { data } = await nexusClient.get<PostTagDetails[]>(
+    `/v0/mapky/geo_captures/${authorId}/${captureId}/tags`,
+  );
+  return data;
+}
+
+export async function fetchSequenceCaptures(
+  authorId: string,
+  sequenceId: string,
+): Promise<GeoCaptureDetails[]> {
+  const { data } = await nexusClient.get<GeoCaptureDetails[]>(
+    `/v0/mapky/sequences/${authorId}/${sequenceId}/captures`,
+  );
+  return data;
+}
+
+export async function fetchNearbyCaptures(
+  lat: number,
+  lon: number,
+  options?: { radius?: number; excludeSequence?: string; limit?: number },
+): Promise<GeoCaptureDetails[]> {
+  const { data } = await nexusClient.get<GeoCaptureDetails[]>(
+    "/v0/mapky/geo_captures/nearby",
+    {
+      params: {
+        lat,
+        lon,
+        radius: options?.radius ?? 80,
+        exclude_sequence: options?.excludeSequence,
+        limit: options?.limit ?? 8,
+      },
+    },
+  );
+  return data;
+}
+
+export async function fetchUserGeoCaptures(
+  userId: string,
+  options?: { skip?: number; limit?: number },
+): Promise<GeoCaptureDetails[]> {
+  const { data } = await nexusClient.get<GeoCaptureDetails[]>(
+    `/v0/mapky/geo_captures/user/${userId}`,
+    {
+      params: {
+        skip: options?.skip ?? 0,
+        limit: options?.limit ?? 100,
+      },
+    },
+  );
+  return data;
+}
+
 export async function searchByTag(
   query: string,
   limit = 20,
@@ -144,6 +231,51 @@ export async function searchByTag(
   const { data } = await nexusClient.get<TagSearchResult>(
     "/v0/mapky/search/tags",
     { params: { q: query, limit } },
+  );
+  return data;
+}
+
+export async function fetchViewportRoutes(
+  bounds: ViewportBounds,
+  limit = 100,
+): Promise<RouteDetails[]> {
+  const { data } = await nexusClient.get<RouteDetails[]>(
+    "/v0/mapky/routes/viewport",
+    {
+      params: {
+        min_lat: bounds.minLat,
+        min_lon: bounds.minLon,
+        max_lat: bounds.maxLat,
+        max_lon: bounds.maxLon,
+        limit,
+      },
+    },
+  );
+  return data;
+}
+
+export async function fetchRouteDetails(
+  authorId: string,
+  routeId: string,
+): Promise<RouteDetails> {
+  const { data } = await nexusClient.get<RouteDetails>(
+    `/v0/mapky/routes/${authorId}/${routeId}`,
+  );
+  return data;
+}
+
+export async function fetchUserRoutes(
+  userId: string,
+  options?: { skip?: number; limit?: number },
+): Promise<RouteDetails[]> {
+  const { data } = await nexusClient.get<RouteDetails[]>(
+    `/v0/mapky/routes/user/${userId}`,
+    {
+      params: {
+        skip: options?.skip ?? 0,
+        limit: options?.limit ?? 100,
+      },
+    },
   );
   return data;
 }

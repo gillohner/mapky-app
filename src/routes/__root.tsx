@@ -3,11 +3,17 @@ import { QueryProvider } from "@/components/providers/QueryProvider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { MapView } from "@/components/map/MapView";
 import { MapkyPlacesLayer } from "@/components/map/MapkyPlacesLayer";
+import { CaptureMarkersLayer } from "@/components/map/CaptureMarkersLayer";
+import { SequenceCoverageLayer } from "@/components/map/SequenceCoverageLayer";
 import { PoiClickHandler } from "@/components/map/PoiClickHandler";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
 import { CollectionOverlays } from "@/components/map/CollectionOverlays";
+import { ViewportRoutesGate } from "@/components/map/ViewportRoutesGate";
 import { IconRail } from "@/components/sidebar/IconRail";
 import { SearchBar } from "@/components/sidebar/SearchBar";
+import { CaptureCreationPanel } from "@/components/capture/CaptureCreationPanel";
+import { MainMapCaptureOverlay } from "@/components/capture/MainMapCaptureOverlay";
+import { DirectionsLayer } from "@/components/route/DirectionsLayer";
 import { Menu } from "@/components/menu/Menu";
 import { Toaster } from "sonner";
 
@@ -22,11 +28,17 @@ function RootLayout() {
         <div className="relative h-dvh w-screen overflow-hidden">
           <MapView />
           <MapkyPlacesLayer />
+          <CaptureMarkersLayer />
+          <SequenceCoverageLayer />
+          <MainMapCaptureOverlay />
           <CollectionOverlays />
+          <ViewportRoutesGate />
           <PoiClickHandler />
           <SelectedPlaceMarker />
           <IconRail />
           <SearchBar />
+          <DirectionsLayer />
+          <CaptureCreationPanel />
           <Outlet />
           <Menu />
         </div>
@@ -35,3 +47,4 @@ function RootLayout() {
     </QueryProvider>
   );
 }
+

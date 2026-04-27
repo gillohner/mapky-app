@@ -5,6 +5,10 @@ node_modules/
 dist/
 dist-ssr/
 
+# E2E artifacts — screenshots, results.json, exported GPX are generated
+# every run. The driver scripts (e2e/*.mjs, e2e/README.md) stay tracked.
+e2e/output/
+
 # Environment
 .env
 .env.local

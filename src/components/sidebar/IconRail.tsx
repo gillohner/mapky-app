@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Menu as MenuIcon, Sun, Moon, Eye, EyeOff, User, FolderHeart, MessageSquare } from "lucide-react";
+import { Menu as MenuIcon, Sun, Moon, Eye, EyeOff, User, FolderHeart, MessageSquare, Camera, CameraOff, Plus, Route as RouteIcon } from "lucide-react";
+import { useCaptureCreationStore } from "@/stores/capture-creation-store";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { getPubkyAvatarUrl } from "@/lib/api/user";
+import { useUserProfile } from "@/lib/api/hooks";
 
 function RailButton({
   onClick,
@@ -32,12 +34,25 @@ export function IconRail() {
   const toggleMenu = useUiStore((s) => s.toggleMenu);
   const placesLayerVisible = useUiStore((s) => s.placesLayerVisible);
   const togglePlacesLayer = useUiStore((s) => s.togglePlacesLayer);
+  const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
+  const toggleCapturesLayer = useUiStore((s) => s.toggleCapturesLayer);
+  const routesLayerVisible = useUiStore((s) => s.routesLayerVisible);
+  const toggleRoutesLayer = useUiStore((s) => s.toggleRoutesLayer);
+  const openCapture = useCaptureCreationStore((s) => s.open);
+  const captureIsOpen = useCaptureCreationStore((s) => s.isOpen);
   const theme = useMapStore((s) => s.theme);
   const setTheme = useMapStore((s) => s.setTheme);
   const [imgError, setImgError] = useState(false);
-
+  // Only request the avatar gateway URL when we know the user has an image
+  // in their profile — otherwise the gateway 404s and we'd be displaying
+  // the icon fallback anyway. Eliminates a console error on every signup
+  // for users without avatars.
+  const profile = useUserProfile(publicKey);
+  const hasAvatar = Boolean(profile.data?.image);
   const avatarUrl =
-    isAuthenticated && publicKey ? getPubkyAvatarUrl(publicKey) : null;
+    isAuthenticated && publicKey && hasAvatar
+      ? getPubkyAvatarUrl(publicKey)
+      : null;
 
   const handleThemeToggle = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -86,6 +101,30 @@ export function IconRail() {
         )}
       </RailButton>
 
+      {/* Captures (street-view) layer toggle */}
+      <RailButton
+        onClick={toggleCapturesLayer}
+        title={
+          capturesLayerVisible ? "Hide geo-captures" : "Show geo-captures"
+        }
+      >
+        {capturesLayerVisible ? (
+          <Camera className="h-5 w-5" />
+        ) : (
+          <CameraOff className="h-5 w-5" />
+        )}
+      </RailButton>
+
+      {/* Routes layer toggle */}
+      <RailButton
+        onClick={toggleRoutesLayer}
+        title={routesLayerVisible ? "Hide routes" : "Show routes"}
+      >
+        <RouteIcon
+          className={`h-5 w-5 ${routesLayerVisible ? "text-foreground" : ""}`}
+        />
+      </RailButton>
+
       {/* Collections */}
       {isAuthenticated && (
         <RailButton
@@ -96,6 +135,14 @@ export function IconRail() {
         </RailButton>
       )}
 
+      {/* Routes */}
+      <RailButton
+        onClick={() => navigate({ to: "/routes" })}
+        title="Routes"
+      >
+        <RouteIcon className="h-5 w-5" />
+      </RailButton>
+
       {/* My Posts */}
       {isAuthenticated && (
         <RailButton
@@ -104,6 +151,16 @@ export function IconRail() {
         >
           <MessageSquare className="h-5 w-5" />
         </RailButton>
+      )}
+
+      {/* New Capture */}
+      {isAuthenticated && !captureIsOpen && (
+        <>
+          <div className="my-1 w-6 border-t border-border" />
+          <RailButton onClick={openCapture} title="New capture">
+            <Plus className="h-5 w-5" />
+          </RailButton>
+        </>
       )}
     </div>
   );

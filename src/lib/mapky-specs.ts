@@ -1,8 +1,14 @@
 import {
   MapkySpecsBuilder,
   MapkyAppPostKind,
+  GeoCaptureKind,
   PubkySpecsBuilder,
+  RouteActivityType,
+  RouteDifficulty,
 } from "mapky-app-specs";
+
+import type { GeoCaptureKind as GeoCaptureKindType } from "@/types/mapky";
+import type { Waypoint } from "@/lib/routing/types";
 
 export function makeOsmUrl(osmType: string, osmId: number): string {
   return `https://www.openstreetmap.org/${osmType}/${osmId}`;
@@ -212,6 +218,315 @@ export function createCollectionTag(
   const collectionUri = `pubky://${authorId}/pub/mapky.app/collections/${collectionId}`;
 
   const result = builder.createPlaceTag(collectionUri, label);
+  const json = JSON.stringify(result.tag.toJson());
+  const path = result.meta.path;
+
+  result.free();
+  builder.free();
+
+  return { path, json };
+}
+
+export interface CreateGeoCaptureResult {
+  /** Homeserver path: /pub/mapky.app/geo_captures/{id} */
+  path: string;
+  /** Full pubky:// URI */
+  url: string;
+  /** JSON string to write */
+  json: string;
+}
+
+const KIND_MAP: Record<GeoCaptureKindType, GeoCaptureKind> = {
+  photo: GeoCaptureKind.Photo,
+  panorama: GeoCaptureKind.Panorama,
+  video: GeoCaptureKind.Video,
+  video360: GeoCaptureKind.Video360,
+  model3d: GeoCaptureKind.Model3d,
+  point_cloud: GeoCaptureKind.PointCloud,
+  audio: GeoCaptureKind.Audio,
+  other: GeoCaptureKind.Other,
+};
+
+export function createGeoCapture(
+  pubkyId: string,
+  opts: {
+    fileUri: string;
+    kind: GeoCaptureKindType;
+    lat: number;
+    lon: number;
+    ele?: number;
+    heading?: number;
+    pitch?: number;
+    fov?: number;
+    caption?: string;
+    /** UNIX microseconds — moment the media was captured */
+    capturedAt?: number;
+  },
+): CreateGeoCaptureResult {
+  const builder = new MapkySpecsBuilder(pubkyId);
+
+  const result = builder.createGeoCapture(
+    opts.fileUri,
+    KIND_MAP[opts.kind],
+    opts.lat,
+    opts.lon,
+    opts.ele ?? null,
+    opts.heading ?? null,
+    opts.pitch ?? null,
+    opts.fov ?? null,
+    opts.caption ?? null,
+    opts.capturedAt != null ? BigInt(opts.capturedAt) : null,
+  );
+
+  const obj = result.geo_capture.toJson() as Record<string, unknown>;
+  const json = JSON.stringify(obj);
+  const path = result.meta.path;
+  const url = result.meta.url;
+
+  result.free();
+  builder.free();
+
+  return { path, url, json };
+}
+
+export interface CreateSequenceResult {
+  path: string;
+  url: string;
+  json: string;
+  sequenceId: string;
+}
+
+export function createSequence(
+  pubkyId: string,
+  opts: {
+    kind: GeoCaptureKindType;
+    capturedAtStart: number; // microseconds
+    capturedAtEnd: number; // microseconds
+    captureCount: number;
+    name?: string;
+    description?: string;
+    device?: string;
+    bbox?: {
+      minLat: number;
+      minLon: number;
+      maxLat: number;
+      maxLon: number;
+    };
+  },
+): CreateSequenceResult {
+  const builder = new MapkySpecsBuilder(pubkyId);
+
+  const result = builder.createSequence(
+    KIND_MAP[opts.kind],
+    BigInt(opts.capturedAtStart),
+    BigInt(opts.capturedAtEnd),
+    opts.captureCount,
+    opts.name ?? null,
+    opts.description ?? null,
+    opts.device ?? null,
+    opts.bbox?.minLat ?? null,
+    opts.bbox?.minLon ?? null,
+    opts.bbox?.maxLat ?? null,
+    opts.bbox?.maxLon ?? null,
+  );
+
+  const obj = result.sequence.toJson() as Record<string, unknown>;
+  const json = JSON.stringify(obj);
+  const path = result.meta.path;
+  const url = result.meta.url;
+  const sequenceId = path.split("/").pop()!;
+
+  result.free();
+  builder.free();
+
+  return { path, url, json, sequenceId };
+}
+
+export function createGeoCaptureTag(
+  pubkyId: string,
+  authorId: string,
+  captureId: string,
+  label: string,
+): CreateTagResult {
+  const builder = new MapkySpecsBuilder(pubkyId);
+  const captureUri = `pubky://${authorId}/pub/mapky.app/geo_captures/${captureId}`;
+
+  const result = builder.createPlaceTag(captureUri, label);
+  const json = JSON.stringify(result.tag.toJson());
+  const path = result.meta.path;
+
+  result.free();
+  builder.free();
+
+  return { path, json };
+}
+
+export type RouteActivityKey =
+  | "hiking"
+  | "cycling"
+  | "running"
+  | "walking"
+  | "driving"
+  | "skiing"
+  | "other";
+
+export type RouteDifficultyKey = "easy" | "moderate" | "difficult" | "expert";
+
+const ACTIVITY_MAP: Record<RouteActivityKey, RouteActivityType> = {
+  hiking: RouteActivityType.Hiking,
+  cycling: RouteActivityType.Cycling,
+  running: RouteActivityType.Running,
+  walking: RouteActivityType.Walking,
+  driving: RouteActivityType.Driving,
+  skiing: RouteActivityType.Skiing,
+  other: RouteActivityType.Other,
+};
+
+const DIFFICULTY_MAP: Record<RouteDifficultyKey, RouteDifficulty> = {
+  easy: RouteDifficulty.Easy,
+  moderate: RouteDifficulty.Moderate,
+  difficult: RouteDifficulty.Difficult,
+  expert: RouteDifficulty.Expert,
+};
+
+export interface RouteGeometryInput {
+  polyline: string;
+  engine: "valhalla" | "manual" | "gpx";
+  costing?: string | null;
+  computed_at: number;
+}
+
+export interface CreateRouteOptions {
+  description?: string | null;
+  difficulty?: RouteDifficultyKey | null;
+  geometry?: RouteGeometryInput | null;
+  osm_ways?: string[] | null;
+  image_uri?: string | null;
+  distance_m?: number | null;
+  elevation_gain_m?: number | null;
+  elevation_loss_m?: number | null;
+  estimated_duration_s?: number | null;
+}
+
+export interface CreateRouteResult {
+  /** Homeserver path: /pub/mapky.app/routes/{id} */
+  path: string;
+  /** Full pubky:// URI */
+  url: string;
+  /** JSON string to write */
+  json: string;
+}
+
+/**
+ * Build a sanitized & validated MapkyAppRoute JSON via the WASM builder, then
+ * splice in the optional fields (description, difficulty, geometry, computed
+ * stats) that the bare constructor doesn't take. Mirrors the pattern in
+ * `createCollection` for the `color` field.
+ */
+export function createRoute(
+  pubkyId: string,
+  name: string,
+  activity: RouteActivityKey,
+  waypoints: Waypoint[],
+  opts: CreateRouteOptions = {},
+): CreateRouteResult {
+  const builder = new MapkySpecsBuilder(pubkyId);
+  const wpInput = waypoints.map((w) => ({
+    lat: w.lat,
+    lon: w.lon,
+    ele: w.ele ?? null,
+    name: w.name ?? null,
+  }));
+
+  const result = builder.createRoute(name, ACTIVITY_MAP[activity], wpInput);
+  const obj = result.route.toJson() as Record<string, unknown>;
+
+  applyRouteOptionsToJson(obj, opts);
+
+  const json = JSON.stringify(obj);
+  const path = result.meta.path;
+  const url = result.meta.url;
+
+  result.free();
+  builder.free();
+
+  return { path, url, json };
+}
+
+/**
+ * Build the JSON for an *update* of an existing route at the same path. Used
+ * during edit flows when we want to overwrite without minting a new
+ * TimestampId. Validates locally by re-running the WASM builder on a temporary
+ * pubky id, then patching the path back is unnecessary because the caller
+ * already knows the path.
+ */
+export function updateRouteJson(
+  name: string,
+  activity: RouteActivityKey,
+  waypoints: Waypoint[],
+  opts: CreateRouteOptions = {},
+): string {
+  const obj: Record<string, unknown> = {
+    name,
+    description: opts.description ?? null,
+    activity,
+    waypoints: waypoints.map((w) => ({
+      lat: w.lat,
+      lon: w.lon,
+      ele: w.ele ?? null,
+      name: w.name ?? null,
+    })),
+  };
+  applyRouteOptionsToJson(obj, opts);
+  return JSON.stringify(obj);
+}
+
+function applyRouteOptionsToJson(
+  obj: Record<string, unknown>,
+  opts: CreateRouteOptions,
+) {
+  if (opts.description !== undefined) {
+    obj.description = opts.description;
+  }
+  if (opts.difficulty) {
+    obj.difficulty = opts.difficulty;
+  }
+  if (opts.geometry) {
+    obj.geometry = {
+      polyline: opts.geometry.polyline,
+      engine: opts.geometry.engine,
+      costing: opts.geometry.costing ?? null,
+      computed_at: opts.geometry.computed_at,
+    };
+  }
+  if (opts.osm_ways && opts.osm_ways.length > 0) {
+    obj.osm_ways = opts.osm_ways;
+  }
+  if (opts.image_uri) {
+    obj.image_uri = opts.image_uri;
+  }
+  if (opts.distance_m != null) obj.distance_m = opts.distance_m;
+  if (opts.elevation_gain_m != null)
+    obj.elevation_gain_m = opts.elevation_gain_m;
+  if (opts.elevation_loss_m != null)
+    obj.elevation_loss_m = opts.elevation_loss_m;
+  if (opts.estimated_duration_s != null)
+    obj.estimated_duration_s = opts.estimated_duration_s;
+}
+
+// Difficulty key map is exposed for UI selectors that want enum-typed values.
+export { DIFFICULTY_MAP };
+
+export function createRouteTag(
+  pubkyId: string,
+  authorId: string,
+  routeId: string,
+  label: string,
+): CreateTagResult {
+  const builder = new MapkySpecsBuilder(pubkyId);
+  const routeUri = `pubky://${authorId}/pub/mapky.app/routes/${routeId}`;
+
+  const result = builder.createPlaceTag(routeUri, label);
   const json = JSON.stringify(result.tag.toJson());
   const path = result.meta.path;
 

@@ -59,18 +59,24 @@ interface PlaceHeaderProps {
 
 export function PlaceHeader({ osmType, osmId, place, tileName, tileKind }: PlaceHeaderProps) {
   const needsLookup = !tileName || !!place;
-  const { data: nominatim, isLoading: nameLoading } = useOsmLookup(
-    osmType,
-    osmId,
-    needsLookup,
-  );
+  const {
+    data: nominatim,
+    isLoading: nameLoading,
+    isError: nameError,
+  } = useOsmLookup(osmType, osmId, needsLookup);
 
-  const placeName =
+  // Resolution priority: Nominatim name → tile name → Nominatim address →
+  // Nominatim display_name fragment → raw OSM identifier. The identifier is
+  // always available so we never show an indefinite skeleton — once
+  // Nominatim errors or settles without a usable name we fall through to it.
+  const resolvedName =
     nominatim?.name ||
     tileName ||
     (nominatim?.address && buildAddressName(nominatim.address)) ||
-    nominatim?.display_name?.split(",")[0] ||
-    `${osmType}/${osmId}`;
+    nominatim?.display_name?.split(",")[0];
+  const placeName = resolvedName || `${osmType} ${osmId}`;
+  const showSkeleton =
+    nameLoading && !tileName && !nameError && !resolvedName;
 
   const locationType =
     formatType(nominatim?.type ?? null, nominatim?.category ?? null) ||
@@ -82,7 +88,7 @@ export function PlaceHeader({ osmType, osmId, place, tileName, tileKind }: Place
   return (
     <div>
       <h2 className="pr-16 text-lg font-semibold text-foreground">
-        {nameLoading && !tileName ? (
+        {showSkeleton ? (
           <span className="inline-block h-5 w-40 animate-pulse rounded bg-border" />
         ) : (
           placeName

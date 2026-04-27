@@ -33,7 +33,7 @@ export const Route = createFileRoute("/place/$osmType/$osmId")({
 
 function PlaceDetailRoute() {
   const { osmType, osmId } = Route.useParams();
-  const { lat, lon, name, kind, from, fromAuthor, fromCollection, fromSearchQuery, fromSearchMode, thread } = Route.useSearch();
+  const { lat, lon, name, kind, from, fromAuthor, fromCollection, fromSearchQuery, fromSearchMode } = Route.useSearch();
 
   return (
     <>

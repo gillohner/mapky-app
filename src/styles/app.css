@@ -100,3 +100,31 @@ html, body, #root {
 .mapky-hover-tooltip .maplibregl-popup-tip {
   display: none;
 }
+
+/* Photo Sphere Viewer — floor navigation dots */
+.psv-floor-dot {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(14, 165, 233, 0.22);
+  border: 2px solid rgba(14, 165, 233, 0.9);
+  box-shadow: 0 0 20px rgba(14, 165, 233, 0.5);
+  transition: transform 0.2s ease, background 0.2s ease;
+  cursor: pointer;
+}
+.psv-floor-dot:hover {
+  transform: scale(1.15);
+  background: rgba(14, 165, 233, 0.45);
+}
+.psv-floor-dot span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.7);
+}

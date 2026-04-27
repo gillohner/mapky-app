@@ -271,7 +271,6 @@ function ThreadView({
   osmType,
   osmId,
   replyMap,
-  postIndex,
   onOpenThread,
   onBack,
   backLabel,
@@ -495,7 +494,6 @@ export function PlacePosts({ osmType, osmId }: PlacePostsProps) {
   return (
     <div className="space-y-1">
       {topLevel.map((post) => {
-        const replyCount = countDescendants(ck(post), replyMap);
         return (
           <div
             key={post.id}

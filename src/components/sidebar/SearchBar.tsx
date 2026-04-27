@@ -4,6 +4,7 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useNominatimSearch, useTagSearch, useOsmLookup } from "@/lib/api/hooks";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
+import { useRouteCreationStore } from "@/stores/route-creation-store";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
 import type { PlaceDetails, PostDetails } from "@/types/mapky";
 import { parseOsmCanonical } from "@/lib/map/osm-url";
@@ -18,6 +19,7 @@ export function SearchBar() {
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Search bar stays visible in street view — user can search to exit
   const navigate = useNavigate();
   const map = useMapStore((s) => s.map);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
@@ -58,7 +60,10 @@ export function SearchBar() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  // Sync SearchBar input with /search route query param
+  // Sync SearchBar input with /search route query param. The /search
+  // route is what we navigate TO when the user types — so a reload of
+  // either / or /search?q=... preserves the active search, and a copy of
+  // the URL is shareable.
   useEffect(() => {
     if (isOnSearchRoute && typeof searchParams === "object" && searchParams !== null) {
       const sp = searchParams as Record<string, unknown>;
@@ -69,6 +74,37 @@ export function SearchBar() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnSearchRoute, searchParams]);
+
+  // Push the active query into the URL so reload restores it. We only
+  // navigate to /search when the user is NOT already on a place /
+  // collection / route detail page — otherwise typing would yank them
+  // out of whatever they were viewing. On those pages we'd lose state on
+  // reload anyway; the search-stickiness sweet spot is the home / map
+  // browsing flow.
+  useEffect(() => {
+    if (query.length < 2) return;
+    if (isOnSearchRoute) {
+      // Already on /search — keep params in sync without navigation.
+      const sp =
+        typeof searchParams === "object" && searchParams !== null
+          ? (searchParams as Record<string, unknown>)
+          : {};
+      if (sp.q !== query || sp.mode !== mode) {
+        navigate({
+          to: "/search",
+          search: { q: query, mode },
+          replace: true,
+        });
+      }
+      return;
+    }
+    // From the home page, push the query to /search so a reload restores
+    // it. Skip when the user is in a focused detail view (place, route,
+    // collection, etc.) so we don't snatch them away mid-read.
+    if (currentPath === "/" || currentPath === "") {
+      navigate({ to: "/search", search: { q: query, mode } });
+    }
+  }, [query, mode, isOnSearchRoute, currentPath, navigate, searchParams]);
 
   const handleSelectPlace = (result: NominatimSearchResult) => {
     setInput("");
@@ -158,6 +194,11 @@ export function SearchBar() {
         ((tagResults.places?.length ?? 0) > 0 ||
           (tagResults.collections?.length ?? 0) > 0 ||
           (tagResults.posts?.length ?? 0) > 0);
+
+  // Hide while directions mode is active — the DirectionsBar takes over the
+  // top of the screen and owns the search/picker UX during that flow.
+  const directionsOpen = useRouteCreationStore((s) => s.isOpen);
+  if (directionsOpen) return null;
 
   return (
     <div

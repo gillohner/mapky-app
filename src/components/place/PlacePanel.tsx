@@ -11,6 +11,7 @@ import {
 import { PlaceHeader } from "./PlaceHeader";
 import { PlacePosts } from "./PlacePosts";
 import { PlaceActions } from "./PlaceActions";
+import { PlaceDirectionsButton } from "./PlaceDirectionsButton";
 import { PlaceTags } from "./PlaceTags";
 import { PlaceCollections } from "./PlaceCollections";
 
@@ -49,7 +50,7 @@ export function PlacePanel({
   from,
 }: PlacePanelProps) {
   const navigate = useNavigate();
-  const { data: place, isLoading, error } = usePlaceDetail(osmType, osmId);
+  const { data: place } = usePlaceDetail(osmType, osmId);
   const { data: parentCollection } = useCollection(
     fromAuthor ?? "",
     fromCollection ?? "",
@@ -156,25 +157,29 @@ export function PlacePanel({
           </button>
         </div>
 
-        {/* Scrollable content */}
+        {/* Scrollable content. Children render unconditionally — gating
+            them on isLoading caused a mount/unmount feedback loop when a
+            child (PlaceDirectionsButton) also subscribes to usePlaceDetail:
+            its mount triggered a refetch, which flipped isLoading true,
+            which unmounted the child, which on next render re-mounted
+            and re-triggered the refetch (~50× per second). Each child
+            renders its own loading state. */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
-          {isLoading && <LoadingSkeleton />}
-          {!isLoading && (
-            <div className="space-y-4">
-              <PlaceHeader osmType={osmType} osmId={osmId} place={place ?? undefined} tileName={tileName} tileKind={tileKind} />
-              <div className="border-t border-border pt-4">
-                <PlaceActions osmType={osmType} osmId={osmId} />
-              </div>
-              <PlaceTags osmType={osmType} osmId={osmId} />
-              <div className="border-t border-border pt-4">
-                <h3 className="mb-2 text-sm font-medium text-foreground">
-                  Posts & Reviews
-                </h3>
-                <PlacePosts osmType={osmType} osmId={osmId} />
-              </div>
-              <PlaceCollections osmType={osmType} osmId={osmId} />
+          <div className="space-y-4">
+            <PlaceHeader osmType={osmType} osmId={osmId} place={place ?? undefined} tileName={tileName} tileKind={tileKind} />
+            <PlaceDirectionsButton osmType={osmType} osmId={osmId} fallbackName={tileName} />
+            <div className="border-t border-border pt-4">
+              <PlaceActions osmType={osmType} osmId={osmId} />
             </div>
-          )}
+            <PlaceTags osmType={osmType} osmId={osmId} />
+            <div className="border-t border-border pt-4">
+              <h3 className="mb-2 text-sm font-medium text-foreground">
+                Posts & Reviews
+              </h3>
+              <PlacePosts osmType={osmType} osmId={osmId} />
+            </div>
+            <PlaceCollections osmType={osmType} osmId={osmId} />
+          </div>
         </div>
       </div>
 
@@ -222,10 +227,7 @@ export function PlacePanel({
             </button>
           ) : null}
 
-          {isLoading && <LoadingSkeleton />}
-          {!isLoading && (
-            <PlaceHeader osmType={osmType} osmId={osmId} place={place ?? undefined} tileName={tileName} tileKind={tileKind} />
-          )}
+          <PlaceHeader osmType={osmType} osmId={osmId} place={place ?? undefined} tileName={tileName} tileKind={tileKind} />
 
           <div className="absolute right-2 top-2 flex items-center gap-1">
             <button
@@ -250,6 +252,11 @@ export function PlacePanel({
         {expanded && (
           <div className="flex-1 overflow-y-auto border-t border-border px-4 py-3">
             <div className="space-y-4">
+              <PlaceDirectionsButton
+                osmType={osmType}
+                osmId={osmId}
+                fallbackName={tileName}
+              />
               <PlaceActions osmType={osmType} osmId={osmId} />
               <PlaceTags osmType={osmType} osmId={osmId} />
               <div className="border-t border-border pt-4">
@@ -264,16 +271,6 @@ export function PlacePanel({
         )}
       </div>
     </>
-  );
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-2">
-      <div className="h-5 w-48 animate-pulse rounded bg-border" />
-      <div className="h-4 w-32 animate-pulse rounded bg-border" />
-      <div className="h-4 w-64 animate-pulse rounded bg-border" />
-    </div>
   );
 }
 
