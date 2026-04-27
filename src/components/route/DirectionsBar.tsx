@@ -127,6 +127,14 @@ export function DirectionsBar() {
       setComputedBundle(null, []);
       setComputing(true);
       setComputeError(null);
+      // Helper: a snap result/error is "stale" if a newer snap has
+      // already replaced this one's controller. This guards a real race
+      // where Valhalla's response races the abort signal — without it,
+      // an old in-flight request that comes back as 429 after a new
+      // snap already succeeded would write the rate-limit error on top
+      // of the fresh polyline + alternates.
+      const isStale = () =>
+        ac.signal.aborted || inFlightAbort.current !== ac;
       try {
         const enumValue =
           ALL_MODES.find((m) => m.key === activity)?.enumValue ??
@@ -138,17 +146,14 @@ export function DirectionsBar() {
           activityOptions: profile.options,
           alternates: 2,
         });
-        if (!ac.signal.aborted) {
-          setComputedBundle(
-            snapToComputed(bundle.primary),
-            bundle.alternates.map(snapToComputed),
-          );
-        }
+        if (isStale()) return;
+        setComputedBundle(
+          snapToComputed(bundle.primary),
+          bundle.alternates.map(snapToComputed),
+        );
       } catch (err) {
+        if (isStale()) return;
         if (err instanceof Error && err.name === "AbortError") return;
-        // Belt-and-braces: ensure no stale primary/alternates are visible
-        // alongside the error. setComputedBundle was already called above
-        // pre-fetch, but explicit clearing here makes the contract clear.
         setComputedBundle(null, []);
         if (err instanceof RoutingError) {
           setComputeError(err.message, err.hint ?? null);
@@ -158,7 +163,7 @@ export function DirectionsBar() {
           );
         }
       } finally {
-        if (!ac.signal.aborted) setComputing(false);
+        if (!isStale()) setComputing(false);
       }
     }, RECOMPUTE_DEBOUNCE_MS);
     return () => clearTimeout(handle);
