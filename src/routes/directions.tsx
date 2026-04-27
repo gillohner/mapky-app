@@ -11,6 +11,7 @@ import {
   parseDirectionsSearch,
   type DirectionsSearchParams,
 } from "@/lib/routing/url";
+import { lookupOsmElement } from "@/lib/api/nominatim";
 
 /**
  * /directions?from=lat,lon[@osmType:osmId]&via=...&to=...&mode=walk
@@ -112,6 +113,53 @@ function DirectionsRoute() {
     sync();
     return useRouteCreationStore.subscribe(sync);
   }, [navigate]);
+
+  // Resolve placeholder OSM labels ("way/135207248") to friendly names
+  // via Nominatim. parseSlotParam can't do this synchronously, so we
+  // hydrate with the OSM ref as a placeholder and patch the slot's
+  // label once Nominatim returns.
+  useEffect(() => {
+    let cancelled = false;
+    const resolve = async () => {
+      const slots = useRouteCreationStore.getState().slots;
+      for (const [i, slot] of slots.entries()) {
+        if (slot.kind !== "place") continue;
+        const placeholder = `${slot.osmType}/${slot.osmId}`;
+        if (slot.label !== placeholder) continue;
+        try {
+          const nom = await lookupOsmElement(slot.osmType, slot.osmId);
+          if (cancelled) return;
+          const friendly =
+            nom?.name ||
+            nom?.display_name?.split(",")[0]?.trim() ||
+            null;
+          if (!friendly) continue;
+          // Re-read the slot before writing — the user may have edited
+          // it while Nominatim was in flight.
+          const current = useRouteCreationStore.getState().slots[i];
+          if (
+            !current ||
+            current.kind !== "place" ||
+            current.id !== slot.id ||
+            current.label !== placeholder
+          ) {
+            continue;
+          }
+          useRouteCreationStore
+            .getState()
+            .setSlot(i, { ...current, label: friendly });
+        } catch {
+          // Nominatim 404 / network — leave the OSM ref as the visible
+          // label. User can re-pick from the search popover if they
+          // want a friendlier name.
+        }
+      }
+    };
+    resolve();
+    return () => {
+      cancelled = true;
+    };
+  }, [search]);
 
   // Closing the panel (X button) navigates away — but only on a true →
   // false transition. The store starts at isOpen=false on mount; without
