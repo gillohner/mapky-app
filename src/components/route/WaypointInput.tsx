@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Crosshair,
+  GripVertical,
   Loader2,
   MapPin,
   Navigation,
@@ -40,9 +41,52 @@ export function WaypointInput({
   const setSlot = useRouteCreationStore((s) => s.setSlot);
   const clearSlot = useRouteCreationStore((s) => s.clearSlot);
   const removeSlot = useRouteCreationStore((s) => s.removeSlot);
+  const moveSlot = useRouteCreationStore((s) => s.moveSlot);
   const pickingForSlot = useRouteCreationStore((s) => s.pickingForSlot);
   const setPickingForSlot = useRouteCreationStore((s) => s.setPickingForSlot);
   const isPicking = pickingForSlot === index;
+
+  // HTML5 native drag-and-drop for reordering waypoints. Only the grip is
+  // `draggable` so the input field still selects text normally with the
+  // mouse. Without setDragImage, the browser would use the grip handle as
+  // the drag ghost and the user would see only a tiny icon trail the
+  // cursor — we point it at the whole row instead so the entire card
+  // follows the cursor.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const isEmpty = slot.kind === "empty";
+
+  const handleDragStart = (e: React.DragEvent) => {
+    if (rowRef.current) {
+      const rect = rowRef.current.getBoundingClientRect();
+      e.dataTransfer.setDragImage(
+        rowRef.current,
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+      );
+    }
+    e.dataTransfer.setData("application/x-mapky-slot", String(index));
+    e.dataTransfer.effectAllowed = "move";
+    setIsDragging(true);
+  };
+  const handleDragEnd = () => setIsDragging(false);
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("application/x-mapky-slot")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setIsDragOver(true);
+  };
+  const handleDragLeave = () => setIsDragOver(false);
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const raw = e.dataTransfer.getData("application/x-mapky-slot");
+    if (!raw) return;
+    const from = Number(raw);
+    if (Number.isNaN(from) || from === index) return;
+    moveSlot(from, index);
+  };
 
   const userLoc = useUserLocation();
 
@@ -122,12 +166,38 @@ export function WaypointInput({
   return (
     <div ref={containerRef} className="relative">
       <div
-        className={`flex items-center gap-2 rounded-lg border bg-surface px-2.5 py-2 transition-colors ${
-          open || isPicking
-            ? "border-accent ring-2 ring-accent/20"
-            : "border-border hover:border-border/70"
+        ref={rowRef}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`flex items-center gap-1 rounded-lg border bg-surface pl-1 pr-2.5 py-2 transition-[opacity,colors] ${
+          isDragging ? "opacity-40" : ""
+        } ${
+          isDragOver
+            ? "border-accent ring-2 ring-accent/40"
+            : open || isPicking
+              ? "border-accent ring-2 ring-accent/20"
+              : "border-border hover:border-border/70"
         }`}
       >
+        {/* Drag handle. Only filled slots are draggable — moving an empty
+            placeholder doesn't make sense and would just confuse users. */}
+        <button
+          type="button"
+          draggable={!isEmpty}
+          onDragStart={!isEmpty ? handleDragStart : undefined}
+          onDragEnd={!isEmpty ? handleDragEnd : undefined}
+          aria-label="Drag to reorder"
+          title={isEmpty ? "Set a location first" : "Drag to reorder"}
+          tabIndex={-1}
+          className={`shrink-0 rounded p-0.5 ${
+            isEmpty
+              ? "cursor-default text-border"
+              : "cursor-grab text-muted hover:text-foreground active:cursor-grabbing"
+          }`}
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
         <span
           className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
           style={{ background: pinColor }}

@@ -8,7 +8,6 @@ import {
   Plus,
   Settings2,
   X,
-  ArrowUpDown,
 } from "lucide-react";
 import {
   slotToWaypoint,
@@ -85,7 +84,6 @@ export function DirectionsBar() {
   const activity = useRouteCreationStore((s) => s.activity);
   const setActivity = useRouteCreationStore((s) => s.setActivity);
   const addStop = useRouteCreationStore((s) => s.addStop);
-  const swapEndpoints = useRouteCreationStore((s) => s.swapEndpoints);
   const close = useRouteCreationStore((s) => s.close);
   const computeNonce = useRouteCreationStore((s) => s.computeNonce);
   const setComputedBundle = useRouteCreationStore((s) => s.setComputedBundle);
@@ -193,14 +191,6 @@ export function DirectionsBar() {
           Directions
         </h2>
         <div className="flex items-center gap-1">
-          <button
-            onClick={swapEndpoints}
-            className="rounded-md p-1.5 text-muted hover:bg-surface hover:text-foreground"
-            title="Swap origin and destination"
-            aria-label="Swap origin and destination"
-          >
-            <ArrowUpDown className="h-3.5 w-3.5" />
-          </button>
           <button
             onClick={() => {
               close();

@@ -124,7 +124,8 @@ interface RouteCreationState {
   clearSlot: (index: number) => void;
   addStop: () => void;
   removeSlot: (index: number) => void;
-  swapEndpoints: () => void;
+  /** Move a slot from one index to another. Used by drag-to-reorder. */
+  moveSlot: (from: number, to: number) => void;
   setPickingForSlot: (index: number | null) => void;
 
   setComputed: (computed: RouteComputed | null) => void;
@@ -272,13 +273,27 @@ export const useRouteCreationStore = create<RouteCreationState>()(
         ...bump(s),
       };
     }),
-  swapEndpoints: () =>
+  moveSlot: (from, to) =>
     set((s) => {
-      if (s.slots.length < 2) return {};
+      if (
+        from === to ||
+        from < 0 ||
+        to < 0 ||
+        from >= s.slots.length ||
+        to >= s.slots.length
+      ) {
+        return {};
+      }
       const slots = [...s.slots];
-      const last = slots.length - 1;
-      [slots[0], slots[last]] = [slots[last], slots[0]];
-      return { slots, ...bump(s) };
+      const [moved] = slots.splice(from, 1);
+      slots.splice(to, 0, moved);
+      return {
+        slots,
+        // Drop any in-progress map-pick — the indices the user was
+        // targeting just shifted underneath them.
+        pickingForSlot: null,
+        ...bump(s),
+      };
     }),
   setPickingForSlot: (pickingForSlot) => set({ pickingForSlot }),
 
