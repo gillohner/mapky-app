@@ -1,17 +1,32 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ChevronUp, ChevronDown, MapPin, FolderHeart, MessageSquare } from "lucide-react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  X,
+  ChevronUp,
+  ChevronDown,
+  MapPin,
+  FolderHeart,
+  MessageSquare,
+  Route as RouteIcon,
+} from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useBoundedSearch, useNominatimSearch, useTagSearch, useOsmLookup } from "@/lib/api/hooks";
+import {
+  useBoundedSearch,
+  useNominatimSearch,
+  useTagSearch,
+  useOsmLookup,
+  useViewportRoutes,
+} from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
+import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { parseOsmCanonical } from "@/lib/map/osm-url";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
-import type { PlaceDetails, PostDetails } from "@/types/mapky";
+import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
 import { SearchResultsOverlay } from "@/components/map/SearchResultsOverlay";
 
 interface SearchPanelProps {
   query: string;
-  mode: "places" | "tags";
+  mode: "places" | "tags" | "routes";
 }
 
 type Viewbox = { west: number; north: number; east: number; south: number };
@@ -67,7 +82,21 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
     mode === "tags" ? query : "",
   );
 
-  const isLoading = mode === "places" ? (nearbyLoading || globalLoading) : tagsLoading;
+  const bbox = useViewportBounds(mode === "routes");
+  const { data: viewportRoutes, isLoading: routesLoading } = useViewportRoutes(
+    mode === "routes" ? bbox : null,
+  );
+  const routeResults = useMemo(
+    () => filterRoutesByName(viewportRoutes ?? null, query),
+    [viewportRoutes, query],
+  );
+
+  const isLoading =
+    mode === "places"
+      ? nearbyLoading || globalLoading
+      : mode === "routes"
+        ? routesLoading
+        : tagsLoading;
 
   // Accumulate nearby results across viewport moves within the same query.
   // Reset when query changes. New viewport results merge into the accumulated set.
@@ -170,9 +199,20 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
   const resultCount =
     mode === "places"
       ? allPlaceResults.length
-      : ((tagResults?.places?.length ?? 0) +
-         (tagResults?.collections?.length ?? 0) +
-         (tagResults?.posts?.length ?? 0));
+      : mode === "routes"
+        ? routeResults.length
+        : ((tagResults?.places?.length ?? 0) +
+            (tagResults?.collections?.length ?? 0) +
+            (tagResults?.posts?.length ?? 0));
+
+  const handleSelectRoute = (route: RouteDetails) => {
+    const idx = route.id.indexOf(":");
+    const routeId = idx >= 0 ? route.id.slice(idx + 1) : route.id;
+    navigate({
+      to: "/route/$authorId/$routeId",
+      params: { authorId: route.author_id, routeId },
+    });
+  };
 
   const resultsContent = (
     <>
@@ -210,6 +250,34 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
             </span>
           </div>
           <PlaceResultList results={globalResults} onSelect={handleSelectPlace} />
+        </div>
+      )}
+
+      {/* Routes mode */}
+      {mode === "routes" && routeResults.length > 0 && (
+        <div>
+          <div className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+            Routes in this area
+          </div>
+          <div className="space-y-0.5">
+            {routeResults.map((route) => (
+              <button
+                key={route.id}
+                onClick={() => handleSelectRoute(route)}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-surface"
+              >
+                <RouteIcon className="h-4 w-4 flex-shrink-0 text-accent" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {route.name || "Untitled route"}
+                  </p>
+                  <p className="text-xs uppercase text-muted">
+                    {route.activity}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -388,6 +456,20 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
         )}
       </div>
     </>
+  );
+}
+
+function filterRoutesByName(
+  routes: RouteDetails[] | null,
+  q: string,
+): RouteDetails[] {
+  if (!routes) return [];
+  if (!q.trim()) return routes;
+  const needle = q.toLowerCase();
+  return routes.filter(
+    (r) =>
+      (r.name ?? "").toLowerCase().includes(needle) ||
+      (r.description ?? "").toLowerCase().includes(needle),
   );
 }
 

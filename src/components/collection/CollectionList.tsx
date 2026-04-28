@@ -1,21 +1,40 @@
-import { useState, useEffect } from "react";
-import { X, Plus, FolderHeart, MapPin, Eye, EyeOff, Layers } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Plus, FolderHeart, MapPin, Eye, EyeOff, Layers } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserCollections } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
+import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
+import { DiscoverSearchInput } from "@/components/discover/SearchInput";
 import { CreateCollectionForm } from "./CreateCollectionForm";
 import type { CollectionDetails } from "@/types/mapky";
 
+type Tab = "mine" | "viewport" | "search";
+
+/**
+ * Collections discover sidebar. Same shell as Routes / Places via
+ * `DiscoverSidebar`. The Viewport tab ships disabled with a "Coming soon"
+ * note pending the `/v0/mapky/collections/viewport` backend endpoint —
+ * the UI shape is in place so we can wire it up without re-styling.
+ */
 export function CollectionList() {
   const navigate = useNavigate();
   const { isAuthenticated, publicKey } = useAuth();
   const { data: collections, isLoading } = useUserCollections(publicKey);
-  const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
   const overlays = useUiStore((s) => s.activeCollectionOverlays);
   const addOverlay = useUiStore((s) => s.addCollectionOverlay);
   const clearAllOverlays = useUiStore((s) => s.clearAllCollectionOverlays);
   const [creating, setCreating] = useState(false);
+  const [tab, setTab] = useState<Tab>(publicKey ? "mine" : "viewport");
+  const [query, setQuery] = useState("");
+
+  const tabs: DiscoverTab[] = useMemo(() => {
+    const list: DiscoverTab[] = [];
+    if (publicKey) list.push({ id: "mine", label: "Mine" });
+    list.push({ id: "viewport", label: "In this area" });
+    list.push({ id: "search", label: "Search" });
+    return list;
+  }, [publicKey]);
 
   const anyVisible = overlays.size > 0;
   const toggleAll = () => {
@@ -29,126 +48,111 @@ export function CollectionList() {
     }
   };
 
-  useEffect(() => {
-    setSidebarOpen(true);
-    return () => setSidebarOpen(false);
-  }, [setSidebarOpen]);
-
   const close = () => navigate({ to: "/" });
 
+  const rightHeader =
+    collections && collections.length > 0 ? (
+      <button
+        onClick={toggleAll}
+        title={anyVisible ? "Hide all on map" : "Show all on map"}
+        className="rounded-lg p-1 text-muted transition-colors hover:bg-surface hover:text-foreground"
+      >
+        <Layers
+          className={`h-4 w-4 ${anyVisible ? "text-accent" : ""}`}
+        />
+      </button>
+    ) : undefined;
+
+  const toolbar =
+    tab === "search" ? (
+      <DiscoverSearchInput
+        value={query}
+        onChange={setQuery}
+        placeholder="Filter your collections…"
+      />
+    ) : undefined;
+
   return (
-    <>
-      {/* Desktop sidebar */}
-      <div className="pointer-events-auto absolute inset-y-0 left-12 z-10 hidden w-[380px] flex-col border-r border-border bg-background shadow-xl md:flex">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted">
-            Collections
-          </span>
-          <div className="flex items-center gap-1">
-            {collections && collections.length > 0 && (
-              <button
-                onClick={toggleAll}
-                title={anyVisible ? "Hide all on map" : "Show all on map"}
-                className="rounded-lg p-1 text-muted transition-colors hover:bg-surface hover:text-foreground"
-              >
-                {anyVisible ? (
-                  <Layers className="h-4 w-4 text-accent" />
-                ) : (
-                  <Layers className="h-4 w-4" />
-                )}
-              </button>
-            )}
+    <DiscoverSidebar
+      title="Collections"
+      tabs={tabs}
+      activeTab={tab}
+      onTabChange={(id) => setTab(id as Tab)}
+      onClose={close}
+      rightHeaderSlot={rightHeader}
+      toolbar={toolbar}
+    >
+      {tab === "viewport" ? (
+        <ViewportPlaceholder />
+      ) : !isAuthenticated ? (
+        <p className="py-8 text-center text-sm text-muted">
+          Sign in to create and view collections
+        </p>
+      ) : creating ? (
+        <CreateCollectionForm onClose={() => setCreating(false)} />
+      ) : (
+        <div className="space-y-3">
+          {tab === "mine" && (
             <button
-              onClick={close}
-              className="rounded-lg p-1 text-muted transition-colors hover:bg-surface hover:text-foreground"
+              onClick={() => setCreating(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted transition-colors hover:border-accent hover:text-accent"
             >
-              <X className="h-5 w-5" />
+              <Plus className="h-4 w-4" />
+              New Collection
             </button>
-          </div>
-        </div>
+          )}
 
-        <div className="flex-1 overflow-y-auto px-4 py-4">
-          {!isAuthenticated ? (
+          {isLoading && <LoadingSkeleton />}
+
+          {!isLoading && (collections?.length ?? 0) === 0 && (
             <p className="py-8 text-center text-sm text-muted">
-              Sign in to create and view collections
+              {tab === "search"
+                ? "Sign in or create a collection first."
+                : "You don't have any collections yet"}
             </p>
-          ) : creating ? (
-            <CreateCollectionForm onClose={() => setCreating(false)} />
-          ) : (
-            <div className="space-y-3">
-              <button
-                onClick={() => setCreating(true)}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted transition-colors hover:border-accent hover:text-accent"
-              >
-                <Plus className="h-4 w-4" />
-                New Collection
-              </button>
+          )}
 
-              {isLoading && <LoadingSkeleton />}
+          {filterCollections(collections ?? null, tab === "search" ? query : "").map(
+            (c) => (
+              <CollectionCard key={c.id} collection={c} />
+            ),
+          )}
 
-              {!isLoading && collections?.length === 0 && (
-                <p className="py-8 text-center text-sm text-muted">
-                  You don't have any collections yet
-                </p>
-              )}
-
-              {collections?.map((c) => (
-                <CollectionCard key={c.id} collection={c} />
-              ))}
-            </div>
+          {tab === "search" && query && collections && filterCollections(collections, query).length === 0 && (
+            <p className="py-4 text-center text-xs text-muted">
+              No matches for "{query}".
+            </p>
           )}
         </div>
-      </div>
+      )}
+    </DiscoverSidebar>
+  );
+}
 
-      {/* Mobile: same content in bottom sheet */}
-      <div className="pointer-events-auto absolute bottom-0 left-0 right-0 z-10 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl md:hidden">
-        <div className="flex-shrink-0 px-4 pt-2 pb-3">
-          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-foreground">
-              Collections
-            </span>
-            <button
-              onClick={close}
-              className="rounded-lg p-1.5 text-muted hover:text-foreground"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto border-t border-border px-4 py-3">
-          {!isAuthenticated ? (
-            <p className="py-4 text-center text-sm text-muted">
-              Sign in to create and view collections
-            </p>
-          ) : creating ? (
-            <CreateCollectionForm onClose={() => setCreating(false)} />
-          ) : (
-            <div className="space-y-3">
-              <button
-                onClick={() => setCreating(true)}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted transition-colors hover:border-accent hover:text-accent"
-              >
-                <Plus className="h-4 w-4" />
-                New Collection
-              </button>
+function ViewportPlaceholder() {
+  return (
+    <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted">
+      <p className="mb-1 font-medium text-foreground">Coming soon</p>
+      <p>
+        Public collections in the current map view need a backend endpoint
+        that's not yet shipped. For now, browse by tag or sign in to see your
+        own collections.
+      </p>
+    </div>
+  );
+}
 
-              {isLoading && <LoadingSkeleton />}
-
-              {!isLoading && collections?.length === 0 && (
-                <p className="py-4 text-center text-sm text-muted">
-                  No collections yet
-                </p>
-              )}
-
-              {collections?.map((c) => (
-                <CollectionCard key={c.id} collection={c} />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </>
+function filterCollections(
+  collections: CollectionDetails[] | null,
+  q: string,
+): CollectionDetails[] {
+  if (!collections) return [];
+  if (!q.trim()) return collections;
+  const needle = q.toLowerCase();
+  return collections.filter(
+    (c) =>
+      c.name.toLowerCase().includes(needle) ||
+      (c.description ?? "").toLowerCase().includes(needle),
   );
 }
 

@@ -3,6 +3,7 @@ import {
   FolderHeart,
   LogIn,
   LogOut,
+  MapPin,
   MessageSquare,
   Moon,
   Plus,
@@ -178,6 +179,13 @@ export function IconRail() {
         ) : (
           <Moon className="h-5 w-5" />
         )}
+      </RailButton>
+
+      <RailButton
+        onClick={() => navigate({ to: "/places" })}
+        title="Places"
+      >
+        <MapPin className="h-5 w-5" />
       </RailButton>
 
       {isAuthenticated && (

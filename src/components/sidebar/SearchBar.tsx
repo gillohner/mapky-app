@@ -1,15 +1,29 @@
-import { useState, useRef, useEffect } from "react";
-import { Search, X, MapPin, Tag, FolderHeart, MessageSquare } from "lucide-react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import {
+  Search,
+  X,
+  MapPin,
+  Tag,
+  FolderHeart,
+  MessageSquare,
+  Route as RouteIcon,
+} from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { useNominatimSearch, useTagSearch, useOsmLookup } from "@/lib/api/hooks";
+import {
+  useNominatimSearch,
+  useTagSearch,
+  useOsmLookup,
+  useViewportRoutes,
+} from "@/lib/api/hooks";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
+import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
-import type { PlaceDetails, PostDetails } from "@/types/mapky";
+import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
 import { parseOsmCanonical } from "@/lib/map/osm-url";
 
-type SearchMode = "places" | "tags";
+type SearchMode = "places" | "tags" | "routes";
 
 export function SearchBar() {
   const [input, setInput] = useState("");
@@ -32,8 +46,24 @@ export function SearchBar() {
   const { data: tagResults, isLoading: tagsLoading } = useTagSearch(
     mode === "tags" ? query : "",
   );
+  // Routes search is client-side filter against the viewport route list:
+  // server-side route search by name isn't exposed yet. Surfaces routes
+  // visible on the map narrowed by the typed query.
+  const bbox = useViewportBounds(mode === "routes");
+  const { data: viewportRoutes, isLoading: routesLoading } = useViewportRoutes(
+    mode === "routes" ? bbox : null,
+  );
+  const routeResults = useMemo(
+    () => filterRoutes(viewportRoutes ?? null, query),
+    [viewportRoutes, query],
+  );
 
-  const isLoading = mode === "places" ? placesLoading : tagsLoading;
+  const isLoading =
+    mode === "places"
+      ? placesLoading
+      : mode === "tags"
+        ? tagsLoading
+        : routesLoading;
 
   // Debounce input → query
   useEffect(() => {
@@ -68,9 +98,11 @@ export function SearchBar() {
     if (isOnSearchRoute && typeof searchParams === "object" && searchParams !== null) {
       const sp = searchParams as Record<string, unknown>;
       const q = sp.q ? String(sp.q) : "";
-      const m = sp.mode === "tags" ? "tags" : "places";
+      const rawMode = sp.mode;
+      const m: SearchMode =
+        rawMode === "tags" || rawMode === "routes" ? rawMode : "places";
       if (q && q !== input) setInput(q);
-      if (m !== mode) setMode(m as SearchMode);
+      if (m !== mode) setMode(m);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnSearchRoute, searchParams]);
@@ -190,10 +222,12 @@ export function SearchBar() {
   const hasResults =
     mode === "places"
       ? placeResults && placeResults.length > 0
-      : tagResults &&
-        ((tagResults.places?.length ?? 0) > 0 ||
-          (tagResults.collections?.length ?? 0) > 0 ||
-          (tagResults.posts?.length ?? 0) > 0);
+      : mode === "routes"
+        ? routeResults.length > 0
+        : tagResults &&
+          ((tagResults.places?.length ?? 0) > 0 ||
+            (tagResults.collections?.length ?? 0) > 0 ||
+            (tagResults.posts?.length ?? 0) > 0);
 
   // Hide while directions mode is active — the DirectionsBar takes over the
   // top of the screen and owns the search/picker UX during that flow.
@@ -233,6 +267,17 @@ export function SearchBar() {
           >
             <Tag className="h-3.5 w-3.5" />
           </button>
+          <button
+            onClick={() => switchMode("routes")}
+            className={`rounded-md p-1.5 transition-colors ${
+              mode === "routes"
+                ? "bg-background text-accent shadow-sm"
+                : "text-muted hover:text-foreground"
+            }`}
+            title="Search routes in this area"
+          >
+            <RouteIcon className="h-3.5 w-3.5" />
+          </button>
         </div>
 
         <Search className="h-4 w-4 flex-shrink-0 text-muted" />
@@ -248,7 +293,11 @@ export function SearchBar() {
           onFocus={() => setShowResults(true)}
           onKeyDown={handleKeyDown}
           placeholder={
-            mode === "places" ? "Search places..." : "Search by tag..."
+            mode === "places"
+              ? "Search places..."
+              : mode === "routes"
+                ? "Search routes in this area..."
+                : "Search by tag..."
           }
           className="w-full bg-transparent text-sm text-foreground placeholder:text-muted focus:outline-none"
         />
@@ -397,9 +446,53 @@ export function SearchBar() {
               )}
             </>
           )}
+
+          {/* Routes mode results */}
+          {mode === "routes" &&
+            routeResults.map((route) => (
+              <button
+                key={route.id}
+                onClick={() => handleSelectRoute(route)}
+                className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-surface"
+              >
+                <RouteIcon className="h-4 w-4 flex-shrink-0 text-accent" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {route.name || "Untitled route"}
+                  </p>
+                  <p className="text-xs uppercase text-muted">{route.activity}</p>
+                </div>
+              </button>
+            ))}
         </div>
       )}
     </div>
+  );
+
+  function handleSelectRoute(route: RouteDetails) {
+    setInput("");
+    setQuery("");
+    setShowResults(false);
+    const idx = route.id.indexOf(":");
+    const routeId = idx >= 0 ? route.id.slice(idx + 1) : route.id;
+    navigate({
+      to: "/route/$authorId/$routeId",
+      params: { authorId: route.author_id, routeId },
+    });
+  }
+}
+
+function filterRoutes(
+  routes: RouteDetails[] | null,
+  q: string,
+): RouteDetails[] {
+  if (!routes) return [];
+  if (!q.trim()) return routes;
+  const needle = q.toLowerCase();
+  return routes.filter(
+    (r) =>
+      (r.name ?? "").toLowerCase().includes(needle) ||
+      (r.description ?? "").toLowerCase().includes(needle),
   );
 }
 

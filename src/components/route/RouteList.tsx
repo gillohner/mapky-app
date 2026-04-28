@@ -1,74 +1,52 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import type maplibregl from "maplibre-gl";
-import { X, Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserRoutes, useViewportRoutes } from "@/lib/api/hooks";
-import { useMapStore } from "@/stores/map-store";
-import { useUiStore } from "@/stores/ui-store";
 import {
   readySlotCount,
   useRouteCreationStore,
 } from "@/stores/route-creation-store";
+import { useViewportBounds } from "@/hooks/use-viewport-bounds";
+import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
+import { DiscoverSearchInput } from "@/components/discover/SearchInput";
 import { RouteCard } from "./RouteCard";
-import type { ViewportBounds } from "@/types/mapky";
+import type { RouteDetails } from "@/types/mapky";
 
-type Tab = "mine" | "viewport";
+type Tab = "mine" | "viewport" | "search";
 
 /**
- * Routes index page rendered in the standard left-anchored sidebar
- * layout (matches CollectionList): full-height left panel on desktop,
- * bottom sheet on mobile. The previous floating-card layout looked
- * different from the rest of the sidebar features (Collections, Search,
- * Place detail) and felt out of place.
+ * Routes discover sidebar. Mirrors CollectionList / PlaceList shape via
+ * DiscoverSidebar so all three feel identical aside from row content.
+ *
+ * Search tab: client-side filter against the viewport routes (server-side
+ * route search by name/tag is a backend follow-up). Surfaces routes that
+ * are visible in the current map view, narrowed by the typed query.
  */
 export function RouteList() {
   const navigate = useNavigate();
   const { publicKey } = useAuth();
-  const map = useMapStore((s) => s.map);
-  const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
   const reset = useRouteCreationStore((s) => s.reset);
   const slots = useRouteCreationStore((s) => s.slots);
   const draftCount = readySlotCount(slots);
 
   const [tab, setTab] = useState<Tab>(publicKey ? "mine" : "viewport");
+  const [query, setQuery] = useState("");
 
-  // Track the viewport bbox in state so panning/zooming the map refetches.
-  // Mirrors the pattern in MapkyPlacesLayer / CaptureMarkersLayer: read on
-  // mount, then update on debounced `moveend`. Without this the bbox is
-  // captured once at render and "In this area" stays frozen.
-  const [bbox, setBbox] = useState<ViewportBounds | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const updateBounds = useCallback(() => {
-    if (!map) return;
-    setBbox(boundsOf(map));
-  }, [map]);
-  useEffect(() => {
-    if (!map) return;
-    const onMoveEnd = () => {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(updateBounds, 400);
-    };
-    if (map.loaded()) updateBounds();
-    else map.once("load", updateBounds);
-    map.on("moveend", onMoveEnd);
-    return () => {
-      map.off("moveend", onMoveEnd);
-      clearTimeout(debounceRef.current);
-    };
-  }, [map, updateBounds]);
+  const bbox = useViewportBounds();
 
   const userRoutes = useUserRoutes(tab === "mine" ? publicKey : null);
-  const viewportRoutes = useViewportRoutes(tab === "viewport" ? bbox : null);
+  const viewportRoutes = useViewportRoutes(
+    tab === "viewport" || tab === "search" ? bbox : null,
+  );
 
-  const list = tab === "mine" ? userRoutes : viewportRoutes;
-
-  // Pad fitBounds + Layers trigger out of the sidebar's way, same as
-  // CollectionList / PlacePanel / DirectionsLayer.
-  useEffect(() => {
-    setSidebarOpen(true);
-    return () => setSidebarOpen(false);
-  }, [setSidebarOpen]);
+  const tabs: DiscoverTab[] = useMemo(() => {
+    const list: DiscoverTab[] = [];
+    if (publicKey) list.push({ id: "mine", label: "Mine" });
+    list.push({ id: "viewport", label: "In this area" });
+    list.push({ id: "search", label: "Search" });
+    return list;
+  }, [publicKey]);
 
   const handleCreate = () => {
     reset();
@@ -77,33 +55,44 @@ export function RouteList() {
 
   const close = () => navigate({ to: "/" });
 
-  const body = (
-    <>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          {publicKey && (
-            <TabButton
-              active={tab === "mine"}
-              onClick={() => setTab("mine")}
-              label="My routes"
-            />
-          )}
-          <TabButton
-            active={tab === "viewport"}
-            onClick={() => setTab("viewport")}
-            label="In this area"
-          />
-        </div>
-        <button
-          onClick={handleCreate}
-          className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover"
-          title="Plan a new route"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          New
-        </button>
-      </div>
+  // Resolve which list + state to render for the current tab.
+  const list =
+    tab === "mine"
+      ? userRoutes
+      : tab === "search"
+        ? filterRoutes(viewportRoutes.data ?? null, query)
+        : viewportRoutes;
 
+  const rightHeader = (
+    <button
+      onClick={handleCreate}
+      className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover"
+      title="Plan a new route"
+    >
+      <Plus className="h-3.5 w-3.5" />
+      New
+    </button>
+  );
+
+  const toolbar =
+    tab === "search" ? (
+      <DiscoverSearchInput
+        value={query}
+        onChange={setQuery}
+        placeholder="Filter routes in view…"
+      />
+    ) : undefined;
+
+  return (
+    <DiscoverSidebar
+      title="Routes"
+      tabs={tabs}
+      activeTab={tab}
+      onTabChange={(id) => setTab(id as Tab)}
+      onClose={close}
+      rightHeaderSlot={rightHeader}
+      toolbar={toolbar}
+    >
       {draftCount > 0 && (
         <button
           onClick={() => navigate({ to: "/directions" })}
@@ -113,104 +102,79 @@ export function RouteList() {
         </button>
       )}
 
-      {list.isLoading && (
-        <p className="flex items-center gap-2 text-xs text-muted">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Loading…
-        </p>
-      )}
-      {list.error && (
-        <p className="text-xs text-red-500">{(list.error as Error).message}</p>
-      )}
-      {list.data && list.data.length === 0 && (
-        <p className="text-xs text-muted">
-          {tab === "mine"
+      <RouteListBody
+        list={list}
+        emptyText={
+          tab === "mine"
             ? "You haven't saved any routes yet."
-            : "No routes in this area yet."}
-        </p>
-      )}
-      <div className="space-y-1.5">
-        {list.data?.map((r) => <RouteCard key={r.id} route={r} />)}
-      </div>
-    </>
-  );
-
-  return (
-    <>
-      {/* Desktop: left-anchored full-height sidebar */}
-      <div className="pointer-events-auto absolute inset-y-0 left-12 z-10 hidden w-[380px] flex-col border-r border-border bg-background shadow-xl md:flex">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted">
-            Routes
-          </span>
-          <button
-            onClick={close}
-            className="rounded-lg p-1 text-muted transition-colors hover:bg-surface hover:text-foreground"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-4 py-4">{body}</div>
-      </div>
-
-      {/* Mobile: bottom sheet */}
-      <div className="pointer-events-auto absolute bottom-0 left-0 right-0 z-10 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl md:hidden">
-        <div className="flex-shrink-0 px-4 pt-2 pb-3">
-          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-foreground">Routes</span>
-            <button
-              onClick={close}
-              className="rounded-lg p-1.5 text-muted hover:text-foreground"
-              aria-label="Close"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto border-t border-border px-4 py-3">
-          {body}
-        </div>
-      </div>
-    </>
+            : tab === "search"
+              ? query
+                ? "No routes match that name in this area."
+                : "Type to filter routes in the current view."
+              : "No routes in this area yet."
+        }
+        showLoader={tab !== "search" || query.length > 0}
+      />
+    </DiscoverSidebar>
   );
 }
 
-function TabButton({
-  active,
-  onClick,
-  label,
+function RouteListBody({
+  list,
+  emptyText,
+  showLoader,
 }: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
+  list: ListLike<RouteDetails> | RouteDetails[];
+  emptyText: string;
+  showLoader: boolean;
 }) {
+  // Normalize so callers can pass either a TanStack-Query result or a
+  // pre-filtered array (search tab).
+  const isLoading = "isLoading" in list ? list.isLoading : false;
+  const error = "error" in list ? (list.error as Error | null) : null;
+  const data = "data" in list ? list.data : list;
+
+  if (isLoading && showLoader) {
+    return (
+      <p className="flex items-center gap-2 text-xs text-muted">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Loading…
+      </p>
+    );
+  }
+  if (error) {
+    return <p className="text-xs text-red-500">{error.message}</p>;
+  }
+  if (!data || data.length === 0) {
+    return <p className="text-xs text-muted">{emptyText}</p>;
+  }
+
   return (
-    <button
-      onClick={onClick}
-      className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
-        active
-          ? "border-accent bg-accent text-white"
-          : "border-border bg-surface text-foreground hover:border-accent"
-      }`}
-    >
-      {label}
-    </button>
+    <div className="space-y-1.5">
+      {data.map((r) => (
+        <RouteCard key={r.id} route={r} />
+      ))}
+    </div>
   );
 }
 
-function boundsOf(map: maplibregl.Map): {
-  minLat: number;
-  minLon: number;
-  maxLat: number;
-  maxLon: number;
-} {
-  const b = map.getBounds();
-  return {
-    minLat: b.getSouth(),
-    minLon: b.getWest(),
-    maxLat: b.getNorth(),
-    maxLon: b.getEast(),
-  };
+interface ListLike<T> {
+  data: T[] | undefined;
+  isLoading: boolean;
+  error: unknown;
 }
+
+function filterRoutes(
+  routes: RouteDetails[] | null,
+  q: string,
+): RouteDetails[] {
+  if (!routes) return [];
+  if (!q.trim()) return routes;
+  const needle = q.toLowerCase();
+  return routes.filter(
+    (r) =>
+      (r.name ?? "").toLowerCase().includes(needle) ||
+      (r.description ?? "").toLowerCase().includes(needle),
+  );
+}
+

@@ -13,6 +13,7 @@ import { emitGpx, gpxFilename } from "@/lib/gpx/emit";
 import type { LngLat } from "@/lib/routing/types";
 import type { RouteDetails } from "@/types/mapky";
 import { RoutePolylineLayer } from "@/components/map/RoutePolylineLayer";
+import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import { RouteStats } from "./RouteStats";
 import { RouteTags } from "./RouteTags";
 
@@ -21,6 +22,12 @@ interface RouteDetailPanelProps {
   routeId: string;
 }
 
+/**
+ * Route detail panel. Lives in the same left sidebar shell as
+ * `CollectionPanel` and `PlacePanel` (via `DiscoverSidebar`) so all three
+ * detail views read identically. Polyline renders on the map; this panel
+ * holds metadata + actions.
+ */
 export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -29,11 +36,9 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   const loadFromExisting = useRouteCreationStore((s) => s.loadFromExisting);
   const resetDirections = useRouteCreationStore((s) => s.reset);
   const directionsOpen = useRouteCreationStore((s) => s.isOpen);
-  // Indexer metadata + homeserver body are fetched separately so a
-  // failure on one doesn't blank the whole page. Common failure modes:
-  // homeserver offline / unreachable on the user's network → still want
-  // to show distance/duration/activity from the indexer with a clear
-  // "polyline unavailable" notice instead of "Route not found".
+  // Indexer metadata + homeserver body fetched separately so a failure on
+  // one side doesn't blank the whole page (e.g. homeserver unreachable
+  // still surfaces distance/duration from the indexer).
   const meta = useRouteDetails(authorId, routeId);
   const body = useRouteBody(authorId, routeId);
   const data = meta.data;
@@ -41,17 +46,11 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   const error = meta.error as Error | null;
   const bodyAvailable = !!body.data;
   const bodyError = body.error as Error | null;
-  // Hoisted above the early-return branches so the hook order is stable
-  // across renders. (React: "Rendered more hooks than during the
-  // previous render" if the loading branch returns early before us.)
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useAutoFocusLayer("routes");
 
-  // Decode the stored polyline for rendering. Falls back to straight lines
-  // between waypoints when there's no snapped geometry; renders nothing
-  // if the body fetch failed entirely.
   const decoded: LngLat[] = useMemo(() => {
     if (!body.data) return [];
     const poly = body.data.geometry?.polyline;
@@ -59,14 +58,10 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
     return body.data.waypoints.map((w) => [w.lon, w.lat] as LngLat);
   }, [body.data]);
 
-  // Auto-hydrate the directions sidebar with this route's waypoints as
-  // soon as the body loads, so the user lands on a route page with the
-  // edit-ready sidebar already populated — no extra click. Keyed by
-  // (authorId, routeId) so navigating between routes re-loads cleanly.
-  // On unmount we reset the sidebar so leaving a route page closes
-  // directions too. Tracks the last-loaded key in a ref to avoid an
-  // infinite update loop (the `loadFromExisting` call mutates the same
-  // store this component reads from).
+  // Auto-hydrate the directions sidebar with this route's waypoints when
+  // the body loads, so opening a route lands the user on an edit-ready
+  // view. Tracks the last-loaded key in a ref to avoid an infinite update
+  // loop (loadFromExisting mutates a store this component reads from).
   const lastLoadedKey = useRef<string | null>(null);
   useEffect(() => {
     if (!body.data) return;
@@ -78,16 +73,13 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
 
   useEffect(() => {
     return () => {
-      // Only reset if we own the directions state (we loaded it). Avoids
-      // wiping a draft the user kicked off elsewhere.
       if (lastLoadedKey.current) resetDirections();
     };
   }, [resetDirections]);
 
-  // Fit map to the route bounds whenever a route loads. The detail card
-  // is pinned to the right on md+ (sm:right-2 sm:w-96 ≈ 392 px) and to the
-  // bottom on mobile, so pad the appropriate edge to keep the polyline
-  // out from under the card.
+  // Fit map to the route bounds. The detail panel now lives in the LEFT
+  // sidebar (380px wide on md+), so pad the left edge instead of the
+  // right. Mobile bottom sheet still gets the bottom padding.
   useEffect(() => {
     if (!map || !data) return;
     const isDesktop =
@@ -101,8 +93,8 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
         padding: {
           top: 80,
           bottom: isDesktop ? 80 : 280,
-          left: 80,
-          right: isDesktop ? 410 : 80,
+          left: isDesktop ? 410 : 80,
+          right: 80,
         },
         duration: 600,
         maxZoom: 16,
@@ -110,19 +102,25 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
     );
   }, [map, data]);
 
+  const close = () => navigate({ to: "/routes" });
+
   if (isLoading) {
     return (
-      <div className="pointer-events-auto fixed inset-x-2 top-2 z-30 rounded-lg border border-border bg-background/95 p-3 text-sm text-muted shadow-lg backdrop-blur-sm sm:right-2 sm:left-auto sm:top-20 sm:w-96">
-        <Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
-        Loading route…
-      </div>
+      <DiscoverSidebar title="Route" onClose={close} mobileCollapsible>
+        <p className="flex items-center gap-2 text-xs text-muted">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Loading route…
+        </p>
+      </DiscoverSidebar>
     );
   }
   if (error || !data) {
     return (
-      <div className="pointer-events-auto fixed inset-x-2 top-2 z-30 rounded-lg border border-border bg-background/95 p-3 text-sm text-red-500 shadow-lg backdrop-blur-sm sm:right-2 sm:left-auto sm:top-20 sm:w-96">
-        {error?.message ?? "Route not found"}
-      </div>
+      <DiscoverSidebar title="Route" onClose={close} mobileCollapsible>
+        <p className="text-sm text-red-500">
+          {error?.message ?? "Route not found"}
+        </p>
+      </DiscoverSidebar>
     );
   }
 
@@ -178,130 +176,108 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
           RouteAlternativesLayer renders the same path (and the live one
           the user is editing). Two layers would z-fight. */}
       {!directionsOpen && (
-        <RoutePolylineLayer
-          coords={decoded}
-          dashed={!body.data?.geometry}
-        />
+        <RoutePolylineLayer coords={decoded} dashed={!body.data?.geometry} />
       )}
 
-      <div className="pointer-events-auto fixed inset-x-2 bottom-2 z-30 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-background/95 p-3 shadow-lg backdrop-blur-sm sm:inset-x-auto sm:right-2 sm:top-20 sm:bottom-auto sm:w-96">
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <div className="min-w-0">
+      <DiscoverSidebar title="Route" onClose={close} mobileCollapsible>
+        <div className="space-y-3">
+          <div>
             <h2 className="truncate text-base font-semibold text-foreground">
               {data.name}
             </h2>
-            <p className="text-[11px] uppercase text-muted">
-              {data.activity}
-            </p>
+            <p className="text-[11px] uppercase text-muted">{data.activity}</p>
           </div>
-          <button
-            onClick={() => navigate({ to: "/routes" })}
-            className="rounded p-1 text-muted hover:text-foreground"
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
 
-        {data.description && (
-          <p className="mb-2 whitespace-pre-line text-sm text-foreground">
-            {data.description}
-          </p>
-        )}
-
-        <RouteStats
-          distance_m={data.distance_m}
-          duration_s={data.estimated_duration_s}
-          elevation_gain_m={data.elevation_gain_m}
-          elevation_loss_m={data.elevation_loss_m}
-        />
-
-        {/* Hint: the directions sidebar (left) is auto-populated with this
-            route's waypoints — clicking Edit isn't necessary. The export /
-            delete actions stay here as resource-level affordances. */}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-foreground hover:border-accent"
-          >
-            <Download className="h-3.5 w-3.5" />
-            GPX
-          </button>
-          {isOwner && (
-            <button
-              onClick={() => setConfirmDelete(true)}
-              className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-foreground hover:border-red-400"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Delete
-            </button>
-          )}
-        </div>
-
-        {/* Inline delete confirmation. Same pattern as
-            CollectionActions — feels native to the app instead of the
-            jarring browser confirm() dialog. */}
-        {confirmDelete && isOwner && (
-          <div className="mt-2 space-y-2 rounded-md border border-red-500/30 bg-red-50/50 p-2 text-xs dark:bg-red-950/30">
-            <p className="text-foreground">
-              Delete <span className="font-medium">{data.name}</span>? This
-              cannot be undone.
+          {data.description && (
+            <p className="whitespace-pre-line text-sm text-foreground">
+              {data.description}
             </p>
-            <div className="flex justify-end gap-1.5">
+          )}
+
+          <RouteStats
+            distance_m={data.distance_m}
+            duration_s={data.estimated_duration_s}
+            elevation_gain_m={data.elevation_gain_m}
+            elevation_loss_m={data.elevation_loss_m}
+          />
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-foreground hover:border-accent"
+            >
+              <Download className="h-3.5 w-3.5" />
+              GPX
+            </button>
+            {isOwner && (
               <button
-                onClick={() => setConfirmDelete(false)}
-                disabled={deleting}
-                className="rounded-md border border-border bg-surface px-2 py-1 text-foreground hover:border-border/70 disabled:opacity-50"
+                onClick={() => setConfirmDelete(true)}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-foreground hover:border-red-400"
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="flex items-center gap-1 rounded-md bg-red-500 px-2 py-1 font-medium text-white hover:bg-red-600 disabled:opacity-50"
-              >
-                {deleting ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3 w-3" />
-                )}
+                <Trash2 className="h-3.5 w-3.5" />
                 Delete
               </button>
+            )}
+          </div>
+
+          {confirmDelete && isOwner && (
+            <div className="space-y-2 rounded-md border border-red-500/30 bg-red-50/50 p-2 text-xs dark:bg-red-950/30">
+              <p className="text-foreground">
+                Delete <span className="font-medium">{data.name}</span>? This
+                cannot be undone.
+              </p>
+              <div className="flex justify-end gap-1.5">
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleting}
+                  className="rounded-md border border-border bg-surface px-2 py-1 text-foreground hover:border-border/70 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex items-center gap-1 rounded-md bg-red-500 px-2 py-1 font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                >
+                  {deleting ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                  Delete
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="mt-3 border-t border-border/60 pt-2">
-          <RouteTags authorId={authorId} routeId={routeId} />
+          <div className="border-t border-border/60 pt-2">
+            <RouteTags authorId={authorId} routeId={routeId} />
+          </div>
+
+          <p className="text-[10px] text-muted">
+            {data.waypoint_count} waypoints
+            {body.data?.geometry
+              ? ` · snapped via ${body.data.geometry.engine}`
+              : bodyAvailable
+                ? " · no snapped geometry"
+                : body.isLoading
+                  ? " · loading geometry…"
+                  : " · polyline unavailable"}
+          </p>
+
+          {bodyError && !body.isLoading && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] dark:border-amber-800/60 dark:bg-amber-950/40">
+              <p className="font-medium text-amber-800 dark:text-amber-300">
+                Polyline unavailable
+              </p>
+              <p className="text-amber-700/80 dark:text-amber-300/70">
+                Couldn't reach this route's body on the homeserver. Stats still
+                come from the indexer; reload to retry.
+              </p>
+            </div>
+          )}
         </div>
-
-        <p className="mt-2 text-[10px] text-muted">
-          {data.waypoint_count} waypoints
-          {body.data?.geometry
-            ? ` · snapped via ${body.data.geometry.engine}`
-            : bodyAvailable
-              ? " · no snapped geometry"
-              : body.isLoading
-                ? " · loading geometry…"
-                : " · polyline unavailable"}
-        </p>
-
-        {/* Body fetch failed entirely — homeserver offline, network
-            blocked, or the JSON has been deleted. Indexer metadata still
-            shows above; flag the missing geometry so the user knows the
-            map isn't drawing the actual path. */}
-        {bodyError && !body.isLoading && (
-          <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] dark:border-amber-800/60 dark:bg-amber-950/40">
-            <p className="font-medium text-amber-800 dark:text-amber-300">
-              Polyline unavailable
-            </p>
-            <p className="text-amber-700/80 dark:text-amber-300/70">
-              Couldn't reach this route's body on the homeserver. Stats
-              still come from the indexer; reload to retry.
-            </p>
-          </div>
-        )}
-      </div>
+      </DiscoverSidebar>
     </>
   );
 }

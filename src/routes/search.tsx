@@ -7,10 +7,13 @@ export const Route = createFileRoute("/search")({
     search: Record<string, unknown>,
   ): {
     q?: string;
-    mode?: "places" | "tags";
+    mode?: "places" | "tags" | "routes";
   } => ({
     q: search.q ? String(search.q) : undefined,
-    mode: search.mode === "tags" ? "tags" : "places",
+    mode:
+      search.mode === "tags" || search.mode === "routes"
+        ? search.mode
+        : "places",
   }),
 });
 
