@@ -5,17 +5,16 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserCollections } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
-import { DiscoverSearchInput } from "@/components/discover/SearchInput";
 import { CreateCollectionForm } from "./CreateCollectionForm";
 import type { CollectionDetails } from "@/types/mapky";
 
-type Tab = "mine" | "viewport" | "search";
+type Tab = "mine" | "viewport";
 
 /**
- * Collections discover sidebar. Same shell as Routes / Places via
- * `DiscoverSidebar`. The Viewport tab ships disabled with a "Coming soon"
- * note pending the `/v0/mapky/collections/viewport` backend endpoint —
- * the UI shape is in place so we can wire it up without re-styling.
+ * Collections discover sidebar — Mine / In this area feed. Search lives
+ * in the global top SearchBar. Viewport tab ships disabled with a
+ * "Coming soon" note pending the /v0/mapky/collections/viewport
+ * backend endpoint.
  */
 export function CollectionList() {
   const navigate = useNavigate();
@@ -26,13 +25,11 @@ export function CollectionList() {
   const clearAllOverlays = useUiStore((s) => s.clearAllCollectionOverlays);
   const [creating, setCreating] = useState(false);
   const [tab, setTab] = useState<Tab>(publicKey ? "mine" : "viewport");
-  const [query, setQuery] = useState("");
 
   const tabs: DiscoverTab[] = useMemo(() => {
     const list: DiscoverTab[] = [];
     if (publicKey) list.push({ id: "mine", label: "Mine" });
     list.push({ id: "viewport", label: "In this area" });
-    list.push({ id: "search", label: "Search" });
     return list;
   }, [publicKey]);
 
@@ -63,15 +60,6 @@ export function CollectionList() {
       </button>
     ) : undefined;
 
-  const toolbar =
-    tab === "search" ? (
-      <DiscoverSearchInput
-        value={query}
-        onChange={setQuery}
-        placeholder="Filter your collections…"
-      />
-    ) : undefined;
-
   return (
     <DiscoverSidebar
       title="Collections"
@@ -80,7 +68,6 @@ export function CollectionList() {
       onTabChange={(id) => setTab(id as Tab)}
       onClose={close}
       rightHeaderSlot={rightHeader}
-      toolbar={toolbar}
     >
       {tab === "viewport" ? (
         <ViewportPlaceholder />
@@ -92,37 +79,25 @@ export function CollectionList() {
         <CreateCollectionForm onClose={() => setCreating(false)} />
       ) : (
         <div className="space-y-3">
-          {tab === "mine" && (
-            <button
-              onClick={() => setCreating(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted transition-colors hover:border-accent hover:text-accent"
-            >
-              <Plus className="h-4 w-4" />
-              New Collection
-            </button>
-          )}
+          <button
+            onClick={() => setCreating(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted transition-colors hover:border-accent hover:text-accent"
+          >
+            <Plus className="h-4 w-4" />
+            New Collection
+          </button>
 
           {isLoading && <LoadingSkeleton />}
 
           {!isLoading && (collections?.length ?? 0) === 0 && (
             <p className="py-8 text-center text-sm text-muted">
-              {tab === "search"
-                ? "Sign in or create a collection first."
-                : "You don't have any collections yet"}
+              You don't have any collections yet
             </p>
           )}
 
-          {filterCollections(collections ?? null, tab === "search" ? query : "").map(
-            (c) => (
-              <CollectionCard key={c.id} collection={c} />
-            ),
-          )}
-
-          {tab === "search" && query && collections && filterCollections(collections, query).length === 0 && (
-            <p className="py-4 text-center text-xs text-muted">
-              No matches for "{query}".
-            </p>
-          )}
+          {collections?.map((c) => (
+            <CollectionCard key={c.id} collection={c} />
+          ))}
         </div>
       )}
     </DiscoverSidebar>
@@ -135,24 +110,10 @@ function ViewportPlaceholder() {
       <p className="mb-1 font-medium text-foreground">Coming soon</p>
       <p>
         Public collections in the current map view need a backend endpoint
-        that's not yet shipped. For now, browse by tag or sign in to see your
-        own collections.
+        that's not yet shipped. For now, browse by tag in the search bar or
+        sign in to see your own collections.
       </p>
     </div>
-  );
-}
-
-function filterCollections(
-  collections: CollectionDetails[] | null,
-  q: string,
-): CollectionDetails[] {
-  if (!collections) return [];
-  if (!q.trim()) return collections;
-  const needle = q.toLowerCase();
-  return collections.filter(
-    (c) =>
-      c.name.toLowerCase().includes(needle) ||
-      (c.description ?? "").toLowerCase().includes(needle),
   );
 }
 
