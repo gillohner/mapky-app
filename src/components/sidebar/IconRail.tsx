@@ -1,19 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  Camera,
   FolderHeart,
   LogIn,
   LogOut,
   MapPin,
   MessageSquare,
   Moon,
-  Plus,
   Route as RouteIcon,
   Sun,
   User,
 } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { useCaptureCreationStore } from "@/stores/capture-creation-store";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useMapStore } from "@/stores/map-store";
 import {
@@ -61,8 +60,6 @@ function RailButton({
 export function IconRail() {
   const { isAuthenticated, publicKey, logout } = useAuth();
   const navigate = useNavigate();
-  const openCapture = useCaptureCreationStore((s) => s.open);
-  const captureIsOpen = useCaptureCreationStore((s) => s.isOpen);
   const theme = useMapStore((s) => s.theme);
   const setTheme = useMapStore((s) => s.setTheme);
 
@@ -204,6 +201,13 @@ export function IconRail() {
         <RouteIcon className="h-5 w-5" />
       </RailButton>
 
+      <RailButton
+        onClick={() => navigate({ to: "/captures" })}
+        title="Captures"
+      >
+        <Camera className="h-5 w-5" />
+      </RailButton>
+
       {isAuthenticated && (
         <RailButton
           onClick={() => navigate({ to: "/my-posts" })}
@@ -211,15 +215,6 @@ export function IconRail() {
         >
           <MessageSquare className="h-5 w-5" />
         </RailButton>
-      )}
-
-      {isAuthenticated && !captureIsOpen && (
-        <>
-          <div className="my-1 w-6 border-t border-border" />
-          <RailButton onClick={openCapture} title="New capture">
-            <Plus className="h-5 w-5" />
-          </RailButton>
-        </>
       )}
 
       {profileOpen && (

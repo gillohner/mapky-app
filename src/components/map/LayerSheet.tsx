@@ -2,8 +2,6 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
-  MapPin,
-  Camera,
   Sun,
   Moon,
   Satellite,
@@ -16,20 +14,15 @@ import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 
 /**
- * Single source of truth for what's drawn on the map. Replaces the flat
- * layer-toggle stripe in the icon rail with a Google/Apple Maps-style
- * sheet (bottom-sheet on mobile, anchored card on desktop) grouped into
- * Mapky data, Basemap, and Overlays sections. Closes on Escape and
- * outside-click.
+ * Layers sheet — basemap + raster/extrusion overlays only. Mapky data
+ * layers (Places, Captures) used to live here as toggles; they're now
+ * always-on, with auto-dimming on detail pages handling relevance.
+ * Pinned collection overlays are still surfaced here for quick "hide
+ * all" access.
  */
 export function LayerSheet() {
   const open = useUiStore((s) => s.layerSheetOpen);
   const setOpen = useUiStore((s) => s.setLayerSheetOpen);
-
-  const placesLayerVisible = useUiStore((s) => s.placesLayerVisible);
-  const togglePlacesLayer = useUiStore((s) => s.togglePlacesLayer);
-  const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
-  const toggleCapturesLayer = useUiStore((s) => s.toggleCapturesLayer);
 
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
   const toggleMetroOverlay = useUiStore((s) => s.toggleMetroOverlay);
@@ -100,32 +93,18 @@ export function LayerSheet() {
           </button>
         </div>
 
-        {/* Mapky data */}
-        <Section title="Mapky data">
-          <Toggle
-            icon={<MapPin className="h-4 w-4" />}
-            label="Places"
-            description="Pubky-tagged spots on the map"
-            on={placesLayerVisible}
-            onChange={togglePlacesLayer}
-          />
-          <Toggle
-            icon={<Camera className="h-4 w-4" />}
-            label="Captures"
-            description="Photos, panoramas, and tracks"
-            on={capturesLayerVisible}
-            onChange={toggleCapturesLayer}
-          />
-          {activeCollections.size > 0 && (
+        {/* Pinned collections — only renders when something is active. */}
+        {activeCollections.size > 0 && (
+          <Section title="Pinned collections">
             <button
               onClick={clearAllCollectionOverlays}
-              className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-left text-xs text-muted hover:border-accent hover:text-foreground"
+              className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-left text-xs text-muted hover:border-accent hover:text-foreground"
             >
               Hide all {activeCollections.size} pinned collection
               {activeCollections.size === 1 ? "" : "s"}
             </button>
-          )}
-        </Section>
+          </Section>
+        )}
 
         {/* Basemap */}
         <Section title="Basemap">
