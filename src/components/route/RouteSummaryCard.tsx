@@ -21,7 +21,6 @@ import {
 import {
   createRoute,
   type RouteActivityKey,
-  type RouteDifficultyKey,
 } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { fetchUserRoutes } from "@/lib/api/mapky";
@@ -47,8 +46,6 @@ export function RouteSummaryCard() {
   const isPublishing = useRouteCreationStore((s) => s.isPublishing);
   const setPublishing = useRouteCreationStore((s) => s.setPublishing);
   const activity = useRouteCreationStore((s) => s.activity);
-  const difficulty = useRouteCreationStore((s) => s.difficulty);
-  const setDifficulty = useRouteCreationStore((s) => s.setDifficulty);
   const name = useRouteCreationStore((s) => s.name);
   const setName = useRouteCreationStore((s) => s.setName);
   const description = useRouteCreationStore((s) => s.description);
@@ -94,7 +91,6 @@ export function RouteSummaryCard() {
         usableWaypoints,
         {
           description: description.trim() || null,
-          difficulty: (difficulty as RouteDifficultyKey | null) ?? null,
           geometry: {
             polyline: computed.polyline,
             engine: computed.engine,
@@ -120,7 +116,6 @@ export function RouteSummaryCard() {
         name: name.trim(),
         description: description.trim() || null,
         activity,
-        difficulty,
         distance_m: computed.distance_m,
         elevation_gain_m: computed.elevation_gain_m ?? null,
         elevation_loss_m: computed.elevation_loss_m ?? null,
@@ -348,26 +343,6 @@ export function RouteSummaryCard() {
             rows={2}
             className="w-full resize-none rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
           />
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] uppercase tracking-wide text-muted">
-              Difficulty
-            </span>
-            <button
-              onClick={() => setDifficulty(null)}
-              className={chip(difficulty == null)}
-            >
-              none
-            </button>
-            {(["easy", "moderate", "difficult", "expert"] as const).map((d) => (
-              <button
-                key={d}
-                onClick={() => setDifficulty(d)}
-                className={chip(difficulty === d)}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
           <div className="flex items-center gap-2 pt-1">
             <button
               onClick={() => setStepsOpen((v) => !v)}
@@ -418,14 +393,6 @@ export function RouteSummaryCard() {
       )}
     </div>
   );
-}
-
-function chip(active: boolean) {
-  return `rounded-full border px-2 py-0.5 text-[10px] capitalize transition-colors ${
-    active
-      ? "border-accent bg-accent text-white"
-      : "border-border bg-surface text-foreground hover:border-accent"
-  }`;
 }
 
 function formatDistance(m: number): string {

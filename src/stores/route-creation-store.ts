@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
   RouteActivity,
-  RouteDifficultyLabel,
   RouteFullJson,
   RouteWaypointJson,
 } from "@/types/mapky";
@@ -83,7 +82,6 @@ interface RouteCreationState {
   pickingForSlot: number | null;
 
   activity: RouteActivity;
-  difficulty: RouteDifficultyLabel | null;
 
   // Save-step state — only relevant once the route is computed and the
   // user clicks "Save to my routes".
@@ -118,7 +116,6 @@ interface RouteCreationState {
   reset: () => void;
 
   setActivity: (activity: RouteActivity) => void;
-  setDifficulty: (difficulty: RouteDifficultyLabel | null) => void;
   setName: (name: string) => void;
   setDescription: (description: string) => void;
   setImageUri: (uri: string | null) => void;
@@ -167,7 +164,6 @@ const INITIAL: Pick<
   | "slots"
   | "pickingForSlot"
   | "activity"
-  | "difficulty"
   | "name"
   | "description"
   | "imageUri"
@@ -190,7 +186,6 @@ const INITIAL: Pick<
   slots: [emptySlot(), emptySlot()],
   pickingForSlot: null,
   activity: "hiking",
-  difficulty: null,
   name: "",
   description: "",
   imageUri: null,
@@ -233,7 +228,6 @@ export const useRouteCreationStore = create<RouteCreationState>()(
     set({ ...INITIAL, slots: [emptySlot(), emptySlot()] }),
 
   setActivity: (activity) => set((s) => ({ activity, ...bump(s) })),
-  setDifficulty: (difficulty) => set({ difficulty }),
   setName: (name) => set({ name }),
   setDescription: (description) => set({ description }),
   setImageUri: (uri) => set({ imageUri: uri }),
@@ -346,7 +340,6 @@ export const useRouteCreationStore = create<RouteCreationState>()(
       name: body.name,
       description: body.description ?? "",
       activity: body.activity,
-      difficulty: body.difficulty ?? null,
       imageUri: body.image_uri ?? null,
       computed: initialComputed,
       primary: initialComputed,
@@ -359,15 +352,14 @@ export const useRouteCreationStore = create<RouteCreationState>()(
       name: "mapky-directions",
       version: 1,
       // Persist only the user-authored bits — slots, activity, prefs, and
-      // the save-form draft (name/description/difficulty). Don't persist
-      // the snapped result itself: it's expensive to serialize, depends
-      // on Valhalla being callable, and we want a fresh snap on rehydrate
-      // anyway. Don't persist isOpen either — opening directions on every
-      // app boot would be intrusive.
+      // the save-form draft (name/description). Don't persist the snapped
+      // result itself: it's expensive to serialize, depends on Valhalla
+      // being callable, and we want a fresh snap on rehydrate anyway.
+      // Don't persist isOpen either — opening directions on every app
+      // boot would be intrusive.
       partialize: (state) => ({
         slots: state.slots,
         activity: state.activity,
-        difficulty: state.difficulty,
         name: state.name,
         description: state.description,
         imageUri: state.imageUri,

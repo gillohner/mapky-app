@@ -165,7 +165,6 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
             </h2>
             <p className="text-[11px] uppercase text-muted">
               {data.activity}
-              {data.difficulty ? ` · ${data.difficulty}` : ""}
             </p>
           </div>
           <button

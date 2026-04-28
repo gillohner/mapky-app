@@ -4,7 +4,6 @@ import {
   GeoCaptureKind,
   PubkySpecsBuilder,
   RouteActivityType,
-  RouteDifficulty,
 } from "mapky-app-specs";
 
 import type { GeoCaptureKind as GeoCaptureKindType } from "@/types/mapky";
@@ -370,8 +369,6 @@ export type RouteActivityKey =
   | "skiing"
   | "other";
 
-export type RouteDifficultyKey = "easy" | "moderate" | "difficult" | "expert";
-
 const ACTIVITY_MAP: Record<RouteActivityKey, RouteActivityType> = {
   hiking: RouteActivityType.Hiking,
   cycling: RouteActivityType.Cycling,
@@ -380,13 +377,6 @@ const ACTIVITY_MAP: Record<RouteActivityKey, RouteActivityType> = {
   driving: RouteActivityType.Driving,
   skiing: RouteActivityType.Skiing,
   other: RouteActivityType.Other,
-};
-
-const DIFFICULTY_MAP: Record<RouteDifficultyKey, RouteDifficulty> = {
-  easy: RouteDifficulty.Easy,
-  moderate: RouteDifficulty.Moderate,
-  difficult: RouteDifficulty.Difficult,
-  expert: RouteDifficulty.Expert,
 };
 
 export interface RouteGeometryInput {
@@ -398,7 +388,6 @@ export interface RouteGeometryInput {
 
 export interface CreateRouteOptions {
   description?: string | null;
-  difficulty?: RouteDifficultyKey | null;
   geometry?: RouteGeometryInput | null;
   osm_ways?: string[] | null;
   image_uri?: string | null;
@@ -419,9 +408,9 @@ export interface CreateRouteResult {
 
 /**
  * Build a sanitized & validated MapkyAppRoute JSON via the WASM builder, then
- * splice in the optional fields (description, difficulty, geometry, computed
- * stats) that the bare constructor doesn't take. Mirrors the pattern in
- * `createCollection` for the `color` field.
+ * splice in the optional fields (description, geometry, computed stats) that
+ * the bare constructor doesn't take. Mirrors the pattern in `createCollection`
+ * for the `color` field.
  */
 export function createRoute(
   pubkyId: string,
@@ -488,9 +477,6 @@ function applyRouteOptionsToJson(
   if (opts.description !== undefined) {
     obj.description = opts.description;
   }
-  if (opts.difficulty) {
-    obj.difficulty = opts.difficulty;
-  }
   if (opts.geometry) {
     obj.geometry = {
       polyline: opts.geometry.polyline,
@@ -513,9 +499,6 @@ function applyRouteOptionsToJson(
   if (opts.estimated_duration_s != null)
     obj.estimated_duration_s = opts.estimated_duration_s;
 }
-
-// Difficulty key map is exposed for UI selectors that want enum-typed values.
-export { DIFFICULTY_MAP };
 
 export function createRouteTag(
   pubkyId: string,

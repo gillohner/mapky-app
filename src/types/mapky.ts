@@ -114,8 +114,6 @@ export type RouteActivity =
   | "skiing"
   | "other";
 
-export type RouteDifficultyLabel = "easy" | "moderate" | "difficult" | "expert";
-
 /** Indexer metadata for a route. Returned by `/v0/mapky/routes/...`. */
 export interface RouteDetails {
   id: string; // compound: "author_id:route_id"
@@ -123,7 +121,6 @@ export interface RouteDetails {
   name: string;
   description: string | null;
   activity: RouteActivity;
-  difficulty: RouteDifficultyLabel | null;
   distance_m: number | null;
   elevation_gain_m: number | null;
   elevation_loss_m: number | null;
@@ -167,7 +164,6 @@ export interface RouteFullJson {
   name: string;
   description?: string | null;
   activity: RouteActivity;
-  difficulty?: RouteDifficultyLabel | null;
   waypoints: RouteWaypointJson[];
   osm_ways?: string[] | null;
   control_points?: RouteWaypointJson[] | null;
