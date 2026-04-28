@@ -18,6 +18,8 @@ import {
   fetchViewportRoutes,
   fetchRouteDetails,
   fetchUserRoutes,
+  fetchRouteTags,
+  fetchPlaceRoutes,
   searchByTag,
 } from "./mapky";
 import { fetchUserProfile } from "./user";
@@ -249,6 +251,25 @@ export function useRouteDetails(authorId: string, routeId: string) {
     queryFn: () => fetchRouteDetails(authorId, routeId),
     enabled: !!authorId && !!routeId,
     retry: noRetryOn404,
+  });
+}
+
+export function useRouteTags(authorId: string, routeId: string) {
+  return useQuery({
+    queryKey: ["mapky", "route", authorId, routeId, "tags"],
+    queryFn: () => fetchRouteTags(authorId, routeId),
+    enabled: !!authorId && !!routeId,
+    retry: noRetryOn404,
+  });
+}
+
+export function usePlaceRoutes(osmType: string, osmId: number) {
+  return useQuery({
+    queryKey: ["mapky", "place", osmType, osmId, "routes"],
+    queryFn: () => fetchPlaceRoutes(osmType, osmId),
+    enabled: !!osmType && !!osmId,
+    retry: noRetryOn404,
+    staleTime: 60_000,
   });
 }
 

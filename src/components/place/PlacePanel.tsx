@@ -15,6 +15,7 @@ import { PlaceActions } from "./PlaceActions";
 import { PlaceDirectionsButton } from "./PlaceDirectionsButton";
 import { PlaceTags } from "./PlaceTags";
 import { PlaceCollections } from "./PlaceCollections";
+import { PlaceRoutes } from "./PlaceRoutes";
 
 interface PlacePanelProps {
   osmType: string;
@@ -182,6 +183,7 @@ export function PlacePanel({
               <PlacePosts osmType={osmType} osmId={osmId} />
             </div>
             <PlaceCollections osmType={osmType} osmId={osmId} />
+            <PlaceRoutes osmType={osmType} osmId={osmId} />
           </div>
         </div>
       </div>
@@ -269,6 +271,7 @@ export function PlacePanel({
                 <PlacePosts osmType={osmType} osmId={osmId} />
               </div>
               <PlaceCollections osmType={osmType} osmId={osmId} />
+              <PlaceRoutes osmType={osmType} osmId={osmId} />
             </div>
           </div>
         )}

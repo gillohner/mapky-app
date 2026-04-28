@@ -20,6 +20,7 @@ import {
 } from "@/stores/route-creation-store";
 import {
   createRoute,
+  updateRouteJson,
   type RouteActivityKey,
 } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
@@ -51,6 +52,8 @@ export function RouteSummaryCard() {
   const description = useRouteCreationStore((s) => s.description);
   const setDescription = useRouteCreationStore((s) => s.setDescription);
   const mode = useRouteCreationStore((s) => s.mode);
+  const editingFromAuthor = useRouteCreationStore((s) => s.editingFromAuthor);
+  const editingFromId = useRouteCreationStore((s) => s.editingFromId);
   const reset = useRouteCreationStore((s) => s.reset);
   const close = useRouteCreationStore((s) => s.close);
 
@@ -76,40 +79,72 @@ export function RouteSummaryCard() {
     setShowSaveForm(true);
   };
 
-  const handleSaveConfirm = async () => {
+  // Owners can either save in place or fork; non-owners can only fork.
+  // Driven explicitly by which button the user clicked so the UI can
+  // reflect the choice precisely.
+  const canEditInPlace =
+    mode === "edit" &&
+    editingFromAuthor === publicKey &&
+    editingFromId !== null;
+
+  const handleSaveConfirm = async (options: { asNew: boolean } = { asNew: false }) => {
     if (!session || !publicKey || !computed || !canCompute) return;
     if (name.trim().length === 0) {
       toast.error("Give your route a name");
       return;
     }
     setPublishing(true);
+
+    // Edit-in-place when the signed-in user is also the route's author
+    // AND the user explicitly chose "Save changes". For "Save as new" or
+    // any non-owner edit, mint a new TimestampId path. The watcher's PUT
+    // is idempotent — same id MERGEs into the existing :MapkyAppRoute
+    // node; a fresh id creates a new one.
+    const isOwnerEdit = canEditInPlace && !options.asNew;
+
+    const opts = {
+      description: description.trim() || null,
+      geometry: {
+        polyline: computed.polyline,
+        engine: computed.engine,
+        costing: computed.costing,
+        computed_at: computed.computed_at,
+      },
+      distance_m: computed.distance_m,
+      elevation_gain_m: computed.elevation_gain_m ?? null,
+      elevation_loss_m: computed.elevation_loss_m ?? null,
+      estimated_duration_s: Math.round(computed.duration_s),
+    };
+
     try {
-      const result = createRoute(
-        publicKey,
-        name.trim(),
-        activity as RouteActivityKey,
-        usableWaypoints,
-        {
-          description: description.trim() || null,
-          geometry: {
-            polyline: computed.polyline,
-            engine: computed.engine,
-            costing: computed.costing,
-            computed_at: computed.computed_at,
-          },
-          distance_m: computed.distance_m,
-          elevation_gain_m: computed.elevation_gain_m ?? null,
-          elevation_loss_m: computed.elevation_loss_m ?? null,
-          estimated_duration_s: Math.round(computed.duration_s),
-        },
-      );
+      let path: `/pub/${string}`;
+      let json: string;
+      let routeId: string;
 
-      await session.storage.putText(
-        result.path as `/pub/${string}`,
-        result.json,
-      );
+      if (isOwnerEdit) {
+        json = updateRouteJson(
+          name.trim(),
+          activity as RouteActivityKey,
+          usableWaypoints,
+          opts,
+        );
+        routeId = editingFromId!;
+        path = `/pub/mapky.app/routes/${routeId}` as `/pub/${string}`;
+      } else {
+        const result = createRoute(
+          publicKey,
+          name.trim(),
+          activity as RouteActivityKey,
+          usableWaypoints,
+          opts,
+        );
+        json = result.json;
+        path = result.path as `/pub/${string}`;
+        routeId = result.path.split("/").pop()!;
+      }
 
-      const routeId = result.path.split("/").pop()!;
+      await session.storage.putText(path, json);
+
       const optimistic: RouteDetails = {
         id: `${publicKey}:${routeId}`,
         author_id: publicKey,
@@ -135,10 +170,23 @@ export function RouteSummaryCard() {
       });
       queryClient.setQueryData<RouteDetails[]>(
         ["mapky", "routes", "user", publicKey],
-        (old) => [...(old ?? []), optimistic],
+        (old) => {
+          if (!old) return [optimistic];
+          // Owner-edit replaces the existing entry by compound id.
+          if (isOwnerEdit) {
+            return old.map((r) => (r.id === optimistic.id ? optimistic : r));
+          }
+          return [...old, optimistic];
+        },
       );
 
-      toast.success(mode === "edit" ? "Saved as new route" : "Route saved");
+      toast.success(
+        isOwnerEdit
+          ? "Route updated"
+          : mode === "edit"
+            ? "Saved as new route"
+            : "Route saved",
+      );
 
       // Trigger ingest and wait until the indexer can serve this route
       // before navigating to the detail page — otherwise the detail page
@@ -162,6 +210,16 @@ export function RouteSummaryCard() {
       queryClient.invalidateQueries({
         queryKey: ["mapky", "routes", "user", publicKey],
       });
+      // Owner edit: also bust the route detail cache so the viewer
+      // refetches the fresh metadata + body.
+      if (isOwnerEdit) {
+        queryClient.invalidateQueries({
+          queryKey: ["mapky", "route", publicKey, routeId],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["mapky", "route-body", publicKey, routeId],
+        });
+      }
       reset();
       navigate({
         to: "/route/$authorId/$routeId",
@@ -362,18 +420,54 @@ export function RouteSummaryCard() {
             >
               Cancel
             </button>
-            <button
-              onClick={handleSaveConfirm}
-              disabled={!name.trim() || isPublishing}
-              className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-            >
-              {isPublishing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Save className="h-3.5 w-3.5" />
-              )}
-              Save route
-            </button>
+
+            {/* Owner-edit gets two clear options; everyone else (non-owner
+                editing, or fresh create) gets a single primary action with
+                a label that matches the actual behavior. */}
+            {canEditInPlace ? (
+              <>
+                <button
+                  onClick={() => handleSaveConfirm({ asNew: true })}
+                  disabled={!name.trim() || isPublishing}
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-xs text-foreground hover:border-accent disabled:opacity-50"
+                  title="Save as a new route (keeps the original)"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  Save as new
+                </button>
+                <button
+                  onClick={() => handleSaveConfirm({ asNew: false })}
+                  disabled={!name.trim() || isPublishing}
+                  className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                  title="Update the original route in place"
+                >
+                  {isPublishing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  Save changes
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => handleSaveConfirm({ asNew: false })}
+                disabled={!name.trim() || isPublishing}
+                className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                title={
+                  mode === "edit"
+                    ? "Save a copy of this route to your homeserver"
+                    : "Save this route to your homeserver"
+                }
+              >
+                {isPublishing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Save className="h-3.5 w-3.5" />
+                )}
+                {mode === "edit" ? "Save as my route" : "Save route"}
+              </button>
+            )}
           </div>
           {stepsOpen && (
             <ul className="rounded-md border border-border bg-surface p-1.5 text-[11px] text-muted">

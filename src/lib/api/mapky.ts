@@ -279,3 +279,25 @@ export async function fetchUserRoutes(
   );
   return data;
 }
+
+export async function fetchRouteTags(
+  authorId: string,
+  routeId: string,
+): Promise<PostTagDetails[]> {
+  const { data } = await nexusClient.get<PostTagDetails[]>(
+    `/v0/mapky/routes/${authorId}/${routeId}/tags`,
+  );
+  return data;
+}
+
+export async function fetchPlaceRoutes(
+  osmType: string,
+  osmId: number,
+  options?: { limit?: number },
+): Promise<RouteDetails[]> {
+  const { data } = await nexusClient.get<RouteDetails[]>(
+    `/v0/mapky/place/${osmType}/${osmId}/routes`,
+    { params: { limit: options?.limit ?? 50 } },
+  );
+  return data;
+}

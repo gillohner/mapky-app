@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Download, Edit2, Loader2, Trash2 } from "lucide-react";
+import { Download, Loader2, Trash2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useMapStore } from "@/stores/map-store";
 import { useRouteBody, useRouteDetails } from "@/lib/api/hooks";
@@ -14,6 +14,7 @@ import type { LngLat } from "@/lib/routing/types";
 import type { RouteDetails } from "@/types/mapky";
 import { RoutePolylineLayer } from "@/components/map/RoutePolylineLayer";
 import { RouteStats } from "./RouteStats";
+import { RouteTags } from "./RouteTags";
 
 interface RouteDetailPanelProps {
   authorId: string;
@@ -26,6 +27,8 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   const { session, publicKey } = useAuth();
   const map = useMapStore((s) => s.map);
   const loadFromExisting = useRouteCreationStore((s) => s.loadFromExisting);
+  const resetDirections = useRouteCreationStore((s) => s.reset);
+  const directionsOpen = useRouteCreationStore((s) => s.isOpen);
   // Indexer metadata + homeserver body are fetched separately so a
   // failure on one doesn't blank the whole page. Common failure modes:
   // homeserver offline / unreachable on the user's network → still want
@@ -55,6 +58,31 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
     if (poly) return decodePolyline(poly);
     return body.data.waypoints.map((w) => [w.lon, w.lat] as LngLat);
   }, [body.data]);
+
+  // Auto-hydrate the directions sidebar with this route's waypoints as
+  // soon as the body loads, so the user lands on a route page with the
+  // edit-ready sidebar already populated — no extra click. Keyed by
+  // (authorId, routeId) so navigating between routes re-loads cleanly.
+  // On unmount we reset the sidebar so leaving a route page closes
+  // directions too. Tracks the last-loaded key in a ref to avoid an
+  // infinite update loop (the `loadFromExisting` call mutates the same
+  // store this component reads from).
+  const lastLoadedKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!body.data) return;
+    const key = `${authorId}:${routeId}`;
+    if (lastLoadedKey.current === key) return;
+    lastLoadedKey.current = key;
+    loadFromExisting(authorId, routeId, body.data);
+  }, [authorId, routeId, body.data, loadFromExisting]);
+
+  useEffect(() => {
+    return () => {
+      // Only reset if we own the directions state (we loaded it). Avoids
+      // wiping a draft the user kicked off elsewhere.
+      if (lastLoadedKey.current) resetDirections();
+    };
+  }, [resetDirections]);
 
   // Fit map to the route bounds whenever a route loads. The detail card
   // is pinned to the right on md+ (sm:right-2 sm:w-96 ≈ 392 px) and to the
@@ -99,15 +127,6 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   }
 
   const isOwner = publicKey === authorId;
-
-  const handleEdit = () => {
-    if (!body.data) {
-      toast.error("Can't edit until the route body loads.");
-      return;
-    }
-    loadFromExisting(authorId, routeId, body.data);
-    navigate({ to: "/directions" });
-  };
 
   const handleExport = () => {
     if (!body.data) {
@@ -155,10 +174,15 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
 
   return (
     <>
-      <RoutePolylineLayer
-        coords={decoded}
-        dashed={!body.data?.geometry}
-      />
+      {/* Skip the detail's polyline once directions is open — its
+          RouteAlternativesLayer renders the same path (and the live one
+          the user is editing). Two layers would z-fight. */}
+      {!directionsOpen && (
+        <RoutePolylineLayer
+          coords={decoded}
+          dashed={!body.data?.geometry}
+        />
+      )}
 
       <div className="pointer-events-auto fixed inset-x-2 bottom-2 z-30 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-background/95 p-3 shadow-lg backdrop-blur-sm sm:inset-x-auto sm:right-2 sm:top-2 sm:bottom-auto sm:w-96">
         <div className="mb-2 flex items-start justify-between gap-2">
@@ -192,14 +216,10 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
           elevation_loss_m={data.elevation_loss_m}
         />
 
+        {/* Hint: the directions sidebar (left) is auto-populated with this
+            route's waypoints — clicking Edit isn't necessary. The export /
+            delete actions stay here as resource-level affordances. */}
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleEdit}
-            className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-foreground hover:border-accent"
-          >
-            <Edit2 className="h-3.5 w-3.5" />
-            Edit (creates new)
-          </button>
           <button
             onClick={handleExport}
             className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-foreground hover:border-accent"
@@ -250,6 +270,10 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
             </div>
           </div>
         )}
+
+        <div className="mt-3 border-t border-border/60 pt-2">
+          <RouteTags authorId={authorId} routeId={routeId} />
+        </div>
 
         <p className="mt-2 text-[10px] text-muted">
           {data.waypoint_count} waypoints
