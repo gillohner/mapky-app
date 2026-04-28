@@ -49,7 +49,7 @@ export interface SelectedFeature {
   name?: string;
 }
 
-export type DimmableLayer = "places" | "captures" | "routes";
+export type DimmableLayer = "places" | "captures";
 
 interface UiStore {
   menuOpen: boolean;
@@ -63,10 +63,6 @@ interface UiStore {
   capturesLayerVisible: boolean;
   setCapturesLayerVisible: (visible: boolean) => void;
   toggleCapturesLayer: () => void;
-
-  routesLayerVisible: boolean;
-  setRoutesLayerVisible: (visible: boolean) => void;
-  toggleRoutesLayer: () => void;
 
   /** OpenRailwayMap raster overlay — rail lines, metro, signals. */
   metroOverlayVisible: boolean;
@@ -141,11 +137,6 @@ export const useUiStore = create<UiStore>()(
       setCapturesLayerVisible: (visible) => set({ capturesLayerVisible: visible }),
       toggleCapturesLayer: () =>
         set((s) => ({ capturesLayerVisible: !s.capturesLayerVisible })),
-
-      routesLayerVisible: false,
-      setRoutesLayerVisible: (visible) => set({ routesLayerVisible: visible }),
-      toggleRoutesLayer: () =>
-        set((s) => ({ routesLayerVisible: !s.routesLayerVisible })),
 
       metroOverlayVisible: false,
       setMetroOverlayVisible: (visible) => set({ metroOverlayVisible: visible }),
@@ -241,7 +232,6 @@ export const useUiStore = create<UiStore>()(
       partialize: (state) => ({
         placesLayerVisible: state.placesLayerVisible,
         capturesLayerVisible: state.capturesLayerVisible,
-        routesLayerVisible: state.routesLayerVisible,
         metroOverlayVisible: state.metroOverlayVisible,
         cyclingOverlayVisible: state.cyclingOverlayVisible,
         terrainOverlayVisible: state.terrainOverlayVisible,

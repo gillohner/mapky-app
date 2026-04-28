@@ -158,9 +158,20 @@ function PostContent({
   const replyCount = countDescendants(ck(post), replyMap);
   const isOwner = publicKey === post.author_id;
 
+  // Indent compounds by depth so level-1 / level-2 / level-3 are
+  // visually distinct rather than all sitting at the same offset.
+  const indentStyle =
+    depth > 0
+      ? { marginLeft: `${depth * 1.25}rem` }
+      : undefined;
+
   if (editOpen) {
     return (
-      <div className={depth > 0 ? "ml-5 border-l-2 border-border pl-2.5" : ""} onClick={(e) => e.stopPropagation()}>
+      <div
+        className={depth > 0 ? "border-l-2 border-border pl-2.5" : ""}
+        style={indentStyle}
+        onClick={(e) => e.stopPropagation()}
+      >
         <PostForm
           osmType={osmType}
           osmId={osmId}
@@ -175,7 +186,8 @@ function PostContent({
   return (
     <>
       <div
-        className={`group flex gap-3 rounded-lg p-2 transition-colors hover:bg-surface ${depth > 0 ? "ml-5 border-l-2 border-border pl-2.5" : ""}`}
+        className={`group flex gap-3 rounded-lg p-2 transition-colors hover:bg-surface ${depth > 0 ? "border-l-2 border-border pl-2.5" : ""}`}
+        style={indentStyle}
       >
         <UserAvatar userId={post.author_id} size={depth > 0 ? 6 : 8} />
         <div className="min-w-0 flex-1">
@@ -249,7 +261,11 @@ function PostContent({
       </div>
 
       {replyOpen && (
-        <div className={depth > 0 ? "ml-5 border-l-2 border-border pl-2.5" : "ml-11"} onClick={(e) => e.stopPropagation()}>
+        <div
+          className={depth > 0 ? "border-l-2 border-border pl-2.5" : "ml-11"}
+          style={indentStyle}
+          onClick={(e) => e.stopPropagation()}
+        >
           <PostForm
             osmType={osmType}
             osmId={osmId}

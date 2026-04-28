@@ -57,3 +57,8 @@ export const useMapStore = create<MapStore>()(
     },
   ),
 );
+
+if (typeof window !== "undefined" && import.meta.env.DEV) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__map = useMapStore;
+}

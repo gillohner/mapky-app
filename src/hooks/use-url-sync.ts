@@ -19,7 +19,6 @@ import { useMapStore } from "@/stores/map-store";
  *   sl  satellite labels       (0 to hide; default visible when satellite)
  *   pl  places layer       (0 to hide; default visible)
  *   ca  captures layer     (0 to hide; default visible)
- *   rt  routes layer       (1 to show; default hidden)
  *   mt  metro overlay      (1 to show)
  *   cy  cycling overlay    (1 to show)
  *   tr  terrain overlay    (1 to show)
@@ -46,7 +45,6 @@ function hydrateFromUrl() {
 
   if (params.get("pl") === "0") ui.setPlacesLayerVisible(false);
   if (params.get("ca") === "0") ui.setCapturesLayerVisible(false);
-  if (params.get("rt") === "1") ui.setRoutesLayerVisible(true);
   if (params.get("mt") === "1") ui.setMetroOverlayVisible(true);
   if (params.get("cy") === "1") ui.setCyclingOverlayVisible(true);
   if (params.get("tr") === "1") ui.setTerrainOverlayVisible(true);
@@ -69,7 +67,6 @@ hydrateFromUrl();
 export function useUrlSync() {
   const placesLayerVisible = useUiStore((s) => s.placesLayerVisible);
   const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
-  const routesLayerVisible = useUiStore((s) => s.routesLayerVisible);
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
   const cyclingOverlayVisible = useUiStore((s) => s.cyclingOverlayVisible);
   const terrainOverlayVisible = useUiStore((s) => s.terrainOverlayVisible);
@@ -97,7 +94,6 @@ export function useUrlSync() {
 
     setOrDelete(params, "pl", placesLayerVisible ? null : "0");
     setOrDelete(params, "ca", capturesLayerVisible ? null : "0");
-    setOrDelete(params, "rt", routesLayerVisible ? "1" : null);
     setOrDelete(params, "mt", metroOverlayVisible ? "1" : null);
     setOrDelete(params, "cy", cyclingOverlayVisible ? "1" : null);
     setOrDelete(params, "tr", terrainOverlayVisible ? "1" : null);
@@ -124,7 +120,6 @@ export function useUrlSync() {
   }, [
     placesLayerVisible,
     capturesLayerVisible,
-    routesLayerVisible,
     metroOverlayVisible,
     cyclingOverlayVisible,
     terrainOverlayVisible,

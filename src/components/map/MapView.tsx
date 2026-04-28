@@ -2,12 +2,12 @@ import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import { Maximize2 } from "lucide-react";
 import { createMapStyle } from "@/lib/map/style";
-import { decodeFeatureId } from "@/lib/map/feature-id";
+import { pickFeature } from "@/lib/map/pick-feature";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 
-// Style layer IDs from @protomaps/basemaps
+// Layer IDs we still need locally for hover/click logic.
 const POI_LAYERS = ["pois"];
 const PLACE_LAYERS = [
   "places_subplace",
@@ -15,139 +15,9 @@ const PLACE_LAYERS = [
   "places_region",
   "places_country",
 ];
-const BUILDING_LAYERS = ["buildings"];
 
-/** Pixels of tolerance for near-miss POI clicks. */
-const POI_TOLERANCE = 20;
-
-interface FeatureHit {
-  osmType: string;
-  osmId: number;
-  name: string;
-  kind: string;
-  sourceLayer: string;
-  /** Feature's actual coordinates (if point geometry). */
-  lng?: number;
-  lat?: number;
-}
-
-/** Try to decode a Protomaps tile feature into an OSM reference. */
-function tryDecode(f: maplibregl.MapGeoJSONFeature): FeatureHit | null {
-  if (typeof f.id !== "number" || f.id <= 0) return null;
-  const decoded = decodeFeatureId(f.id);
-  if (!decoded) return null;
-  const hit: FeatureHit = {
-    ...decoded,
-    name: f.properties?.name ? String(f.properties.name) : "",
-    kind: f.properties?.kind ? String(f.properties.kind) : "",
-    sourceLayer: f.sourceLayer ?? "",
-  };
-  if (f.geometry.type === "Point") {
-    const [lng, lat] = f.geometry.coordinates as [number, number];
-    hit.lng = lng;
-    hit.lat = lat;
-  }
-  return hit;
-}
-
-/** Among features, return the one whose point geometry is nearest to clickPx. */
-function findNearest(
-  features: maplibregl.MapGeoJSONFeature[],
-  map: maplibregl.Map,
-  clickPx: { x: number; y: number },
-): FeatureHit | null {
-  let best: FeatureHit | null = null;
-  let bestDist = Infinity;
-
-  for (const f of features) {
-    const hit = tryDecode(f);
-    if (!hit) continue;
-
-    let dist = 0;
-    if (f.geometry.type === "Point") {
-      const coords = f.geometry.coordinates as [number, number];
-      const pt = map.project(coords);
-      dist = Math.hypot(pt.x - clickPx.x, pt.y - clickPx.y);
-    }
-
-    if (dist < bestDist) {
-      best = hit;
-      bestDist = dist;
-    }
-  }
-
-  return best;
-}
-
-/** Safely filter to layers that actually exist on the map. */
 function existingLayers(map: maplibregl.Map, ids: string[]): string[] {
   return ids.filter((id) => map.getLayer(id));
-}
-
-/**
- * Layered feature picking — checks POIs, then places, then buildings.
- * Each step uses a filtered queryRenderedFeatures so higher-priority
- * layers can't be shadowed by large polygons underneath.
- */
-/** Try to decode the first decodable feature from a list. */
-function firstDecodable(
-  features: maplibregl.MapGeoJSONFeature[],
-): FeatureHit | null {
-  for (const f of features) {
-    const hit = tryDecode(f);
-    if (hit) return hit;
-  }
-  return null;
-}
-
-function pickFeature(
-  map: maplibregl.Map,
-  point: maplibregl.Point,
-): FeatureHit | null {
-  const poiLayers = existingLayers(map, POI_LAYERS);
-  const placeLayers = existingLayers(map, PLACE_LAYERS);
-  const buildingLayers = existingLayers(map, BUILDING_LAYERS);
-
-  // Step 1: exact POI symbol hit
-  if (poiLayers.length) {
-    const hit = firstDecodable(
-      map.queryRenderedFeatures(point, { layers: poiLayers }),
-    );
-    if (hit) return hit;
-  }
-
-  // Step 2: exact place label (city/town/country)
-  if (placeLayers.length) {
-    const hit = firstDecodable(
-      map.queryRenderedFeatures(point, { layers: placeLayers }),
-    );
-    if (hit) return hit;
-  }
-
-  // Step 3: nearby POI (tolerance bbox) — only fires when no symbol was
-  // directly clicked, so it can't steal clicks from place labels.
-  if (poiLayers.length) {
-    const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
-      [point.x - POI_TOLERANCE, point.y - POI_TOLERANCE],
-      [point.x + POI_TOLERANCE, point.y + POI_TOLERANCE],
-    ];
-    const nearby = map.queryRenderedFeatures(bbox, { layers: poiLayers });
-    if (nearby.length) {
-      const nearest = findNearest(nearby, map, point);
-      if (nearest) return nearest;
-    }
-  }
-
-  // Step 4: building polygon
-  if (buildingLayers.length) {
-    const hit = firstDecodable(
-      map.queryRenderedFeatures(point, { layers: buildingLayers }),
-    );
-    if (hit) return hit;
-  }
-
-  // Step 5: nothing
-  return null;
 }
 
 /**

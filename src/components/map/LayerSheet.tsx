@@ -4,7 +4,6 @@ import {
   X,
   MapPin,
   Camera,
-  Route as RouteIcon,
   Sun,
   Moon,
   Satellite,
@@ -31,8 +30,6 @@ export function LayerSheet() {
   const togglePlacesLayer = useUiStore((s) => s.togglePlacesLayer);
   const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
   const toggleCapturesLayer = useUiStore((s) => s.toggleCapturesLayer);
-  const routesLayerVisible = useUiStore((s) => s.routesLayerVisible);
-  const toggleRoutesLayer = useUiStore((s) => s.toggleRoutesLayer);
 
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
   const toggleMetroOverlay = useUiStore((s) => s.toggleMetroOverlay);
@@ -118,13 +115,6 @@ export function LayerSheet() {
             description="Photos, panoramas, and tracks"
             on={capturesLayerVisible}
             onChange={toggleCapturesLayer}
-          />
-          <Toggle
-            icon={<RouteIcon className="h-4 w-4" />}
-            label="Routes"
-            description="Saved walking, biking, hiking routes"
-            on={routesLayerVisible}
-            onChange={toggleRoutesLayer}
           />
           {activeCollections.size > 0 && (
             <button

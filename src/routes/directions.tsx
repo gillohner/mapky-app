@@ -48,9 +48,12 @@ function DirectionsRoute() {
   const search = Route.useSearch();
   const navigate = useNavigate();
 
-  // Last URL we wrote OR hydrated from. Used to short-circuit the
-  // bidirectional sync — without this, every store update would trigger a
-  // navigate, which would refire the URL → store effect, looping.
+  // Last URL we wrote OR hydrated from, as a canonical key. Both
+  // directions of the sync must produce the same string when the URL
+  // reflects the store, otherwise they'll ping-pong: each navigate
+  // re-fires the URL→store effect (which wipes computed/primary back to
+  // null), and the next snap result gets clobbered before the user
+  // ever sees a polyline.
   const lastSyncedRef = useRef<string>("");
 
   // URL → store: hydrate on initial mount AND when external navigation
@@ -61,7 +64,7 @@ function DirectionsRoute() {
   // (e.g. via "Resume draft" or the Routes "+ New" button) without
   // wiping their in-progress draft.
   useEffect(() => {
-    const key = JSON.stringify(search);
+    const key = canonicalSearchKey(search);
     if (key === lastSyncedRef.current) return;
     lastSyncedRef.current = key;
 
@@ -101,7 +104,7 @@ function DirectionsRoute() {
       const s = useRouteCreationStore.getState();
       if (!s.isOpen) return;
       const next = buildDirectionsSearch(s.slots, s.activity);
-      const key = JSON.stringify(next);
+      const key = canonicalSearchKey(next);
       if (key === lastSyncedRef.current) return;
       lastSyncedRef.current = key;
       // replace: true so each waypoint edit doesn't fill browser history.
@@ -180,4 +183,21 @@ function DirectionsRoute() {
   }, [isOpen, currentPath, navigate]);
 
   return null;
+}
+
+/**
+ * Stable, order-independent key for a directions search-params object.
+ * `Route.useSearch()` returns `{from, to, via, mode}` (validateSearch
+ * order); `buildDirectionsSearch()` returns `{mode, from, to, via?}`.
+ * Plain `JSON.stringify` would yield different strings for the same
+ * content because of key order, so we serialize via a fixed sequence
+ * to guarantee both sides round-trip to the same key.
+ */
+function canonicalSearchKey(s: DirectionsSearchParams): string {
+  return JSON.stringify({
+    mode: s.mode ?? "",
+    from: s.from ?? "",
+    to: s.to ?? "",
+    via: s.via ?? [],
+  });
 }

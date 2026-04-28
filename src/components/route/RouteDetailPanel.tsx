@@ -112,7 +112,7 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
 
   if (isLoading) {
     return (
-      <div className="pointer-events-auto fixed inset-x-2 top-2 z-30 rounded-lg border border-border bg-background/95 p-3 text-sm text-muted shadow-lg backdrop-blur-sm sm:right-2 sm:left-auto sm:w-96">
+      <div className="pointer-events-auto fixed inset-x-2 top-2 z-30 rounded-lg border border-border bg-background/95 p-3 text-sm text-muted shadow-lg backdrop-blur-sm sm:right-2 sm:left-auto sm:top-20 sm:w-96">
         <Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
         Loading route…
       </div>
@@ -120,7 +120,7 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   }
   if (error || !data) {
     return (
-      <div className="pointer-events-auto fixed inset-x-2 top-2 z-30 rounded-lg border border-border bg-background/95 p-3 text-sm text-red-500 shadow-lg backdrop-blur-sm sm:right-2 sm:left-auto sm:w-96">
+      <div className="pointer-events-auto fixed inset-x-2 top-2 z-30 rounded-lg border border-border bg-background/95 p-3 text-sm text-red-500 shadow-lg backdrop-blur-sm sm:right-2 sm:left-auto sm:top-20 sm:w-96">
         {error?.message ?? "Route not found"}
       </div>
     );
@@ -184,7 +184,7 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
         />
       )}
 
-      <div className="pointer-events-auto fixed inset-x-2 bottom-2 z-30 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-background/95 p-3 shadow-lg backdrop-blur-sm sm:inset-x-auto sm:right-2 sm:top-2 sm:bottom-auto sm:w-96">
+      <div className="pointer-events-auto fixed inset-x-2 bottom-2 z-30 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-background/95 p-3 shadow-lg backdrop-blur-sm sm:inset-x-auto sm:right-2 sm:top-20 sm:bottom-auto sm:w-96">
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h2 className="truncate text-base font-semibold text-foreground">

@@ -56,7 +56,7 @@ const FOOT_MODES: ModeOption[] = [
   {
     key: "hiking",
     label: "Hike",
-    description: "Trails allowed · 4.5 km/h",
+    description: "Trails allowed · 5 km/h",
     Icon: Mountain,
     enumValue: ActivityEnum.Hiking,
   },
@@ -97,6 +97,27 @@ export function DirectionsBar() {
   const [prefsOpen, setPrefsOpen] = useState(false);
 
   const inFlightAbort = useRef<AbortController | null>(null);
+  // Signature of (slots, activity, preferences) the snap is currently
+  // working on (or has already produced). Used to short-circuit redundant
+  // effect runs caused by upstream re-renders that don't actually change
+  // the routing inputs — Zustand store replacement, URL-sync reactions,
+  // etc. Without it, a saved route page re-snaps on every unrelated
+  // re-render and flaps the polyline.
+  const lastSnappedSigRef = useRef<string | null>(null);
+  // Live debounce handle. Held in a ref (not the effect's cleanup
+  // closure) so a same-sig re-render doesn't clear an in-flight snap.
+  const debounceHandleRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  // Cancel any pending debounce + in-flight request when the component
+  // unmounts. Doesn't run between renders.
+  useEffect(() => {
+    return () => {
+      if (debounceHandleRef.current) clearTimeout(debounceHandleRef.current);
+      inFlightAbort.current?.abort();
+    };
+  }, []);
 
   // Auto-snap whenever the slots / activity change. Mirrors the behavior of
   // the previous panel but reads typed slots instead of raw waypoints.
@@ -108,11 +129,38 @@ export function DirectionsBar() {
         w !== null,
       );
     if (wps.length < 2) {
+      if (debounceHandleRef.current) {
+        clearTimeout(debounceHandleRef.current);
+        debounceHandleRef.current = null;
+      }
       setComputedBundle(null, []);
       setComputeError(null);
+      lastSnappedSigRef.current = null;
       return;
     }
-    const handle = setTimeout(async () => {
+    const sig = JSON.stringify({
+      wps: wps.map((w) => [w.lat.toFixed(6), w.lon.toFixed(6)]),
+      activity,
+      preferences,
+    });
+    // Already snapping / snapped this exact configuration — let the
+    // existing debounce or completed result stand.
+    if (sig === lastSnappedSigRef.current) return;
+    // First run with a saved route already carrying a snapped polyline:
+    // adopt the existing geometry instead of re-asking Valhalla.
+    if (lastSnappedSigRef.current === null) {
+      const initial = useRouteCreationStore.getState().computed;
+      if (initial && initial.polyline && initial.engine === "valhalla") {
+        lastSnappedSigRef.current = sig;
+        return;
+      }
+    }
+    // Real change: cancel any earlier debounce, mark this sig as
+    // current, and schedule a fresh snap.
+    if (debounceHandleRef.current) clearTimeout(debounceHandleRef.current);
+    lastSnappedSigRef.current = sig;
+    debounceHandleRef.current = setTimeout(async () => {
+      debounceHandleRef.current = null;
       inFlightAbort.current?.abort();
       const ac = new AbortController();
       inFlightAbort.current = ac;
@@ -164,7 +212,8 @@ export function DirectionsBar() {
         if (!isStale()) setComputing(false);
       }
     }, RECOMPUTE_DEBOUNCE_MS);
-    return () => clearTimeout(handle);
+    // No effect-cleanup clear: the handle lives in a ref so a same-sig
+    // re-render doesn't kill an already-scheduled snap.
   }, [
     isOpen,
     computeNonce,

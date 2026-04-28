@@ -6,6 +6,7 @@ import type {
   RouteWaypointJson,
 } from "@/types/mapky";
 import type { LngLat, RouteSnapResult, Waypoint } from "@/lib/routing/types";
+import { decodePolyline } from "@/lib/routing/polyline";
 import {
   emptyPreferences,
   type RoutingPreferences,
@@ -328,10 +329,14 @@ export const useRouteCreationStore = create<RouteCreationState>()(
   setPublishing: (isPublishing) => set({ isPublishing }),
 
   loadFromExisting: (authorId, routeId, body) => {
+    // Decode the saved polyline up front so RouteAlternativesLayer
+    // (which reads `decoded`, not the encoded string) can render the
+    // line immediately. Without this the panel would briefly show the
+    // route and then blank out until a wasteful re-snap repopulated it.
     const initialComputed = body.geometry
       ? {
           polyline: body.geometry.polyline,
-          decoded: [] as LngLat[],
+          decoded: decodePolyline(body.geometry.polyline),
           distance_m: body.distance_m ?? 0,
           duration_s: body.estimated_duration_s ?? 0,
           elevation_gain_m: body.elevation_gain_m ?? undefined,

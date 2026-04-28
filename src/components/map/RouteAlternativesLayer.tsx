@@ -158,12 +158,23 @@ export function RouteAlternativesLayer({
           type: "geojson",
           data: lineFCRef.current,
         });
+      } else {
+        // Source already exists — make sure it carries the latest data.
+        // Without this, a styledata-driven re-attach (or a sync effect
+        // that fired before this ensure) can leave the source empty.
+        (map.getSource(SOURCE_LINES) as maplibregl.GeoJSONSource).setData(
+          lineFCRef.current,
+        );
       }
       if (!map.getSource(SOURCE_LABELS)) {
         map.addSource(SOURCE_LABELS, {
           type: "geojson",
           data: labelFCRef.current,
         });
+      } else {
+        (map.getSource(SOURCE_LABELS) as maplibregl.GeoJSONSource).setData(
+          labelFCRef.current,
+        );
       }
 
       // Inactive: wide invisible click target + halo + line.
@@ -286,6 +297,14 @@ export function RouteAlternativesLayer({
       ensure();
     }
 
+    // Re-attach when the basemap style is swapped (theme/satellite
+    // switch wipes all custom sources) — and as a defensive backstop in
+    // case the initial ensure() raced an unsettled style on first mount.
+    const onStyleData = () => {
+      if (!map.getSource(SOURCE_LINES)) ensure();
+    };
+    map.on("styledata", onStyleData);
+
     const handler = (e: maplibregl.MapMouseEvent) => onClickRef.current(e);
     const onEnter = () => (map.getCanvas().style.cursor = "pointer");
     const onLeave = () => (map.getCanvas().style.cursor = "");
@@ -304,6 +323,7 @@ export function RouteAlternativesLayer({
       map.off("mouseleave", LAYER_INACTIVE_HIT, onLeave);
       map.off("mouseenter", LAYER_LABELS, onEnter);
       map.off("mouseleave", LAYER_LABELS, onLeave);
+      map.off("styledata", onStyleData);
       for (const id of [
         LAYER_LABELS,
         LAYER_FALLBACK_LINE,

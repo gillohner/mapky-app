@@ -13,8 +13,7 @@ export function LayerSheetTrigger() {
   // Light "active dot" hint when any non-default layer state is on.
   const places = useUiStore((s) => s.placesLayerVisible);
   const captures = useUiStore((s) => s.capturesLayerVisible);
-  const routes = useUiStore((s) => s.routesLayerVisible);
-  const nonDefault = !places || !captures || routes;
+  const nonDefault = !places || !captures;
 
   return (
     <button

@@ -8,10 +8,9 @@ import { SequenceCoverageLayer } from "@/components/map/SequenceCoverageLayer";
 import { PoiClickHandler } from "@/components/map/PoiClickHandler";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
 import { CollectionOverlays } from "@/components/map/CollectionOverlays";
-import { ViewportRoutesGate } from "@/components/map/ViewportRoutesGate";
 import { RailOverlayLayer } from "@/components/map/RailOverlayLayer";
 import { CyclingOverlayLayer } from "@/components/map/CyclingOverlayLayer";
-import { CyclingLegend } from "@/components/map/CyclingLegend";
+import { MapLegends } from "@/components/map/MapLegends";
 import { TerrainOverlayLayer } from "@/components/map/TerrainOverlayLayer";
 import { Buildings3DLayer } from "@/components/map/Buildings3DLayer";
 import { LayerSheet } from "@/components/map/LayerSheet";
@@ -41,7 +40,6 @@ function RootLayout() {
           <SequenceCoverageLayer />
           <MainMapCaptureOverlay />
           <CollectionOverlays />
-          <ViewportRoutesGate />
           <TerrainOverlayLayer />
           <RailOverlayLayer />
           <CyclingOverlayLayer />
@@ -56,7 +54,7 @@ function RootLayout() {
           <Menu />
           <LayerSheetTrigger />
           <LayerSheet />
-          <CyclingLegend />
+          <MapLegends />
         </div>
         <Toaster position="bottom-center" />
       </AuthProvider>
