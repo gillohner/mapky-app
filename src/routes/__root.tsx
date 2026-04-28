@@ -11,6 +11,7 @@ import { CollectionOverlays } from "@/components/map/CollectionOverlays";
 import { ViewportRoutesGate } from "@/components/map/ViewportRoutesGate";
 import { RailOverlayLayer } from "@/components/map/RailOverlayLayer";
 import { CyclingOverlayLayer } from "@/components/map/CyclingOverlayLayer";
+import { CyclingLegend } from "@/components/map/CyclingLegend";
 import { TerrainOverlayLayer } from "@/components/map/TerrainOverlayLayer";
 import { LayerSheet } from "@/components/map/LayerSheet";
 import { LayerSheetTrigger } from "@/components/map/LayerSheetTrigger";
@@ -53,6 +54,7 @@ function RootLayout() {
           <Menu />
           <LayerSheetTrigger />
           <LayerSheet />
+          <CyclingLegend />
         </div>
         <Toaster position="bottom-center" />
       </AuthProvider>
