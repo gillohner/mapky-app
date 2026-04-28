@@ -1,11 +1,11 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Download, Edit2, Loader2, Trash2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useMapStore } from "@/stores/map-store";
-import { useRoute } from "@/lib/api/hooks";
+import { useRouteBody, useRouteDetails } from "@/lib/api/hooks";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { decodePolyline } from "@/lib/routing/polyline";
 import { emitGpx, gpxFilename } from "@/lib/gpx/emit";
@@ -25,15 +25,33 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   const { session, publicKey } = useAuth();
   const map = useMapStore((s) => s.map);
   const loadFromExisting = useRouteCreationStore((s) => s.loadFromExisting);
-  const { data, isLoading, error } = useRoute(authorId, routeId);
+  // Indexer metadata + homeserver body are fetched separately so a
+  // failure on one doesn't blank the whole page. Common failure modes:
+  // homeserver offline / unreachable on the user's network → still want
+  // to show distance/duration/activity from the indexer with a clear
+  // "polyline unavailable" notice instead of "Route not found".
+  const meta = useRouteDetails(authorId, routeId);
+  const body = useRouteBody(authorId, routeId);
+  const data = meta.data;
+  const isLoading = meta.isLoading;
+  const error = meta.error as Error | null;
+  const bodyAvailable = !!body.data;
+  const bodyError = body.error as Error | null;
+  // Hoisted above the early-return branches so the hook order is stable
+  // across renders. (React: "Rendered more hooks than during the
+  // previous render" if the loading branch returns early before us.)
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Decode the stored polyline for rendering. Falls back to straight lines
-  // between waypoints when there's no snapped geometry.
+  // between waypoints when there's no snapped geometry; renders nothing
+  // if the body fetch failed entirely.
   const decoded: LngLat[] = useMemo(() => {
-    const poly = data?.body.geometry?.polyline;
+    if (!body.data) return [];
+    const poly = body.data.geometry?.polyline;
     if (poly) return decodePolyline(poly);
-    return data?.body.waypoints.map((w) => [w.lon, w.lat] as LngLat) ?? [];
-  }, [data]);
+    return body.data.waypoints.map((w) => [w.lon, w.lat] as LngLat);
+  }, [body.data]);
 
   // Fit map to the route bounds whenever a route loads. The detail card
   // is pinned to the right on md+ (sm:right-2 sm:w-96 ≈ 392 px) and to the
@@ -80,16 +98,24 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   const isOwner = publicKey === authorId;
 
   const handleEdit = () => {
-    loadFromExisting(authorId, routeId, data.body);
+    if (!body.data) {
+      toast.error("Can't edit until the route body loads.");
+      return;
+    }
+    loadFromExisting(authorId, routeId, body.data);
     navigate({ to: "/directions" });
   };
 
   const handleExport = () => {
+    if (!body.data) {
+      toast.error("GPX export needs the route body, which couldn't be loaded.");
+      return;
+    }
     const gpx = emitGpx({
       name: data.name,
       description: data.description,
-      waypoints: data.body.waypoints,
-      geometry: data.body.geometry ? decoded : null,
+      waypoints: body.data.waypoints,
+      geometry: body.data.geometry ? decoded : null,
     });
     const blob = new Blob([gpx], { type: "application/gpx+xml" });
     const url = URL.createObjectURL(blob);
@@ -104,7 +130,7 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
 
   const handleDelete = async () => {
     if (!session || !isOwner) return;
-    if (!confirm("Delete this route? This cannot be undone.")) return;
+    setDeleting(true);
     try {
       await session.storage.delete(
         `/pub/mapky.app/routes/${routeId}` as `/pub/${string}`,
@@ -120,12 +146,16 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
       navigate({ to: "/routes" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete");
+      setDeleting(false);
     }
   };
 
   return (
     <>
-      <RoutePolylineLayer coords={decoded} dashed={!data.body.geometry} />
+      <RoutePolylineLayer
+        coords={decoded}
+        dashed={!body.data?.geometry}
+      />
 
       <div className="pointer-events-auto fixed inset-x-2 bottom-2 z-30 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-background/95 p-3 shadow-lg backdrop-blur-sm sm:inset-x-auto sm:right-2 sm:top-2 sm:bottom-auto sm:w-96">
         <div className="mb-2 flex items-start justify-between gap-2">
@@ -177,7 +207,7 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
           </button>
           {isOwner && (
             <button
-              onClick={handleDelete}
+              onClick={() => setConfirmDelete(true)}
               className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-foreground hover:border-red-400"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -186,12 +216,65 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
           )}
         </div>
 
+        {/* Inline delete confirmation. Same pattern as
+            CollectionActions — feels native to the app instead of the
+            jarring browser confirm() dialog. */}
+        {confirmDelete && isOwner && (
+          <div className="mt-2 space-y-2 rounded-md border border-red-500/30 bg-red-50/50 p-2 text-xs dark:bg-red-950/30">
+            <p className="text-foreground">
+              Delete <span className="font-medium">{data.name}</span>? This
+              cannot be undone.
+            </p>
+            <div className="flex justify-end gap-1.5">
+              <button
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="rounded-md border border-border bg-surface px-2 py-1 text-foreground hover:border-border/70 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex items-center gap-1 rounded-md bg-red-500 px-2 py-1 font-medium text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                {deleting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+                Delete
+              </button>
+            </div>
+          </div>
+        )}
+
         <p className="mt-2 text-[10px] text-muted">
           {data.waypoint_count} waypoints
-          {data.body.geometry
-            ? ` · snapped via ${data.body.geometry.engine}`
-            : " · no snapped geometry"}
+          {body.data?.geometry
+            ? ` · snapped via ${body.data.geometry.engine}`
+            : bodyAvailable
+              ? " · no snapped geometry"
+              : body.isLoading
+                ? " · loading geometry…"
+                : " · polyline unavailable"}
         </p>
+
+        {/* Body fetch failed entirely — homeserver offline, network
+            blocked, or the JSON has been deleted. Indexer metadata still
+            shows above; flag the missing geometry so the user knows the
+            map isn't drawing the actual path. */}
+        {bodyError && !body.isLoading && (
+          <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] dark:border-amber-800/60 dark:bg-amber-950/40">
+            <p className="font-medium text-amber-800 dark:text-amber-300">
+              Polyline unavailable
+            </p>
+            <p className="text-amber-700/80 dark:text-amber-300/70">
+              Couldn't reach this route's body on the homeserver. Stats
+              still come from the indexer; reload to retry.
+            </p>
+          </div>
+        )}
       </div>
     </>
   );

@@ -197,6 +197,16 @@ try {
 
   // ── Phase 7: GPX export ──────────────────────────────────────────────────
   log("→ phase 7: GPX export");
+  // RouteDetailPanel guards GPX export on body.data being present (the
+  // homeserver fetch). Wait for the body-loaded marker before clicking
+  // so we don't race the homeserver read.
+  await page.waitForFunction(
+    () => {
+      const meta = document.body?.innerText ?? "";
+      return /snapped via|no snapped geometry/.test(meta);
+    },
+    { timeout: 10_000 },
+  ).catch(() => {});
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 10000 }),
     page.getByRole("button", { name: /^GPX$/ }).click(),

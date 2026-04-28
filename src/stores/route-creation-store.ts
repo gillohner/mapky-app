@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import type {
   RouteActivity,
   RouteDifficultyLabel,
@@ -210,7 +211,9 @@ function bump(state: { computeNonce: number }): { computeNonce: number } {
   return { computeNonce: state.computeNonce + 1 };
 }
 
-export const useRouteCreationStore = create<RouteCreationState>((set) => ({
+export const useRouteCreationStore = create<RouteCreationState>()(
+  persist(
+    (set) => ({
   ...INITIAL,
 
   open: (mode = "create") =>
@@ -351,7 +354,35 @@ export const useRouteCreationStore = create<RouteCreationState>((set) => ({
       selectedAlternate: 0,
     }));
   },
-}));
+}),
+    {
+      name: "mapky-directions",
+      version: 1,
+      // Persist only the user-authored bits — slots, activity, prefs, and
+      // the save-form draft (name/description/difficulty). Don't persist
+      // the snapped result itself: it's expensive to serialize, depends
+      // on Valhalla being callable, and we want a fresh snap on rehydrate
+      // anyway. Don't persist isOpen either — opening directions on every
+      // app boot would be intrusive.
+      partialize: (state) => ({
+        slots: state.slots,
+        activity: state.activity,
+        difficulty: state.difficulty,
+        name: state.name,
+        description: state.description,
+        imageUri: state.imageUri,
+        preferences: state.preferences,
+      }),
+      // Bump computeNonce after rehydrate so the snap effect fires once
+      // we land in directions mode again.
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.computeNonce = (state.computeNonce ?? 0) + 1;
+        }
+      },
+    },
+  ),
+);
 
 // Dev-only: expose the store on window for E2E tests / quick debugging.
 // Bundled out of production builds via the Vite import.meta.env.DEV gate.
