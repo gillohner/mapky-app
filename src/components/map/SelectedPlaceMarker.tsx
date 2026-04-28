@@ -6,19 +6,11 @@ import { useUiStore } from "@/stores/ui-store";
 const SEL_SOURCE = "mapky-selected-place";
 const SEL_LAYER_FILL = "mapky-selected-fill";
 const SEL_LAYER_LINE = "mapky-selected-line";
-const SEL_LAYER_GLOW = "mapky-selected-glow";
-const SEL_LAYER_RING = "mapky-selected-ring";
 
 const HIGHLIGHT_COLOR = "#22c55e";
 
-/** Protomaps v4 vector tile source name (see lib/map/style.ts). */
 const PROTOMAPS_SOURCE = "protomaps";
 
-/**
- * Source layers in the protomaps v4 schema that carry OSM-referenceable
- * geometries. We query each one for the selected feature id so a building
- * polygon, road line, or POI point can all be highlighted.
- */
 const PROTOMAPS_SOURCE_LAYERS = [
   "buildings",
   "roads",
@@ -39,7 +31,7 @@ function ensureLayers(map: maplibregl.Map) {
     });
   }
 
-  // Filled polygon (buildings, areas). `fill` only renders Polygon/MultiPolygon.
+  // Filled polygon (buildings, areas).
   if (!map.getLayer(SEL_LAYER_FILL)) {
     map.addLayer({
       id: SEL_LAYER_FILL,
@@ -53,10 +45,7 @@ function ensureLayers(map: maplibregl.Map) {
   }
 
   // Stroke for line geometries (roads, paths). Polygons are excluded so the
-  // line layer doesn't auto-outline tile-clipped multi-tile polygons with
-  // the visible cut edges; clean polygon outlining across tile fragments is
-  // an open problem (see git history) and the fill alone is acceptable for
-  // now.
+  // line layer doesn't auto-outline tile-clipped multi-tile polygons.
   if (!map.getLayer(SEL_LAYER_LINE)) {
     map.addLayer({
       id: SEL_LAYER_LINE,
@@ -78,48 +67,8 @@ function ensureLayers(map: maplibregl.Map) {
       },
     });
   }
-
-  // Outer glow for point geometries. MapLibre's circle layer renders at every
-  // vertex by default — restrict to Point geometries so polygons/lines don't
-  // get a circle on every corner.
-  if (!map.getLayer(SEL_LAYER_GLOW)) {
-    map.addLayer({
-      id: SEL_LAYER_GLOW,
-      type: "circle",
-      source: SEL_SOURCE,
-      filter: ["==", ["geometry-type"], "Point"],
-      paint: {
-        "circle-radius": 22,
-        "circle-color": HIGHLIGHT_COLOR,
-        "circle-opacity": 0.18,
-        "circle-blur": 0.6,
-      },
-    });
-  }
-
-  // Crisp ring for point geometries.
-  if (!map.getLayer(SEL_LAYER_RING)) {
-    map.addLayer({
-      id: SEL_LAYER_RING,
-      type: "circle",
-      source: SEL_SOURCE,
-      filter: ["==", ["geometry-type"], "Point"],
-      paint: {
-        "circle-radius": 16,
-        "circle-color": "transparent",
-        "circle-stroke-width": 2.5,
-        "circle-stroke-color": HIGHLIGHT_COLOR,
-        "circle-stroke-opacity": 0.7,
-      },
-    });
-  }
 }
 
-/**
- * Look up the selected feature's actual geometry by querying the protomaps
- * vector source across all OSM-bearing source layers. Returns every match
- * (a building may exist in multiple tiles when it straddles a boundary).
- */
 function queryGeometryById(
   map: maplibregl.Map,
   featureId: number,
@@ -138,9 +87,7 @@ function queryGeometryById(
     }
     for (const f of features) {
       if (f.id !== featureId) continue;
-      // Dedupe identical geometries returned from neighboring tiles.
       const key = `${sourceLayer}:${f.geometry.type}:${JSON.stringify(
-        // Hash a small slice to keep this cheap.
         (f.geometry as { coordinates?: unknown }).coordinates,
       ).slice(0, 200)}`;
       if (seen.has(key)) continue;
@@ -156,21 +103,41 @@ function queryGeometryById(
   return out;
 }
 
+function hasArea(features: GeoJSON.Feature[]): boolean {
+  return features.some(
+    (f) => f.geometry.type !== "Point" && f.geometry.type !== "MultiPoint",
+  );
+}
+
+function createPinElement(): HTMLDivElement {
+  const el = document.createElement("div");
+  el.className = "mapky-place-pin";
+  el.innerHTML = `
+    <svg class="mapky-place-pin__icon" width="28" height="40" viewBox="0 0 28 40" aria-hidden="true">
+      <path d="M14 2 C7 2 2 7 2 14 C2 22 14 38 14 38 C14 38 26 22 26 14 C26 7 21 2 14 2 Z"
+            fill="${HIGHLIGHT_COLOR}" stroke="white" stroke-width="2"/>
+      <circle cx="14" cy="14" r="4" fill="white"/>
+    </svg>
+    <span class="mapky-place-pin__label"></span>
+  `;
+  return el;
+}
+
 /**
- * Highlights the selected place on top of the basemap. Renders the actual
- * tile geometry where available — filled fill for building/area polygons,
- * traced line for ways, and a dot/glow/ring for nodes — so the selection
- * mirrors how openstreetmap.org highlights features.
- *
- * Falls back to a point at the place coordinates when no tile geometry is
- * found (e.g. before tiles around the target finish loading).
+ * Highlights the selected place. When the underlying tile feature is a
+ * polygon or line (building, park, road), it's drawn as a translucent
+ * fill / stroke. When it's just a point — or no tile geometry could be
+ * resolved yet — we render a Google-Maps-style balloon pin with the
+ * place name next to it instead of the previous circle/ring overlay.
  */
 export function SelectedPlaceMarker() {
   const map = useMapStore((s) => s.map);
   const selected = useUiStore((s) => s.selectedFeature);
   const layerReady = useRef(false);
+  const markerRef = useRef<maplibregl.Marker | null>(null);
+  const pinElRef = useRef<HTMLDivElement | null>(null);
 
-  // Recreate layers after style changes (theme toggle wipes the style).
+  // Recreate layers after style changes (theme/basemap toggles wipe style).
   useEffect(() => {
     if (!map) return;
     const onStyleData = () => {
@@ -182,8 +149,27 @@ export function SelectedPlaceMarker() {
     };
   }, [map]);
 
+  // One Marker instance for the lifetime of the map. We attach/detach it
+  // from the map and update label/position on selection changes.
   useEffect(() => {
     if (!map) return;
+    const el = createPinElement();
+    pinElRef.current = el;
+    markerRef.current = new maplibregl.Marker({
+      element: el,
+      anchor: "bottom",
+    });
+    return () => {
+      markerRef.current?.remove();
+      markerRef.current = null;
+      pinElRef.current = null;
+    };
+  }, [map]);
+
+  useEffect(() => {
+    if (!map) return;
+    const marker = markerRef.current;
+    const pinEl = pinElRef.current;
 
     const apply = () => {
       if (!layerReady.current) {
@@ -198,25 +184,32 @@ export function SelectedPlaceMarker() {
 
       if (!selected) {
         src.setData({ type: "FeatureCollection", features: [] });
+        marker?.remove();
         return;
       }
 
       const features = queryGeometryById(map, selected.featureId);
+      const showAreaHighlight = hasArea(features);
 
-      if (features.length === 0) {
-        // Fallback: point at the place coordinates so the user always sees
-        // *something* selected, even before tiles load.
-        features.push({
-          type: "Feature",
-          geometry: {
-            type: "Point",
-            coordinates: [selected.lng, selected.lat],
-          },
-          properties: {},
-        });
+      if (showAreaHighlight) {
+        // Area / way found in tiles — fill/stroke handles the highlight,
+        // hide the balloon pin.
+        src.setData({ type: "FeatureCollection", features });
+        marker?.remove();
+      } else {
+        // No area to highlight — drop a balloon pin at the place coords
+        // with the name as a label.
+        src.setData({ type: "FeatureCollection", features: [] });
+        if (marker && pinEl) {
+          const labelEl = pinEl.querySelector(
+            ".mapky-place-pin__label",
+          ) as HTMLSpanElement | null;
+          if (labelEl) labelEl.textContent = selected.name ?? "";
+          marker.setLngLat([selected.lng, selected.lat]);
+          if (!marker.getElement().isConnected) marker.addTo(map);
+          else marker.addTo(map); // idempotent
+        }
       }
-
-      src.setData({ type: "FeatureCollection", features });
     };
 
     if (map.isStyleLoaded()) {

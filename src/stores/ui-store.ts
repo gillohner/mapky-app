@@ -45,6 +45,8 @@ export interface SelectedFeature {
   /** Fallback coords for fly-to when opening from search */
   lng: number;
   lat: number;
+  /** Place name for the balloon-pin label when there's no area highlight */
+  name?: string;
 }
 
 export type DimmableLayer = "places" | "captures" | "routes";

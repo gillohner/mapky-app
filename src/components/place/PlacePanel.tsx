@@ -101,10 +101,11 @@ export function PlacePanel({
         sourceLayers: sourceLayersForType(osmType),
         lng: lon,
         lat,
+        name: tileName,
       });
     }
     return () => setSelectedFeature(null);
-  }, [osmType, osmId, place?.lat, place?.lon, fallbackLat, fallbackLon, setSelectedFeature]);
+  }, [osmType, osmId, place?.lat, place?.lon, tileName, fallbackLat, fallbackLon, setSelectedFeature]);
 
   const close = () => navigate({ to: "/" });
 

@@ -101,6 +101,43 @@ html, body, #root {
   display: none;
 }
 
+/* Selected-place balloon pin (used when no polygon/line area is
+   available). Pin tip sits on the lat/lng; label hangs to the right
+   beside the pin head. */
+.mapky-place-pin {
+  position: relative;
+  width: 28px;
+  height: 40px;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
+}
+
+.mapky-place-pin__icon {
+  display: block;
+  width: 28px;
+  height: 40px;
+}
+
+.mapky-place-pin__label {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 8px;
+  padding: 3px 8px;
+  background: var(--raw-bg);
+  color: var(--raw-fg);
+  border: 1px solid var(--raw-border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
+.mapky-place-pin__label:empty {
+  display: none;
+}
+
 /* Photo Sphere Viewer — floor navigation dots */
 .psv-floor-dot {
   pointer-events: auto;
