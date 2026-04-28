@@ -12,6 +12,14 @@ interface MapStore {
 
   theme: "light" | "dark";
   setTheme: (theme: "light" | "dark") => void;
+
+  basemap: "default" | "satellite";
+  setBasemap: (basemap: "default" | "satellite") => void;
+
+  /** Show vector labels on top of satellite imagery (hybrid mode). */
+  satelliteLabels: boolean;
+  setSatelliteLabels: (on: boolean) => void;
+  toggleSatelliteLabels: () => void;
 }
 
 export const useMapStore = create<MapStore>()(
@@ -28,6 +36,14 @@ export const useMapStore = create<MapStore>()(
         ? "dark"
         : "light",
       setTheme: (theme) => set({ theme }),
+
+      basemap: "default",
+      setBasemap: (basemap) => set({ basemap }),
+
+      satelliteLabels: true,
+      setSatelliteLabels: (on) => set({ satelliteLabels: on }),
+      toggleSatelliteLabels: () =>
+        set((s) => ({ satelliteLabels: !s.satelliteLabels })),
     }),
     {
       name: "mapky-map",
@@ -35,6 +51,8 @@ export const useMapStore = create<MapStore>()(
         center: state.center,
         zoom: state.zoom,
         theme: state.theme,
+        basemap: state.basemap,
+        satelliteLabels: state.satelliteLabels,
       }),
     },
   ),

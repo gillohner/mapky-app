@@ -66,6 +66,21 @@ interface UiStore {
   setRoutesLayerVisible: (visible: boolean) => void;
   toggleRoutesLayer: () => void;
 
+  /** OpenRailwayMap raster overlay — rail lines, metro, signals. */
+  metroOverlayVisible: boolean;
+  setMetroOverlayVisible: (visible: boolean) => void;
+  toggleMetroOverlay: () => void;
+
+  /** CyclOSM cycling overlay — bike infrastructure, lanes, paths. */
+  cyclingOverlayVisible: boolean;
+  setCyclingOverlayVisible: (visible: boolean) => void;
+  toggleCyclingOverlay: () => void;
+
+  /** AWS Terrarium hillshade — terrain relief from elevation tiles. */
+  terrainOverlayVisible: boolean;
+  setTerrainOverlayVisible: (visible: boolean) => void;
+  toggleTerrainOverlay: () => void;
+
   /**
    * Layers that should render at reduced opacity. Driven by
    * `useAutoFocusLayer` on detail pages — runtime only, never persisted.
@@ -124,6 +139,23 @@ export const useUiStore = create<UiStore>()(
       setRoutesLayerVisible: (visible) => set({ routesLayerVisible: visible }),
       toggleRoutesLayer: () =>
         set((s) => ({ routesLayerVisible: !s.routesLayerVisible })),
+
+      metroOverlayVisible: false,
+      setMetroOverlayVisible: (visible) => set({ metroOverlayVisible: visible }),
+      toggleMetroOverlay: () =>
+        set((s) => ({ metroOverlayVisible: !s.metroOverlayVisible })),
+
+      cyclingOverlayVisible: false,
+      setCyclingOverlayVisible: (visible) =>
+        set({ cyclingOverlayVisible: visible }),
+      toggleCyclingOverlay: () =>
+        set((s) => ({ cyclingOverlayVisible: !s.cyclingOverlayVisible })),
+
+      terrainOverlayVisible: false,
+      setTerrainOverlayVisible: (visible) =>
+        set({ terrainOverlayVisible: visible }),
+      toggleTerrainOverlay: () =>
+        set((s) => ({ terrainOverlayVisible: !s.terrainOverlayVisible })),
 
       dimmedLayers: new Set<DimmableLayer>(),
       setDimmed: (layer, on) =>
@@ -197,6 +229,9 @@ export const useUiStore = create<UiStore>()(
         placesLayerVisible: state.placesLayerVisible,
         capturesLayerVisible: state.capturesLayerVisible,
         routesLayerVisible: state.routesLayerVisible,
+        metroOverlayVisible: state.metroOverlayVisible,
+        cyclingOverlayVisible: state.cyclingOverlayVisible,
+        terrainOverlayVisible: state.terrainOverlayVisible,
       }),
     },
   ),

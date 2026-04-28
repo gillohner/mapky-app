@@ -225,7 +225,8 @@ export function MapView() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const initializedRef = useRef(false);
   const hoverPopupRef = useRef<maplibregl.Popup | null>(null);
-  const { center, zoom, theme, setMap, setView } = useMapStore();
+  const { center, zoom, theme, basemap, satelliteLabels, setMap, setView } =
+    useMapStore();
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const streetViewActive = useUiStore((s) => s.streetViewActive);
   const streetViewExpanded = useUiStore((s) => s.streetViewExpanded);
@@ -237,7 +238,7 @@ export function MapView() {
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: createMapStyle(theme),
+      style: createMapStyle(theme, basemap, { satelliteLabels }),
       center: center,
       zoom: zoom,
     });
@@ -346,16 +347,20 @@ export function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-add highlight layers after style changes (theme switch removes all layers)
+  // Re-add highlight layers after style changes (theme/basemap/labels
+  // switch removes all layers, custom layers re-attach via styledata
+  // listeners).
   useEffect(() => {
     if (!mapRef.current || !initializedRef.current) return;
-    mapRef.current.setStyle(createMapStyle(theme));
+    mapRef.current.setStyle(
+      createMapStyle(theme, basemap, { satelliteLabels }),
+    );
     mapRef.current.once("idle", () => {
       if (mapRef.current) {
         expandPoiFilter(mapRef.current, theme);
       }
     });
-  }, [theme]);
+  }, [theme, basemap, satelliteLabels]);
 
   // Adjust map padding when sidebar opens/closes (desktop only)
   useEffect(() => {

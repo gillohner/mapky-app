@@ -9,6 +9,9 @@ import { PoiClickHandler } from "@/components/map/PoiClickHandler";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
 import { CollectionOverlays } from "@/components/map/CollectionOverlays";
 import { ViewportRoutesGate } from "@/components/map/ViewportRoutesGate";
+import { RailOverlayLayer } from "@/components/map/RailOverlayLayer";
+import { CyclingOverlayLayer } from "@/components/map/CyclingOverlayLayer";
+import { TerrainOverlayLayer } from "@/components/map/TerrainOverlayLayer";
 import { LayerSheet } from "@/components/map/LayerSheet";
 import { LayerSheetTrigger } from "@/components/map/LayerSheetTrigger";
 import { IconRail } from "@/components/sidebar/IconRail";
@@ -18,12 +21,14 @@ import { MainMapCaptureOverlay } from "@/components/capture/MainMapCaptureOverla
 import { DirectionsLayer } from "@/components/route/DirectionsLayer";
 import { Menu } from "@/components/menu/Menu";
 import { Toaster } from "sonner";
+import { useUrlSync } from "@/hooks/use-url-sync";
 
 export const Route = createRootRoute({
   component: RootLayout,
 });
 
 function RootLayout() {
+  useUrlSync();
   return (
     <QueryProvider>
       <AuthProvider>
@@ -35,6 +40,9 @@ function RootLayout() {
           <MainMapCaptureOverlay />
           <CollectionOverlays />
           <ViewportRoutesGate />
+          <TerrainOverlayLayer />
+          <RailOverlayLayer />
+          <CyclingOverlayLayer />
           <PoiClickHandler />
           <SelectedPlaceMarker />
           <IconRail />

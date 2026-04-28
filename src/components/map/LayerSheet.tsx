@@ -1,6 +1,17 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, MapPin, Camera, Route as RouteIcon, Sun, Moon } from "lucide-react";
+import {
+  X,
+  MapPin,
+  Camera,
+  Route as RouteIcon,
+  Sun,
+  Moon,
+  Satellite,
+  TrainFront,
+  Bike,
+  Mountain,
+} from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 
@@ -22,6 +33,15 @@ export function LayerSheet() {
   const routesLayerVisible = useUiStore((s) => s.routesLayerVisible);
   const toggleRoutesLayer = useUiStore((s) => s.toggleRoutesLayer);
 
+  const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
+  const toggleMetroOverlay = useUiStore((s) => s.toggleMetroOverlay);
+
+  const cyclingOverlayVisible = useUiStore((s) => s.cyclingOverlayVisible);
+  const toggleCyclingOverlay = useUiStore((s) => s.toggleCyclingOverlay);
+
+  const terrainOverlayVisible = useUiStore((s) => s.terrainOverlayVisible);
+  const toggleTerrainOverlay = useUiStore((s) => s.toggleTerrainOverlay);
+
   const activeCollections = useUiStore((s) => s.activeCollectionOverlays);
   const clearAllCollectionOverlays = useUiStore(
     (s) => s.clearAllCollectionOverlays,
@@ -29,6 +49,10 @@ export function LayerSheet() {
 
   const theme = useMapStore((s) => s.theme);
   const setTheme = useMapStore((s) => s.setTheme);
+  const basemap = useMapStore((s) => s.basemap);
+  const setBasemap = useMapStore((s) => s.setBasemap);
+  const satelliteLabels = useMapStore((s) => s.satelliteLabels);
+  const toggleSatelliteLabels = useMapStore((s) => s.toggleSatelliteLabels);
 
   useEffect(() => {
     if (!open) return;
@@ -44,7 +68,11 @@ export function LayerSheet() {
   const handleSetTheme = (t: "light" | "dark") => {
     setTheme(t);
     document.documentElement.classList.toggle("dark", t === "dark");
+    // Picking a theme also implies the default vector basemap.
+    if (basemap !== "default") setBasemap("default");
   };
+
+  const handleSetSatellite = () => setBasemap("satellite");
 
   return createPortal(
     <div
@@ -111,30 +139,58 @@ export function LayerSheet() {
             <BasemapTile
               icon={<Sun className="h-4 w-4" />}
               label="Light"
-              active={theme === "light"}
+              active={basemap === "default" && theme === "light"}
               onClick={() => handleSetTheme("light")}
             />
             <BasemapTile
               icon={<Moon className="h-4 w-4" />}
               label="Dark"
-              active={theme === "dark"}
+              active={basemap === "default" && theme === "dark"}
               onClick={() => handleSetTheme("dark")}
             />
             <BasemapTile
-              icon={null}
+              icon={<Satellite className="h-4 w-4" />}
               label="Satellite"
-              active={false}
-              disabled
-              onClick={() => {}}
+              active={basemap === "satellite"}
+              onClick={handleSetSatellite}
             />
           </div>
+          {basemap === "satellite" && (
+            <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-surface">
+              <input
+                type="checkbox"
+                checked={satelliteLabels}
+                onChange={toggleSatelliteLabels}
+                className="h-3.5 w-3.5 accent-accent"
+              />
+              <span className="flex-1">Show place &amp; road labels</span>
+            </label>
+          )}
         </Section>
 
-        {/* Overlays — placeholder for transit/cycling/terrain */}
+        {/* Overlays */}
         <Section title="Overlays" lastSection>
-          <p className="text-[11px] text-muted">
-            Metro, cycling, and terrain overlays coming soon.
-          </p>
+          <Toggle
+            icon={<TrainFront className="h-4 w-4" />}
+            label="Rail & metro"
+            description="OpenRailwayMap — lines, stations, signals"
+            on={metroOverlayVisible}
+            onChange={toggleMetroOverlay}
+          />
+          <Toggle
+            icon={<Bike className="h-4 w-4" />}
+            label="Cycling"
+            description="CyclOSM — bike lanes, paths, infrastructure"
+            on={cyclingOverlayVisible}
+            onChange={toggleCyclingOverlay}
+          />
+          <Toggle
+            icon={<Mountain className="h-4 w-4" />}
+            label="Terrain"
+            description="Hillshade relief from elevation tiles"
+            on={terrainOverlayVisible}
+            onChange={toggleTerrainOverlay}
+          />
         </Section>
       </div>
     </div>,
