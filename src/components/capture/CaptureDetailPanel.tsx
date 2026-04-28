@@ -30,7 +30,6 @@ import {
 import { resolveFileUrl } from "@/lib/api/user";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { UserAvatar } from "@/components/shared/UserAvatar";
-import { MobileMenuTrigger } from "@/components/sidebar/MobileMenuTrigger";
 import { CaptureTags } from "./CaptureTags";
 import { SphereViewer, type VirtualTourNodeData, type SphereViewerHandle } from "./SphereViewer";
 
@@ -260,7 +259,6 @@ export function CaptureDetailPanel({
     const mediaUrl = resolveFileUrl(capture.file_uri);
     return (
       <>
-        <MobileMenuTrigger />
 
         {/* Sphere viewer — fullscreen when expanded, corner thumbnail when map is expanded */}
         <div
@@ -395,7 +393,6 @@ export function CaptureDetailPanel({
   // ─── Standard (photo / video) ─── sidebar panel (unchanged layout)
   return (
     <>
-      <MobileMenuTrigger />
       <div
         className="pointer-events-auto fixed inset-x-0 bottom-0 z-40 flex max-h-[90dvh] flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl md:inset-y-0 md:right-0 md:left-auto md:max-h-none md:w-[28rem] md:rounded-none md:rounded-l-2xl md:border-l md:border-t-0"
         role="dialog"

@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PlacePanel } from "@/components/place/PlacePanel";
-import { MobileMenuTrigger } from "@/components/sidebar/MobileMenuTrigger";
 
 export const Route = createFileRoute("/place/$osmType/$osmId")({
   component: PlaceDetailRoute,
@@ -37,7 +36,6 @@ function PlaceDetailRoute() {
 
   return (
     <>
-      <MobileMenuTrigger />
       <PlacePanel
         osmType={osmType}
         osmId={Number(osmId)}

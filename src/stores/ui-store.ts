@@ -52,10 +52,6 @@ export interface SelectedFeature {
 export type DimmableLayer = "places" | "captures";
 
 interface UiStore {
-  menuOpen: boolean;
-  setMenuOpen: (open: boolean) => void;
-  toggleMenu: () => void;
-
   placesLayerVisible: boolean;
   setPlacesLayerVisible: (visible: boolean) => void;
   togglePlacesLayer: () => void;
@@ -124,10 +120,6 @@ interface UiStore {
 export const useUiStore = create<UiStore>()(
   persist(
     (set) => ({
-      menuOpen: false,
-      setMenuOpen: (open) => set({ menuOpen: open }),
-      toggleMenu: () => set((s) => ({ menuOpen: !s.menuOpen })),
-
       placesLayerVisible: true,
       setPlacesLayerVisible: (visible) => set({ placesLayerVisible: visible }),
       togglePlacesLayer: () =>

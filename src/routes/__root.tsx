@@ -20,7 +20,6 @@ import { SearchBar } from "@/components/sidebar/SearchBar";
 import { CaptureCreationPanel } from "@/components/capture/CaptureCreationPanel";
 import { MainMapCaptureOverlay } from "@/components/capture/MainMapCaptureOverlay";
 import { DirectionsLayer } from "@/components/route/DirectionsLayer";
-import { Menu } from "@/components/menu/Menu";
 import { Toaster } from "sonner";
 import { useUrlSync } from "@/hooks/use-url-sync";
 
@@ -51,7 +50,6 @@ function RootLayout() {
           <DirectionsLayer />
           <CaptureCreationPanel />
           <Outlet />
-          <Menu />
           <LayerSheetTrigger />
           <LayerSheet />
           <MapLegends />

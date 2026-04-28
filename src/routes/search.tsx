@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { SearchPanel } from "@/components/search/SearchPanel";
-import { MobileMenuTrigger } from "@/components/sidebar/MobileMenuTrigger";
 
 export const Route = createFileRoute("/search")({
   component: SearchRoute,
@@ -20,7 +19,6 @@ function SearchRoute() {
 
   return (
     <>
-      <MobileMenuTrigger />
       <SearchPanel query={q ?? ""} mode={mode ?? "places"} />
     </>
   );
