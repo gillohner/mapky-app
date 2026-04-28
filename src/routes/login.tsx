@@ -191,7 +191,7 @@ function LoginPage() {
   };
 
   return (
-    <div className="pointer-events-auto flex h-dvh items-center justify-center bg-background/95 p-6 backdrop-blur-sm">
+    <div className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/95 p-6 backdrop-blur-sm">
       <button
         onClick={() => navigate({ to: "/" })}
         className="absolute right-4 top-4 rounded-full p-2 text-muted transition-colors hover:bg-surface hover:text-foreground"

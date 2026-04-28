@@ -69,6 +69,22 @@ export function IconRail() {
   const [imgError, setImgError] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const hoverCloseTimerRef = useRef<number | null>(null);
+
+  const cancelHoverClose = () => {
+    if (hoverCloseTimerRef.current !== null) {
+      window.clearTimeout(hoverCloseTimerRef.current);
+      hoverCloseTimerRef.current = null;
+    }
+  };
+  const scheduleHoverClose = () => {
+    cancelHoverClose();
+    hoverCloseTimerRef.current = window.setTimeout(() => {
+      setProfileOpen(false);
+      hoverCloseTimerRef.current = null;
+    }, 150);
+  };
+  useEffect(() => cancelHoverClose, []);
 
   const profile = useUserProfile(publicKey);
   const hasAvatar = Boolean(profile.data?.image);
@@ -125,6 +141,12 @@ export function IconRail() {
       <button
         ref={triggerRef}
         onClick={() => setProfileOpen((v) => !v)}
+        onMouseEnter={() => {
+          cancelHoverClose();
+          setProfileOpen(true);
+        }}
+        onMouseLeave={scheduleHoverClose}
+        onFocus={() => setProfileOpen(true)}
         title={isAuthenticated ? "Account" : "Sign in"}
         aria-label="Account"
         className="flex h-10 w-10 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-foreground"
@@ -195,6 +217,8 @@ export function IconRail() {
       {profileOpen && (
         <div
           ref={popoverRef}
+          onMouseEnter={cancelHoverClose}
+          onMouseLeave={scheduleHoverClose}
           className="absolute left-12 top-2 z-30 ml-1 w-64 rounded-lg border border-border bg-background/95 shadow-xl backdrop-blur"
         >
           {isAuthenticated ? (
