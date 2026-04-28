@@ -353,7 +353,11 @@ export const useRouteCreationStore = create<RouteCreationState>()(
     set(() => ({
       ...INITIAL,
       slots: body.waypoints.map((w) => waypointJsonToSlot(w)),
-      isOpen: true,
+      // Hydrating the store on /route/$id used to flip isOpen=true,
+      // which mounted the DirectionsBar sidebar UNDER the RouteDetailPanel
+      // (both occupy the same left slot) and hid the global SearchBar.
+      // Leave it closed; navigating to /directions later opens the editor.
+      isOpen: false,
       mode: "edit",
       editingFromAuthor: authorId,
       editingFromId: routeId,

@@ -135,7 +135,11 @@ export function useOsmLookup(
     enabled,
     staleTime: Infinity,
     gcTime: Infinity,
-    retry: noRetryOn404,
+    // Nominatim is rate-limited (429) and returns 404 for unindexed
+    // elements. Either way, retrying spams the console without changing
+    // the outcome — the UI has its own fallback (osm_canonical) for the
+    // miss, so a single attempt is enough.
+    retry: false,
   });
 }
 

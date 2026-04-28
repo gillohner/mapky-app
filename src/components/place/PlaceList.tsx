@@ -4,6 +4,7 @@ import { useViewportPlaces, useOsmLookup } from "@/lib/api/hooks";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useMapStore } from "@/stores/map-store";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
+import { fallbackPlaceLabel } from "@/lib/map/osm-url";
 import type { PlaceDetails } from "@/types/mapky";
 
 /**
@@ -52,7 +53,7 @@ function PlaceRow({ place }: { place: PlaceDetails }) {
   const name =
     nominatim?.name ||
     nominatim?.display_name?.split(",")[0] ||
-    place.osm_canonical;
+    fallbackPlaceLabel(place.osm_type, place.osm_id);
   const typeLabel = nominatim?.type?.replace(/_/g, " ") ?? "";
 
   return (

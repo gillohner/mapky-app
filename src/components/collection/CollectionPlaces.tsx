@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { MapPin } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { parseOsmCanonical } from "@/lib/map/osm-url";
+import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
 import { useOsmLookup } from "@/lib/api/hooks";
 
 interface CollectionPlacesProps {
@@ -69,7 +69,7 @@ function PlaceItem({
   const name =
     nominatim?.name ||
     nominatim?.display_name?.split(",")[0] ||
-    `${osmType}/${osmId}`;
+    fallbackPlaceLabel(osmType, osmId);
 
   const typeLabel = nominatim?.type?.replace(/_/g, " ") ?? "";
 

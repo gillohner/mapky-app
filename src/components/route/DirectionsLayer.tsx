@@ -109,7 +109,7 @@ export function DirectionsLayer() {
 
       {/* Mobile: bottom sheet (collapsible). Lets the user see the map
           while still picking start / end. */}
-      <div className="pointer-events-auto absolute bottom-0 left-0 right-0 z-10 flex max-h-[70vh] flex-col overflow-y-auto rounded-t-2xl border-t border-border bg-background shadow-2xl md:hidden">
+      <div className="pointer-events-auto absolute bottom-0 left-12 right-0 z-10 flex max-h-[70vh] flex-col overflow-y-auto rounded-t-2xl border-t border-border bg-background shadow-2xl md:hidden">
         <div className="mx-auto my-2 h-1 w-10 rounded-full bg-border" />
         <DirectionsBar />
         <RouteSummaryCard />

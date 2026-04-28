@@ -135,7 +135,7 @@ function MobileSheet({
 
   return (
     <div
-      className={`pointer-events-auto absolute bottom-0 left-0 right-0 z-10 flex flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl transition-[max-height] duration-300 ease-out md:hidden ${
+      className={`pointer-events-auto absolute bottom-0 left-12 right-0 z-10 flex flex-col rounded-t-2xl border-t border-l border-border bg-background shadow-2xl transition-[max-height] duration-300 ease-out md:hidden ${
         expanded ? "max-h-[85vh]" : "max-h-[120px]"
       }`}
     >

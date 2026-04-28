@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserPosts, useOsmLookup } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
-import { parseOsmCanonical } from "@/lib/map/osm-url";
+import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
 import type { PostDetails } from "@/types/mapky";
 
 function timeAgo(timestamp: number): string {
@@ -28,10 +28,13 @@ function PlaceName({ osmCanonical }: { osmCanonical: string }) {
     parsed?.osmId ?? 0,
     !!parsed,
   );
+  const fallback = parsed
+    ? fallbackPlaceLabel(parsed.osmType, parsed.osmId)
+    : osmCanonical;
   const name =
     nominatim?.name ||
     nominatim?.display_name?.split(",")[0] ||
-    osmCanonical;
+    fallback;
   return <>{name}</>;
 }
 
@@ -172,7 +175,7 @@ export function MyPostsPanel() {
       </div>
 
       {/* Mobile bottom sheet */}
-      <div className="pointer-events-auto absolute bottom-0 left-0 right-0 z-10 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl md:hidden">
+      <div className="pointer-events-auto absolute bottom-0 left-12 right-0 z-10 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl md:hidden">
         <div className="flex-shrink-0 px-4 pt-2 pb-3">
           <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
           <div className="flex items-center justify-between">

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Download, Loader2, Trash2 } from "lucide-react";
+import { Download, Loader2, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useMapStore } from "@/stores/map-store";
 import { useRouteBody, useRouteDetails } from "@/lib/api/hooks";
@@ -34,8 +34,7 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   const { session, publicKey } = useAuth();
   const map = useMapStore((s) => s.map);
   const loadFromExisting = useRouteCreationStore((s) => s.loadFromExisting);
-  const resetDirections = useRouteCreationStore((s) => s.reset);
-  const directionsOpen = useRouteCreationStore((s) => s.isOpen);
+  const openDirections = useRouteCreationStore((s) => s.open);
   // Indexer metadata + homeserver body fetched separately so a failure on
   // one side doesn't blank the whole page (e.g. homeserver unreachable
   // still surfaces distance/duration from the indexer).
@@ -58,10 +57,12 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
     return body.data.waypoints.map((w) => [w.lon, w.lat] as LngLat);
   }, [body.data]);
 
-  // Auto-hydrate the directions sidebar with this route's waypoints when
-  // the body loads, so opening a route lands the user on an edit-ready
-  // view. Tracks the last-loaded key in a ref to avoid an infinite update
-  // loop (loadFromExisting mutates a store this component reads from).
+  // Pre-hydrate the directions store so a click on "Open in directions"
+  // lands the user on an edit-ready sidebar without an extra fetch /
+  // re-snap. Tracks the last-loaded key in a ref to avoid an infinite
+  // update loop (loadFromExisting mutates a store this component reads
+  // from). Slots stay populated even after this panel unmounts; the
+  // next route detail overwrites them via loadFromExisting.
   const lastLoadedKey = useRef<string | null>(null);
   useEffect(() => {
     if (!body.data) return;
@@ -70,12 +71,6 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
     lastLoadedKey.current = key;
     loadFromExisting(authorId, routeId, body.data);
   }, [authorId, routeId, body.data, loadFromExisting]);
-
-  useEffect(() => {
-    return () => {
-      if (lastLoadedKey.current) resetDirections();
-    };
-  }, [resetDirections]);
 
   // Fit map to the route bounds. The detail panel now lives in the LEFT
   // sidebar (380px wide on md+), so pad the left edge instead of the
@@ -172,12 +167,7 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
 
   return (
     <>
-      {/* Skip the detail's polyline once directions is open — its
-          RouteAlternativesLayer renders the same path (and the live one
-          the user is editing). Two layers would z-fight. */}
-      {!directionsOpen && (
-        <RoutePolylineLayer coords={decoded} dashed={!body.data?.geometry} />
-      )}
+      <RoutePolylineLayer coords={decoded} dashed={!body.data?.geometry} />
 
       <DiscoverSidebar title="Route" onClose={close} mobileCollapsible>
         <div className="space-y-3">
@@ -202,6 +192,16 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
           />
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => {
+                openDirections();
+                navigate({ to: "/directions" });
+              }}
+              className="flex items-center gap-1.5 rounded-md bg-accent px-2 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              {isOwner ? "Edit" : "Open in directions"}
+            </button>
             <button
               onClick={handleExport}
               className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-foreground hover:border-accent"

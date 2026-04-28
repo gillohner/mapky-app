@@ -19,7 +19,7 @@ import {
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
-import { parseOsmCanonical } from "@/lib/map/osm-url";
+import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
 import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
 import { SearchResultsOverlay } from "@/components/map/SearchResultsOverlay";
@@ -408,7 +408,7 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
 
       {/* Mobile bottom sheet */}
       <div
-        className={`pointer-events-auto absolute bottom-0 left-0 right-0 z-10 flex flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl transition-[max-height] duration-300 ease-out md:hidden ${
+        className={`pointer-events-auto absolute bottom-0 left-12 right-0 z-10 flex flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl transition-[max-height] duration-300 ease-out md:hidden ${
           expanded ? "max-h-[85vh]" : "max-h-[200px]"
         }`}
       >
@@ -527,7 +527,16 @@ function OsmPlaceName({ osmCanonical }: { osmCanonical: string }) {
     parsed?.osmId ?? 0,
     !!parsed,
   );
-  return <>{nominatim?.name || nominatim?.display_name?.split(",")[0] || osmCanonical}</>;
+  const fallback = parsed
+    ? fallbackPlaceLabel(parsed.osmType, parsed.osmId)
+    : osmCanonical;
+  return (
+    <>
+      {nominatim?.name ||
+        nominatim?.display_name?.split(",")[0] ||
+        fallback}
+    </>
+  );
 }
 
 function TagPlaceResult({
@@ -542,7 +551,7 @@ function TagPlaceResult({
   const name =
     nominatim?.name ||
     nominatim?.display_name?.split(",")[0] ||
-    place.osm_canonical;
+    fallbackPlaceLabel(place.osm_type, place.osm_id);
 
   const typeLabel = nominatim?.type?.replace(/_/g, " ") ?? "";
 

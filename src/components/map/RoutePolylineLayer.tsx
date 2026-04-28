@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useMapStore } from "@/stores/map-store";
 import type { LngLat } from "@/lib/routing/types";
 
@@ -18,6 +18,10 @@ interface RoutePolylineLayerProps {
  * Renders a route polyline as a MapLibre line layer. Mounts the source +
  * layer on first render and keeps them in sync with `coords` afterwards.
  * Cleans up on unmount.
+ *
+ * Holds the latest line in a ref so the styledata re-attach (which fires
+ * when the basemap swap or first pmtile load wipes our layers) can
+ * repopulate the source without waiting for another React render.
  */
 export function RoutePolylineLayer({
   coords,
@@ -28,6 +32,7 @@ export function RoutePolylineLayer({
   dashed = false,
 }: RoutePolylineLayerProps) {
   const map = useMapStore((s) => s.map);
+  const lineRef = useRef<GeoJSON.FeatureCollection>(emptyFC());
 
   useEffect(() => {
     if (!map) return;
@@ -35,48 +40,60 @@ export function RoutePolylineLayer({
     const haloId = `${sourceId}-halo`;
 
     const ensure = () => {
-      if (!map.getSource(sourceId)) {
-        map.addSource(sourceId, {
-          type: "geojson",
-          data: emptyFC(),
-        });
-      }
-      if (!map.getLayer(haloId)) {
-        map.addLayer({
-          id: haloId,
-          type: "line",
-          source: sourceId,
-          paint: {
-            "line-color": "#FFFFFF",
-            "line-opacity": 0.7,
-            "line-width": width + 4,
-            "line-blur": 1,
-          },
-          layout: { "line-cap": "round", "line-join": "round" },
-        });
-      }
-      if (!map.getLayer(layerId)) {
-        map.addLayer({
-          id: layerId,
-          type: "line",
-          source: sourceId,
-          paint: {
-            "line-color": color,
-            "line-width": width,
-            ...(dashed ? { "line-dasharray": [2, 2] } : {}),
-          },
-          layout: { "line-cap": "round", "line-join": "round" },
-        });
+      try {
+        if (!map.getSource(sourceId)) {
+          map.addSource(sourceId, {
+            type: "geojson",
+            data: lineRef.current,
+          });
+        } else {
+          // Source already there — make sure its data matches the latest
+          // line. Covers the case where ensure() was called by the
+          // styledata listener after a setStyle wiped only the layers.
+          (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData(
+            lineRef.current,
+          );
+        }
+        if (!map.getLayer(haloId)) {
+          map.addLayer({
+            id: haloId,
+            type: "line",
+            source: sourceId,
+            paint: {
+              "line-color": "#FFFFFF",
+              "line-opacity": 0.7,
+              "line-width": width + 4,
+              "line-blur": 1,
+            },
+            layout: { "line-cap": "round", "line-join": "round" },
+          });
+        }
+        if (!map.getLayer(layerId)) {
+          map.addLayer({
+            id: layerId,
+            type: "line",
+            source: sourceId,
+            paint: {
+              "line-color": color,
+              "line-width": width,
+              ...(dashed ? { "line-dasharray": [2, 2] } : {}),
+            },
+            layout: { "line-cap": "round", "line-join": "round" },
+          });
+        }
+      } catch {
+        // Style isn't ready yet — styledata listener below retries.
       }
     };
 
-    if (!map.isStyleLoaded()) {
-      map.once("style.load", ensure);
-    } else {
-      ensure();
-    }
+    ensure();
+    const onStyleData = () => {
+      if (!map.getSource(sourceId) || !map.getLayer(layerId)) ensure();
+    };
+    map.on("styledata", onStyleData);
 
     return () => {
+      map.off("styledata", onStyleData);
       if (map.getLayer(layerId)) map.removeLayer(layerId);
       if (map.getLayer(haloId)) map.removeLayer(haloId);
       if (map.getSource(sourceId)) map.removeSource(sourceId);
@@ -84,28 +101,25 @@ export function RoutePolylineLayer({
   }, [map, sourceId, color, width, dashed]);
 
   useEffect(() => {
+    const path = coords.length >= 2 ? coords : fallbackWaypoints ?? [];
+    lineRef.current =
+      path.length < 2
+        ? emptyFC()
+        : {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                geometry: { type: "LineString", coordinates: path },
+                properties: {},
+              },
+            ],
+          };
     if (!map) return;
     const src = map.getSource(sourceId) as
       | maplibregl.GeoJSONSource
       | undefined;
-    if (!src) return;
-
-    const path = coords.length >= 2 ? coords : fallbackWaypoints ?? [];
-    if (path.length < 2) {
-      src.setData(emptyFC());
-      return;
-    }
-
-    src.setData({
-      type: "FeatureCollection",
-      features: [
-        {
-          type: "Feature",
-          geometry: { type: "LineString", coordinates: path },
-          properties: {},
-        },
-      ],
-    });
+    src?.setData(lineRef.current);
   }, [map, sourceId, coords, fallbackWaypoints]);
 
   return null;

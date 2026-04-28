@@ -17,11 +17,10 @@ import {
 } from "@/lib/api/hooks";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
-import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
 import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
-import { parseOsmCanonical } from "@/lib/map/osm-url";
+import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
 
 type SearchMode = "places" | "tags" | "routes";
 
@@ -229,10 +228,12 @@ export function SearchBar() {
             (tagResults.collections?.length ?? 0) > 0 ||
             (tagResults.posts?.length ?? 0) > 0);
 
-  // Hide while directions mode is active — the DirectionsBar takes over the
-  // top of the screen and owns the search/picker UX during that flow.
-  const directionsOpen = useRouteCreationStore((s) => s.isOpen);
-  if (directionsOpen) return null;
+  // Hide while the user is on /directions — DirectionsBar owns the
+  // search/picker UX there. Earlier this was driven by the store's
+  // `isOpen` flag, which leaked across pages whenever a route panel
+  // hydrated the store. Path-based gating keeps the SearchBar visible on
+  // /route/$id and other pages that touch the directions store.
+  if (currentPath === "/directions") return null;
 
   return (
     <div
@@ -503,7 +504,16 @@ function OsmPlaceName({ osmCanonical }: { osmCanonical: string }) {
     parsed?.osmId ?? 0,
     !!parsed,
   );
-  return <>{nominatim?.name || nominatim?.display_name?.split(",")[0] || osmCanonical}</>;
+  const fallback = parsed
+    ? fallbackPlaceLabel(parsed.osmType, parsed.osmId)
+    : osmCanonical;
+  return (
+    <>
+      {nominatim?.name ||
+        nominatim?.display_name?.split(",")[0] ||
+        fallback}
+    </>
+  );
 }
 
 function TagPlaceResult({
@@ -522,7 +532,7 @@ function TagPlaceResult({
   const name =
     nominatim?.name ||
     nominatim?.display_name?.split(",")[0] ||
-    place.osm_canonical;
+    fallbackPlaceLabel(place.osm_type, place.osm_id);
 
   const typeLabel =
     nominatim?.type?.replace(/_/g, " ") ?? "";
