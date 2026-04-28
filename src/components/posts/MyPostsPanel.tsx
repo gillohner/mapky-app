@@ -1,9 +1,8 @@
-import { useEffect } from "react";
-import { X, Star, MessageSquare, MapPin } from "lucide-react";
+import { Star, MessageSquare, MapPin } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserPosts, useOsmLookup } from "@/lib/api/hooks";
-import { useUiStore } from "@/stores/ui-store";
+import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
 import type { PostDetails } from "@/types/mapky";
 
@@ -112,17 +111,9 @@ export function MyPostsPanel() {
   const navigate = useNavigate();
   const { isAuthenticated, publicKey } = useAuth();
   const { data: posts, isLoading } = useUserPosts(publicKey);
-  const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
 
-  useEffect(() => {
-    setSidebarOpen(true);
-    return () => setSidebarOpen(false);
-  }, [setSidebarOpen]);
-
-  const close = () => navigate({ to: "/" });
-
-  const content = (
-    <>
+  return (
+    <DiscoverSidebar title="My Posts" onClose={() => navigate({ to: "/" })}>
       {!isAuthenticated && (
         <p className="py-8 text-center text-sm text-muted">
           Sign in to see your posts.
@@ -153,47 +144,6 @@ export function MyPostsPanel() {
           ))}
         </div>
       )}
-    </>
-  );
-
-  return (
-    <>
-      {/* Desktop sidebar */}
-      <div className="pointer-events-auto absolute inset-y-0 left-12 z-10 hidden w-[380px] flex-col border-r border-border bg-background shadow-xl md:flex">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted">
-            My Posts
-          </span>
-          <button
-            onClick={close}
-            className="rounded-lg p-1 text-muted transition-colors hover:bg-surface hover:text-foreground"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-4 py-4">{content}</div>
-      </div>
-
-      {/* Mobile bottom sheet */}
-      <div className="pointer-events-auto absolute bottom-0 left-12 right-0 z-10 flex max-h-[85vh] flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl md:hidden">
-        <div className="flex-shrink-0 px-4 pt-2 pb-3">
-          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-foreground">
-              My Posts
-            </span>
-            <button
-              onClick={close}
-              className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface hover:text-foreground"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto border-t border-border px-4 py-3">
-          {content}
-        </div>
-      </div>
-    </>
+    </DiscoverSidebar>
   );
 }
