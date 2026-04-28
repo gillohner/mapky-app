@@ -83,6 +83,11 @@ interface UiStore {
   setTerrainOverlayVisible: (visible: boolean) => void;
   toggleTerrainOverlay: () => void;
 
+  /** Extrude buildings using the height field from Protomaps tiles. */
+  buildings3DVisible: boolean;
+  setBuildings3DVisible: (visible: boolean) => void;
+  toggleBuildings3D: () => void;
+
   /**
    * Layers that should render at reduced opacity. Driven by
    * `useAutoFocusLayer` on detail pages — runtime only, never persisted.
@@ -159,6 +164,12 @@ export const useUiStore = create<UiStore>()(
       toggleTerrainOverlay: () =>
         set((s) => ({ terrainOverlayVisible: !s.terrainOverlayVisible })),
 
+      buildings3DVisible: false,
+      setBuildings3DVisible: (visible) =>
+        set({ buildings3DVisible: visible }),
+      toggleBuildings3D: () =>
+        set((s) => ({ buildings3DVisible: !s.buildings3DVisible })),
+
       dimmedLayers: new Set<DimmableLayer>(),
       setDimmed: (layer, on) =>
         set((s) => {
@@ -234,6 +245,7 @@ export const useUiStore = create<UiStore>()(
         metroOverlayVisible: state.metroOverlayVisible,
         cyclingOverlayVisible: state.cyclingOverlayVisible,
         terrainOverlayVisible: state.terrainOverlayVisible,
+        buildings3DVisible: state.buildings3DVisible,
       }),
     },
   ),

@@ -23,6 +23,7 @@ import { useMapStore } from "@/stores/map-store";
  *   mt  metro overlay      (1 to show)
  *   cy  cycling overlay    (1 to show)
  *   tr  terrain overlay    (1 to show)
+ *   b3  3D buildings       (1 to show)
  *   z   zoom level
  *   c   center as "lat,lon"
  */
@@ -49,6 +50,7 @@ function hydrateFromUrl() {
   if (params.get("mt") === "1") ui.setMetroOverlayVisible(true);
   if (params.get("cy") === "1") ui.setCyclingOverlayVisible(true);
   if (params.get("tr") === "1") ui.setTerrainOverlayVisible(true);
+  if (params.get("b3") === "1") ui.setBuildings3DVisible(true);
 
   const z = parseFloat(params.get("z") ?? "");
   const c = params.get("c");
@@ -71,6 +73,7 @@ export function useUrlSync() {
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
   const cyclingOverlayVisible = useUiStore((s) => s.cyclingOverlayVisible);
   const terrainOverlayVisible = useUiStore((s) => s.terrainOverlayVisible);
+  const buildings3DVisible = useUiStore((s) => s.buildings3DVisible);
 
   const theme = useMapStore((s) => s.theme);
   const basemap = useMapStore((s) => s.basemap);
@@ -98,6 +101,7 @@ export function useUrlSync() {
     setOrDelete(params, "mt", metroOverlayVisible ? "1" : null);
     setOrDelete(params, "cy", cyclingOverlayVisible ? "1" : null);
     setOrDelete(params, "tr", terrainOverlayVisible ? "1" : null);
+    setOrDelete(params, "b3", buildings3DVisible ? "1" : null);
 
     setOrDelete(params, "z", zoom.toFixed(2));
     setOrDelete(
@@ -124,6 +128,7 @@ export function useUrlSync() {
     metroOverlayVisible,
     cyclingOverlayVisible,
     terrainOverlayVisible,
+    buildings3DVisible,
     theme,
     basemap,
     satelliteLabels,

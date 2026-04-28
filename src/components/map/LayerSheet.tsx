@@ -11,6 +11,7 @@ import {
   TrainFront,
   Bike,
   Mountain,
+  Building2,
 } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
@@ -41,6 +42,9 @@ export function LayerSheet() {
 
   const terrainOverlayVisible = useUiStore((s) => s.terrainOverlayVisible);
   const toggleTerrainOverlay = useUiStore((s) => s.toggleTerrainOverlay);
+
+  const buildings3DVisible = useUiStore((s) => s.buildings3DVisible);
+  const toggleBuildings3D = useUiStore((s) => s.toggleBuildings3D);
 
   const activeCollections = useUiStore((s) => s.activeCollectionOverlays);
   const clearAllCollectionOverlays = useUiStore(
@@ -76,7 +80,7 @@ export function LayerSheet() {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-40 flex items-end justify-end pointer-events-none"
+      className="fixed inset-0 z-40 flex items-start justify-end pointer-events-none"
       onClick={() => setOpen(false)}
     >
       {/* Backdrop captures clicks to dismiss; visible only on mobile. */}
@@ -84,7 +88,7 @@ export function LayerSheet() {
 
       {/* Sheet */}
       <div
-        className="pointer-events-auto relative m-2 mb-4 w-full max-w-md rounded-2xl border border-border bg-background/95 p-4 shadow-xl backdrop-blur sm:mb-6 sm:mr-6 sm:w-80"
+        className="pointer-events-auto relative m-2 mt-16 w-full max-w-md rounded-2xl border border-border bg-background/95 p-4 shadow-xl backdrop-blur sm:mr-6 sm:mt-20 sm:w-80"
         onClick={(e) => e.stopPropagation()}
         style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
       >
@@ -190,6 +194,13 @@ export function LayerSheet() {
             description="Hillshade relief from elevation tiles"
             on={terrainOverlayVisible}
             onChange={toggleTerrainOverlay}
+          />
+          <Toggle
+            icon={<Building2 className="h-4 w-4" />}
+            label="3D buildings"
+            description="Tilt the map to see extruded volumes"
+            on={buildings3DVisible}
+            onChange={toggleBuildings3D}
           />
         </Section>
       </div>

@@ -203,7 +203,7 @@ export function SearchBar() {
   return (
     <div
       ref={containerRef}
-      className={`pointer-events-auto absolute top-3 z-20 left-14 right-3 md:right-auto md:w-[380px] transition-[left] duration-300 ${
+      className={`pointer-events-auto absolute top-3 z-20 left-14 right-16 md:right-auto md:w-[380px] transition-[left] duration-300 ${
         sidebarOpen ? "md:left-[440px]" : "md:left-14"
       }`}
     >

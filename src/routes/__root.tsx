@@ -13,6 +13,7 @@ import { RailOverlayLayer } from "@/components/map/RailOverlayLayer";
 import { CyclingOverlayLayer } from "@/components/map/CyclingOverlayLayer";
 import { CyclingLegend } from "@/components/map/CyclingLegend";
 import { TerrainOverlayLayer } from "@/components/map/TerrainOverlayLayer";
+import { Buildings3DLayer } from "@/components/map/Buildings3DLayer";
 import { LayerSheet } from "@/components/map/LayerSheet";
 import { LayerSheetTrigger } from "@/components/map/LayerSheetTrigger";
 import { IconRail } from "@/components/sidebar/IconRail";
@@ -44,6 +45,7 @@ function RootLayout() {
           <TerrainOverlayLayer />
           <RailOverlayLayer />
           <CyclingOverlayLayer />
+          <Buildings3DLayer />
           <PoiClickHandler />
           <SelectedPlaceMarker />
           <IconRail />
