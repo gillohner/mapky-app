@@ -4,6 +4,7 @@ import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useViewportPlaces } from "@/lib/api/hooks";
+import { useLayerOpacityMultiplier } from "@/lib/map/dim";
 
 import type { PlaceDetails, ViewportBounds } from "@/types/mapky";
 
@@ -251,6 +252,35 @@ export function MapkyPlacesLayer() {
       if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
     }
   }, [map, visible]);
+
+  // Apply dim multiplier when this layer is in the background of a focused
+  // detail page. Multiplies the baked opacity values; reapplied on every
+  // change to the multiplier and after style reloads (theme toggle).
+  const dim = useLayerOpacityMultiplier("places");
+  useEffect(() => {
+    if (!map) return;
+    const apply = () => {
+      if (map.getLayer(CLUSTER_LAYER)) {
+        map.setPaintProperty(CLUSTER_LAYER, "circle-opacity", 0.25 * dim);
+        map.setPaintProperty(CLUSTER_LAYER, "circle-stroke-opacity", 0.5 * dim);
+      }
+      if (map.getLayer(CLUSTER_COUNT)) {
+        map.setPaintProperty(CLUSTER_COUNT, "text-opacity", dim);
+      }
+      if (map.getLayer(POINT_RING)) {
+        map.setPaintProperty(POINT_RING, "circle-opacity", 0.15 * dim);
+        map.setPaintProperty(POINT_RING, "circle-stroke-opacity", 0.5 * dim);
+      }
+      if (map.getLayer(POINT_DOT)) {
+        map.setPaintProperty(POINT_DOT, "circle-opacity", 0.7 * dim);
+      }
+    };
+    apply();
+    map.on("styledata", apply);
+    return () => {
+      map.off("styledata", apply);
+    };
+  }, [map, dim]);
 
   // Click on cluster → zoom in
   useEffect(() => {

@@ -4,6 +4,7 @@ import type maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useViewportRoutes } from "@/lib/api/hooks";
 import type { RouteDetails } from "@/types/mapky";
+import { useLayerOpacityMultiplier } from "@/lib/map/dim";
 
 const SOURCE_ID = "mapky-routes-viewport";
 const LAYER_ID = "mapky-routes-viewport-layer";
@@ -96,6 +97,22 @@ export function RoutesViewportLayer({ enabled = true }: RoutesViewportLayerProps
       features: (routes ?? []).map(routeFeature),
     });
   }, [map, routes]);
+
+  const dim = useLayerOpacityMultiplier("routes");
+  useEffect(() => {
+    if (!map) return;
+    const apply = () => {
+      if (map.getLayer(LAYER_ID)) {
+        map.setPaintProperty(LAYER_ID, "circle-opacity", dim);
+        map.setPaintProperty(LAYER_ID, "circle-stroke-opacity", dim);
+      }
+    };
+    apply();
+    map.on("styledata", apply);
+    return () => {
+      map.off("styledata", apply);
+    };
+  }, [map, dim]);
 
   return null;
 }

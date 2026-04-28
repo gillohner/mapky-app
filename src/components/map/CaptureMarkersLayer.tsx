@@ -5,6 +5,7 @@ import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useViewportCaptures } from "@/lib/api/hooks";
+import { useLayerOpacityMultiplier } from "@/lib/map/dim";
 
 import type { GeoCaptureDetails, ViewportBounds } from "@/types/mapky";
 
@@ -186,6 +187,25 @@ export function CaptureMarkersLayer() {
       if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
     }
   }, [map, visible]);
+
+  const dim = useLayerOpacityMultiplier("captures");
+  useEffect(() => {
+    if (!map) return;
+    const apply = () => {
+      if (map.getLayer(POINT_DOT)) {
+        map.setPaintProperty(POINT_DOT, "circle-opacity", 0.9 * dim);
+        map.setPaintProperty(POINT_DOT, "circle-stroke-opacity", dim);
+      }
+      if (map.getLayer(POINT_ARROW)) {
+        map.setPaintProperty(POINT_ARROW, "text-opacity", dim);
+      }
+    };
+    apply();
+    map.on("styledata", apply);
+    return () => {
+      map.off("styledata", apply);
+    };
+  }, [map, dim]);
 
   useEffect(() => {
     if (!map) return;

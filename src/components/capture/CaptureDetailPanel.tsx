@@ -48,6 +48,7 @@ async function fetchParallel<A, B>(
 }
 import { VideoSphereViewer } from "./VideoSphereViewer";
 import { useUiStore } from "@/stores/ui-store";
+import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import type { GeoCaptureDetails, GeoCaptureKind } from "@/types/mapky";
 
 function parseSequenceUri(
@@ -96,6 +97,8 @@ export function CaptureDetailPanel({
   const [lightbox, setLightbox] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const sphereHandle = useRef<SphereViewerHandle | null>(null);
+
+  useAutoFocusLayer("captures");
 
   const isOwner = publicKey === authorId;
   const isPanorama = capture?.kind === "panorama";

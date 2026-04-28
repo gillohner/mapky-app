@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useMapStore } from "@/stores/map-store";
 import { useRouteBody, useRouteDetails } from "@/lib/api/hooks";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
+import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { decodePolyline } from "@/lib/routing/polyline";
 import { emitGpx, gpxFilename } from "@/lib/gpx/emit";
 import type { LngLat } from "@/lib/routing/types";
@@ -42,6 +43,8 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   // previous render" if the loading branch returns early before us.)
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  useAutoFocusLayer("routes");
 
   // Decode the stored polyline for rendering. Falls back to straight lines
   // between waypoints when there's no snapped geometry; renders nothing

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Menu as MenuIcon, Sun, Moon, Eye, EyeOff, User, FolderHeart, MessageSquare, Camera, CameraOff, Plus, Route as RouteIcon } from "lucide-react";
+import { Menu as MenuIcon, Sun, Moon, User, FolderHeart, MessageSquare, Plus, Route as RouteIcon } from "lucide-react";
 import { useCaptureCreationStore } from "@/stores/capture-creation-store";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -32,12 +32,6 @@ export function IconRail() {
   const { isAuthenticated, publicKey } = useAuth();
   const navigate = useNavigate();
   const toggleMenu = useUiStore((s) => s.toggleMenu);
-  const placesLayerVisible = useUiStore((s) => s.placesLayerVisible);
-  const togglePlacesLayer = useUiStore((s) => s.togglePlacesLayer);
-  const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
-  const toggleCapturesLayer = useUiStore((s) => s.toggleCapturesLayer);
-  const routesLayerVisible = useUiStore((s) => s.routesLayerVisible);
-  const toggleRoutesLayer = useUiStore((s) => s.toggleRoutesLayer);
   const openCapture = useCaptureCreationStore((s) => s.open);
   const captureIsOpen = useCaptureCreationStore((s) => s.isOpen);
   const theme = useMapStore((s) => s.theme);
@@ -87,42 +81,6 @@ export function IconRail() {
         ) : (
           <Moon className="h-5 w-5" />
         )}
-      </RailButton>
-
-      {/* Places layer toggle */}
-      <RailButton
-        onClick={togglePlacesLayer}
-        title={placesLayerVisible ? "Hide Pubky places" : "Show Pubky places"}
-      >
-        {placesLayerVisible ? (
-          <Eye className="h-5 w-5" />
-        ) : (
-          <EyeOff className="h-5 w-5" />
-        )}
-      </RailButton>
-
-      {/* Captures (street-view) layer toggle */}
-      <RailButton
-        onClick={toggleCapturesLayer}
-        title={
-          capturesLayerVisible ? "Hide geo-captures" : "Show geo-captures"
-        }
-      >
-        {capturesLayerVisible ? (
-          <Camera className="h-5 w-5" />
-        ) : (
-          <CameraOff className="h-5 w-5" />
-        )}
-      </RailButton>
-
-      {/* Routes layer toggle */}
-      <RailButton
-        onClick={toggleRoutesLayer}
-        title={routesLayerVisible ? "Hide routes" : "Show routes"}
-      >
-        <RouteIcon
-          className={`h-5 w-5 ${routesLayerVisible ? "text-foreground" : ""}`}
-        />
       </RailButton>
 
       {/* Collections */}

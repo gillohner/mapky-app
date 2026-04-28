@@ -5,6 +5,7 @@ import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useViewportCaptures } from "@/lib/api/hooks";
+import { useLayerOpacityMultiplier } from "@/lib/map/dim";
 import type { GeoCaptureDetails, ViewportBounds } from "@/types/mapky";
 
 const SOURCE = "mapky-sequence-lines";
@@ -168,6 +169,21 @@ export function SequenceCoverageLayer() {
       map.setLayoutProperty(LINE_LAYER, "visibility", vis);
     }
   }, [map, visible]);
+
+  const dim = useLayerOpacityMultiplier("captures");
+  useEffect(() => {
+    if (!map) return;
+    const apply = () => {
+      if (map.getLayer(LINE_LAYER)) {
+        map.setPaintProperty(LINE_LAYER, "line-opacity", 0.6 * dim);
+      }
+    };
+    apply();
+    map.on("styledata", apply);
+    return () => {
+      map.off("styledata", apply);
+    };
+  }, [map, dim]);
 
   useEffect(() => {
     if (!map) return;

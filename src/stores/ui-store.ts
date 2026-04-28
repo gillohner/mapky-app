@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export interface PendingPoiClick {
   lng: number;
@@ -46,6 +47,8 @@ export interface SelectedFeature {
   lat: number;
 }
 
+export type DimmableLayer = "places" | "captures" | "routes";
+
 interface UiStore {
   menuOpen: boolean;
   setMenuOpen: (open: boolean) => void;
@@ -62,6 +65,18 @@ interface UiStore {
   routesLayerVisible: boolean;
   setRoutesLayerVisible: (visible: boolean) => void;
   toggleRoutesLayer: () => void;
+
+  /**
+   * Layers that should render at reduced opacity. Driven by
+   * `useAutoFocusLayer` on detail pages — runtime only, never persisted.
+   */
+  dimmedLayers: Set<DimmableLayer>;
+  setDimmed: (layer: DimmableLayer, on: boolean) => void;
+  clearDimmed: () => void;
+
+  layerSheetOpen: boolean;
+  setLayerSheetOpen: (open: boolean) => void;
+  toggleLayerSheet: () => void;
 
   pendingPoiClick: PendingPoiClick | null;
   setPendingPoiClick: (click: PendingPoiClick) => void;
@@ -88,70 +103,101 @@ interface UiStore {
   setStreetViewCenter: (center: [number, number] | null) => void;
 }
 
-export const useUiStore = create<UiStore>((set) => ({
-  menuOpen: false,
-  setMenuOpen: (open) => set({ menuOpen: open }),
-  toggleMenu: () => set((s) => ({ menuOpen: !s.menuOpen })),
+export const useUiStore = create<UiStore>()(
+  persist(
+    (set) => ({
+      menuOpen: false,
+      setMenuOpen: (open) => set({ menuOpen: open }),
+      toggleMenu: () => set((s) => ({ menuOpen: !s.menuOpen })),
 
-  placesLayerVisible: true,
-  setPlacesLayerVisible: (visible) => set({ placesLayerVisible: visible }),
-  togglePlacesLayer: () =>
-    set((s) => ({ placesLayerVisible: !s.placesLayerVisible })),
+      placesLayerVisible: true,
+      setPlacesLayerVisible: (visible) => set({ placesLayerVisible: visible }),
+      togglePlacesLayer: () =>
+        set((s) => ({ placesLayerVisible: !s.placesLayerVisible })),
 
-  capturesLayerVisible: true,
-  setCapturesLayerVisible: (visible) => set({ capturesLayerVisible: visible }),
-  toggleCapturesLayer: () =>
-    set((s) => ({ capturesLayerVisible: !s.capturesLayerVisible })),
+      capturesLayerVisible: true,
+      setCapturesLayerVisible: (visible) => set({ capturesLayerVisible: visible }),
+      toggleCapturesLayer: () =>
+        set((s) => ({ capturesLayerVisible: !s.capturesLayerVisible })),
 
-  routesLayerVisible: false,
-  setRoutesLayerVisible: (visible) => set({ routesLayerVisible: visible }),
-  toggleRoutesLayer: () =>
-    set((s) => ({ routesLayerVisible: !s.routesLayerVisible })),
+      routesLayerVisible: false,
+      setRoutesLayerVisible: (visible) => set({ routesLayerVisible: visible }),
+      toggleRoutesLayer: () =>
+        set((s) => ({ routesLayerVisible: !s.routesLayerVisible })),
 
-  pendingPoiClick: null,
-  setPendingPoiClick: (click) => set({ pendingPoiClick: click }),
-  clearPendingPoiClick: () => set({ pendingPoiClick: null }),
+      dimmedLayers: new Set<DimmableLayer>(),
+      setDimmed: (layer, on) =>
+        set((s) => {
+          const next = new Set(s.dimmedLayers);
+          if (on) next.add(layer);
+          else next.delete(layer);
+          return { dimmedLayers: next };
+        }),
+      clearDimmed: () => set({ dimmedLayers: new Set() }),
 
-  selectedFeature: null,
-  setSelectedFeature: (feature) => set({ selectedFeature: feature }),
+      layerSheetOpen: false,
+      setLayerSheetOpen: (open) => set({ layerSheetOpen: open }),
+      toggleLayerSheet: () => set((s) => ({ layerSheetOpen: !s.layerSheetOpen })),
 
-  sidebarOpen: false,
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      pendingPoiClick: null,
+      setPendingPoiClick: (click) => set({ pendingPoiClick: click }),
+      clearPendingPoiClick: () => set({ pendingPoiClick: null }),
 
-  activeCollectionOverlays: new Map(),
-  addCollectionOverlay: (authorId, collectionId, color) =>
-    set((s) => {
-      const existing = s.activeCollectionOverlays.get(collectionId);
-      // Reuse existing color if no new color provided
-      const resolvedColor = color || existing?.color || nextColor();
-      if (existing && existing.color === resolvedColor) return s;
-      const next = new Map(s.activeCollectionOverlays);
-      next.set(collectionId, { authorId, collectionId, color: resolvedColor });
-      return { activeCollectionOverlays: next };
+      selectedFeature: null,
+      setSelectedFeature: (feature) => set({ selectedFeature: feature }),
+
+      sidebarOpen: false,
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+
+      activeCollectionOverlays: new Map(),
+      addCollectionOverlay: (authorId, collectionId, color) =>
+        set((s) => {
+          const existing = s.activeCollectionOverlays.get(collectionId);
+          // Reuse existing color if no new color provided
+          const resolvedColor = color || existing?.color || nextColor();
+          if (existing && existing.color === resolvedColor) return s;
+          const next = new Map(s.activeCollectionOverlays);
+          next.set(collectionId, { authorId, collectionId, color: resolvedColor });
+          return { activeCollectionOverlays: next };
+        }),
+      removeCollectionOverlay: (collectionId) =>
+        set((s) => {
+          if (!s.activeCollectionOverlays.has(collectionId)) return s;
+          const next = new Map(s.activeCollectionOverlays);
+          next.delete(collectionId);
+          return { activeCollectionOverlays: next };
+        }),
+      toggleCollectionOverlay: (authorId, collectionId, color) =>
+        set((s) => {
+          const next = new Map(s.activeCollectionOverlays);
+          if (next.has(collectionId)) {
+            next.delete(collectionId);
+          } else {
+            next.set(collectionId, { authorId, collectionId, color: color || nextColor() });
+          }
+          return { activeCollectionOverlays: next };
+        }),
+      clearAllCollectionOverlays: () => set({ activeCollectionOverlays: new Map() }),
+
+      streetViewActive: false,
+      setStreetViewActive: (active) => set({ streetViewActive: active, streetViewExpanded: active }),
+      streetViewExpanded: true,
+      toggleStreetViewExpanded: () => set((s) => ({ streetViewExpanded: !s.streetViewExpanded })),
+      streetViewCenter: null,
+      setStreetViewCenter: (center) => set({ streetViewCenter: center }),
     }),
-  removeCollectionOverlay: (collectionId) =>
-    set((s) => {
-      if (!s.activeCollectionOverlays.has(collectionId)) return s;
-      const next = new Map(s.activeCollectionOverlays);
-      next.delete(collectionId);
-      return { activeCollectionOverlays: next };
-    }),
-  toggleCollectionOverlay: (authorId, collectionId, color) =>
-    set((s) => {
-      const next = new Map(s.activeCollectionOverlays);
-      if (next.has(collectionId)) {
-        next.delete(collectionId);
-      } else {
-        next.set(collectionId, { authorId, collectionId, color: color || nextColor() });
-      }
-      return { activeCollectionOverlays: next };
-    }),
-  clearAllCollectionOverlays: () => set({ activeCollectionOverlays: new Map() }),
-
-  streetViewActive: false,
-  setStreetViewActive: (active) => set({ streetViewActive: active, streetViewExpanded: active }),
-  streetViewExpanded: true,
-  toggleStreetViewExpanded: () => set((s) => ({ streetViewExpanded: !s.streetViewExpanded })),
-  streetViewCenter: null,
-  setStreetViewCenter: (center) => set({ streetViewCenter: center }),
-}));
+    {
+      name: "mapky-layers",
+      version: 1,
+      // Persist only what's safe to restore: the user's layer-visibility
+      // choices. Theme/basemap lives in map-store; dimmedLayers, sheet
+      // open-state, sidebar/menu/streetview/POI-click context are all
+      // ephemeral runtime state.
+      partialize: (state) => ({
+        placesLayerVisible: state.placesLayerVisible,
+        capturesLayerVisible: state.capturesLayerVisible,
+        routesLayerVisible: state.routesLayerVisible,
+      }),
+    },
+  ),
+);

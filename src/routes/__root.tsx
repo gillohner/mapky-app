@@ -9,6 +9,8 @@ import { PoiClickHandler } from "@/components/map/PoiClickHandler";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
 import { CollectionOverlays } from "@/components/map/CollectionOverlays";
 import { ViewportRoutesGate } from "@/components/map/ViewportRoutesGate";
+import { LayerSheet } from "@/components/map/LayerSheet";
+import { LayerSheetTrigger } from "@/components/map/LayerSheetTrigger";
 import { IconRail } from "@/components/sidebar/IconRail";
 import { SearchBar } from "@/components/sidebar/SearchBar";
 import { CaptureCreationPanel } from "@/components/capture/CaptureCreationPanel";
@@ -41,6 +43,8 @@ function RootLayout() {
           <CaptureCreationPanel />
           <Outlet />
           <Menu />
+          <LayerSheetTrigger />
+          <LayerSheet />
         </div>
         <Toaster position="bottom-center" />
       </AuthProvider>

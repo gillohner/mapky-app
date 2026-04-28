@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { usePlaceDetail, useCollection } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
+import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import {
   encodeFeatureId,
   sourceLayersForType,
@@ -66,6 +67,8 @@ export function PlacePanel({
     setSidebarOpen(true);
     return () => setSidebarOpen(false);
   }, [setSidebarOpen]);
+
+  useAutoFocusLayer("places");
 
   // Fly to place when coordinates are available (from search params or API).
   // Delay past the sidebar padding easeTo (300ms) so it doesn't get cancelled.
