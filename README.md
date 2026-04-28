@@ -1,73 +1,49 @@
-# React + TypeScript + Vite
+# mapky-app
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Vite + React + TypeScript PWA for [MapKy](https://github.com/gillohner/mapky), a decentralized social layer on OpenStreetMap built on the [Pubky](https://pubky.tech) protocol.
 
-Currently, two official plugins are available:
+The app is a thin client: it writes user-owned blobs to a Pubky homeserver and reads indexed views from [`mapky-nexus-plugin`](https://github.com/gillohner/mapky-nexus-plugin). The map is MapLibre GL JS over Protomaps vector tiles.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## What's in the app
 
-## React Compiler
+- **Places & POIs** — click any OSM POI / place / building to open a detail panel with tags, posts, reviews, photos, and routes that pass near it.
+- **Posts, reviews & threads** — comments, ratings, replies on places.
+- **Geo-captures** — photos, panoramas, video / 360, audio, point clouds. Sequences support a continuous-trajectory viewer.
+- **Routes** — plan turn-by-turn directions (Walk / Run / Hike / Bike / Drive) via Valhalla. Save them, tag them, share via URL. Open someone else's route to auto-load it into the directions sidebar; owners can save edits in place, non-owners save as a copy.
+- **Collections** — named lists of places, with map overlays.
+- **Layers sheet** — top-right floating button. Toggles for Mapky data + basemap (Light / Dark / Satellite hybrid) + free overlays (rail, cycling, terrain hillshade, 3D buildings).
+- **URL sync** — layer state, basemap, theme, and map view live in the URL so any view is shareable.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Commands
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev       # dev server on :5173
+npm run build     # type-check + production build
+npm run lint
+npm test          # vitest
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Configure
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Copy `.env.example` to `.env` and set:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+| Variable | Purpose |
+|---|---|
+| `VITE_PUBKY_ENV` | `testnet` / `staging` / `production` |
+| `VITE_NEXUS_URL` | Base URL of the [pubky-nexus](https://github.com/pubky/pubky-nexus) instance running with `--features mapky` |
+| `VITE_PROTOMAPS_URL` | PMTiles tile source URL |
+| `VITE_PROTOMAPS_KEY` | Protomaps API key (optional for free tier) |
+
+In dev, the Vite proxy maps:
+- `/v0/mapky/*` → the configured Nexus URL
+- `/valhalla/*` → `https://valhalla1.openstreetmap.de/` (used for routing snap)
+
+## Architecture & deeper notes
+
+See [`CLAUDE.md`](./CLAUDE.md) for the full file structure, route subsystem details (URL ⇄ store sync, snap dedup, POI-aware picker, walk-vs-hike costing), layer sheet wiring, and auth patterns.
+
+## Related repos
+
+- [`mapky-app-specs`](https://github.com/gillohner/mapky-app-specs) — Rust/WASM data models the app consumes
+- [`mapky-nexus-plugin`](https://github.com/gillohner/mapky-nexus-plugin) — the Neo4j indexer this app reads from
