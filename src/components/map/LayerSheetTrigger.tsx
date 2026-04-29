@@ -10,10 +10,12 @@ export function LayerSheetTrigger() {
   const open = useUiStore((s) => s.layerSheetOpen);
   const toggle = useUiStore((s) => s.toggleLayerSheet);
 
-  // Light "active dot" hint when any non-default layer state is on.
-  const places = useUiStore((s) => s.placesLayerVisible);
-  const captures = useUiStore((s) => s.capturesLayerVisible);
-  const nonDefault = !places || !captures;
+  // Light "active dot" hint when any of the optional overlays are on.
+  const metro = useUiStore((s) => s.metroOverlayVisible);
+  const cycling = useUiStore((s) => s.cyclingOverlayVisible);
+  const terrain = useUiStore((s) => s.terrainOverlayVisible);
+  const buildings = useUiStore((s) => s.buildings3DVisible);
+  const nonDefault = metro || cycling || terrain || buildings;
 
   return (
     <button

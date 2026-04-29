@@ -52,14 +52,6 @@ export interface SelectedFeature {
 export type DimmableLayer = "places" | "captures";
 
 interface UiStore {
-  placesLayerVisible: boolean;
-  setPlacesLayerVisible: (visible: boolean) => void;
-  togglePlacesLayer: () => void;
-
-  capturesLayerVisible: boolean;
-  setCapturesLayerVisible: (visible: boolean) => void;
-  toggleCapturesLayer: () => void;
-
   /** OpenRailwayMap raster overlay — rail lines, metro, signals. */
   metroOverlayVisible: boolean;
   setMetroOverlayVisible: (visible: boolean) => void;
@@ -120,16 +112,6 @@ interface UiStore {
 export const useUiStore = create<UiStore>()(
   persist(
     (set) => ({
-      placesLayerVisible: true,
-      setPlacesLayerVisible: (visible) => set({ placesLayerVisible: visible }),
-      togglePlacesLayer: () =>
-        set((s) => ({ placesLayerVisible: !s.placesLayerVisible })),
-
-      capturesLayerVisible: true,
-      setCapturesLayerVisible: (visible) => set({ capturesLayerVisible: visible }),
-      toggleCapturesLayer: () =>
-        set((s) => ({ capturesLayerVisible: !s.capturesLayerVisible })),
-
       metroOverlayVisible: false,
       setMetroOverlayVisible: (visible) => set({ metroOverlayVisible: visible }),
       toggleMetroOverlay: () =>
@@ -216,14 +198,15 @@ export const useUiStore = create<UiStore>()(
     }),
     {
       name: "mapky-layers",
-      version: 1,
-      // Persist only what's safe to restore: the user's layer-visibility
-      // choices. Theme/basemap lives in map-store; dimmedLayers, sheet
-      // open-state, sidebar/menu/streetview/POI-click context are all
-      // ephemeral runtime state.
+      // Bumped from v1 → v2 because the schema dropped
+      // placesLayerVisible/capturesLayerVisible (Mapky data layers are
+      // always-on now). v2 storage simply ignores the old keys.
+      version: 2,
+      // Persist only the optional raster overlay toggles — the always-on
+      // data layers don't need state, and theme/basemap lives in
+      // map-store. dimmedLayers / sheet-open / sidebar / streetview /
+      // POI-click context are all ephemeral runtime state.
       partialize: (state) => ({
-        placesLayerVisible: state.placesLayerVisible,
-        capturesLayerVisible: state.capturesLayerVisible,
         metroOverlayVisible: state.metroOverlayVisible,
         cyclingOverlayVisible: state.cyclingOverlayVisible,
         terrainOverlayVisible: state.terrainOverlayVisible,

@@ -2,7 +2,6 @@ import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import type maplibregl from "maplibre-gl";
 import { useNavigate } from "@tanstack/react-router";
 import { useMapStore } from "@/stores/map-store";
-import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useViewportCaptures } from "@/lib/api/hooks";
 import { useLayerOpacityMultiplier } from "@/lib/map/dim";
@@ -94,7 +93,6 @@ function ensureLayers(map: maplibregl.Map, theme: "light" | "dark") {
 export function SequenceCoverageLayer() {
   const map = useMapStore((s) => s.map);
   const theme = useMapStore((s) => s.theme);
-  const visible = useUiStore((s) => s.capturesLayerVisible);
   const navigate = useNavigate();
 
   const [bounds, setBounds] = useState<ViewportBounds | null>(null);
@@ -127,48 +125,54 @@ export function SequenceCoverageLayer() {
     };
   }, [map, updateBounds]);
 
-  useEffect(() => {
-    if (!map) return;
-    const onStyleData = () => {
-      layerReady.current = false;
-    };
-    map.on("styledata", onStyleData);
-    return () => {
-      map.off("styledata", onStyleData);
-    };
-  }, [map]);
-
-  const { data: captures } = useViewportCaptures(visible ? bounds : null);
+  const { data: captures } = useViewportCaptures(bounds);
 
   const geojson = useMemo(
     () => (captures?.length ? buildCoverageGeoJSON(captures) : null),
     [captures],
   );
 
+  // Hold latest GeoJSON in a ref so the deferred "idle" / styledata
+  // re-attach can populate without waiting for another React render.
+  const dataRef = useRef<GeoJSON.FeatureCollection>({
+    type: "FeatureCollection",
+    features: [],
+  });
+
   useEffect(() => {
     if (!map) return;
+
     const setup = () => {
       if (!layerReady.current) {
         ensureLayers(map, theme);
         layerReady.current = true;
       }
+      const src = map.getSource(SOURCE) as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      src?.setData(dataRef.current);
     };
+
+    const onStyleData = () => {
+      layerReady.current = false;
+      setup();
+    };
+    map.on("styledata", onStyleData);
+
     if (map.isStyleLoaded()) setup();
     else map.once("idle", setup);
 
-    const src = map.getSource(SOURCE) as maplibregl.GeoJSONSource | undefined;
-    src?.setData(
-      geojson ?? { type: "FeatureCollection", features: [] },
-    );
-  }, [map, geojson, theme]);
+    return () => {
+      map.off("styledata", onStyleData);
+    };
+  }, [map, theme]);
 
   useEffect(() => {
+    dataRef.current = geojson ?? { type: "FeatureCollection", features: [] };
     if (!map) return;
-    const vis = visible ? "visible" : "none";
-    if (map.getLayer(LINE_LAYER)) {
-      map.setLayoutProperty(LINE_LAYER, "visibility", vis);
-    }
-  }, [map, visible]);
+    const src = map.getSource(SOURCE) as maplibregl.GeoJSONSource | undefined;
+    src?.setData(dataRef.current);
+  }, [map, geojson]);
 
   const dim = useLayerOpacityMultiplier("captures");
   useEffect(() => {

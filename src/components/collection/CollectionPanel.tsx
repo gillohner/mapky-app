@@ -31,27 +31,20 @@ export function CollectionPanel({ authorId, collectionId, fromSearchQuery, fromS
     return () => setSidebarOpen(false);
   }, [setSidebarOpen]);
 
-  // On mount: save current state, hide everything, show only this collection.
-  // On unmount: restore previous state.
+  // On mount: save the user's pinned overlays, swap to ONLY this
+  // collection's overlay so the focused detail isn't visually competing
+  // with everything else they had pinned. Restore on unmount.
+  // (Mapky places are always-on now; useAutoFocusLayer's dim covers the
+  // "hide noise" half of focusing.)
   const savedOverlays = useRef<Map<string, CollectionOverlayEntry> | null>(null);
-  const savedPlacesVisible = useRef<boolean>(true);
 
   useEffect(() => {
     const store = useUiStore.getState();
-
-    // Save current state
     savedOverlays.current = new Map(store.activeCollectionOverlays);
-    savedPlacesVisible.current = store.placesLayerVisible;
-
-    // Hide everything
     store.clearAllCollectionOverlays();
-    if (store.placesLayerVisible) store.setPlacesLayerVisible(false);
-
-    // Show only this collection
     store.addCollectionOverlay(authorId, collectionId, collection?.color ?? undefined);
 
     return () => {
-      // Restore previous state
       const s = useUiStore.getState();
       s.clearAllCollectionOverlays();
       if (savedOverlays.current) {
@@ -59,7 +52,6 @@ export function CollectionPanel({ authorId, collectionId, fromSearchQuery, fromS
           s.addCollectionOverlay(entry.authorId, entry.collectionId, entry.color);
         }
       }
-      if (savedPlacesVisible.current) s.setPlacesLayerVisible(true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authorId, collectionId]);

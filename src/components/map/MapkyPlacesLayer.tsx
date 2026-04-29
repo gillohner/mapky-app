@@ -164,7 +164,6 @@ function ensureLayers(map: maplibregl.Map, theme: "light" | "dark") {
 export function MapkyPlacesLayer() {
   const map = useMapStore((s) => s.map);
   const theme = useMapStore((s) => s.theme);
-  const visible = useUiStore((s) => s.placesLayerVisible);
 
   const [bounds, setBounds] = useState<ViewportBounds | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -203,21 +202,17 @@ export function MapkyPlacesLayer() {
     };
   }, [map, updateBounds]);
 
-  // Recreate layers after style changes (theme toggle removes all layers)
-  useEffect(() => {
-    if (!map) return;
-    const onStyleData = () => {
-      layerReady.current = false;
-    };
-    map.on("styledata", onStyleData);
-    return () => {
-      map.off("styledata", onStyleData);
-    };
-  }, [map]);
+  const { data: places } = useViewportPlaces(bounds);
 
-  const { data: places } = useViewportPlaces(visible ? bounds : null);
+  // Hold the latest GeoJSON in a ref so setup() (which can run via the
+  // deferred "idle" listener AFTER places has already loaded) can
+  // populate the source on first attach without waiting for another
+  // React render. Same pattern as RoutePolylineLayer.
+  const dataRef = useRef<GeoJSON.FeatureCollection>({
+    type: "FeatureCollection",
+    features: [],
+  });
 
-  // Update GeoJSON source
   useEffect(() => {
     if (!map) return;
 
@@ -226,32 +221,37 @@ export function MapkyPlacesLayer() {
         ensureLayers(map, theme);
         layerReady.current = true;
       }
+      const src = map.getSource(SOURCE) as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      src?.setData(dataRef.current);
     };
 
-    if (map.isStyleLoaded()) {
+    // Recreate layers after style changes (theme/basemap swap wipes
+    // them) and re-push the latest data inside the same listener so
+    // the source isn't left empty waiting for the next React render.
+    const onStyleData = () => {
+      layerReady.current = false;
       setup();
-    } else {
-      map.once("idle", setup);
-    }
+    };
+    map.on("styledata", onStyleData);
 
-    const src = map.getSource(SOURCE) as maplibregl.GeoJSONSource | undefined;
-    if (src) {
-      src.setData(
-        places?.length
-          ? placesToGeoJSON(places)
-          : { type: "FeatureCollection", features: [] },
-      );
-    }
-  }, [map, places, theme]);
+    if (map.isStyleLoaded()) setup();
+    else map.once("idle", setup);
 
-  // Toggle layer visibility
+    return () => {
+      map.off("styledata", onStyleData);
+    };
+  }, [map, theme]);
+
   useEffect(() => {
+    dataRef.current = places?.length
+      ? placesToGeoJSON(places)
+      : { type: "FeatureCollection", features: [] };
     if (!map) return;
-    const vis = visible ? "visible" : "none";
-    for (const id of [CLUSTER_LAYER, CLUSTER_COUNT, POINT_RING, POINT_DOT]) {
-      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
-    }
-  }, [map, visible]);
+    const src = map.getSource(SOURCE) as maplibregl.GeoJSONSource | undefined;
+    src?.setData(dataRef.current);
+  }, [map, places]);
 
   // Apply dim multiplier when this layer is in the background of a focused
   // detail page. Multiplies the baked opacity values; reapplied on every

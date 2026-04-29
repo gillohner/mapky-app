@@ -2,7 +2,6 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import type maplibregl from "maplibre-gl";
 import { useNavigate } from "@tanstack/react-router";
 import { useMapStore } from "@/stores/map-store";
-import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useViewportCaptures } from "@/lib/api/hooks";
 import { useLayerOpacityMultiplier } from "@/lib/map/dim";
@@ -113,7 +112,6 @@ function ensureLayers(map: maplibregl.Map, theme: "light" | "dark") {
 export function CaptureMarkersLayer() {
   const map = useMapStore((s) => s.map);
   const theme = useMapStore((s) => s.theme);
-  const visible = useUiStore((s) => s.capturesLayerVisible);
   const navigate = useNavigate();
 
   const [bounds, setBounds] = useState<ViewportBounds | null>(null);
@@ -146,47 +144,52 @@ export function CaptureMarkersLayer() {
     };
   }, [map, updateBounds]);
 
-  useEffect(() => {
-    if (!map) return;
-    const onStyleData = () => {
-      layerReady.current = false;
-    };
-    map.on("styledata", onStyleData);
-    return () => {
-      map.off("styledata", onStyleData);
-    };
-  }, [map]);
+  const { data: captures } = useViewportCaptures(bounds);
 
-  const { data: captures } = useViewportCaptures(visible ? bounds : null);
+  // Same source-races-style-load pattern as MapkyPlacesLayer: hold
+  // current GeoJSON in a ref so the deferred "idle" / styledata
+  // re-attach can populate without waiting for another React render.
+  const dataRef = useRef<GeoJSON.FeatureCollection>({
+    type: "FeatureCollection",
+    features: [],
+  });
 
   useEffect(() => {
     if (!map) return;
+
     const setup = () => {
       if (!layerReady.current) {
         ensureLayers(map, theme);
         layerReady.current = true;
       }
+      const src = map.getSource(SOURCE) as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      src?.setData(dataRef.current);
     };
+
+    const onStyleData = () => {
+      layerReady.current = false;
+      setup();
+    };
+    map.on("styledata", onStyleData);
+
     if (map.isStyleLoaded()) setup();
     else map.once("idle", setup);
 
-    const src = map.getSource(SOURCE) as maplibregl.GeoJSONSource | undefined;
-    if (src) {
-      src.setData(
-        captures?.length
-          ? capturesToGeoJSON(captures)
-          : { type: "FeatureCollection", features: [] },
-      );
-    }
-  }, [map, captures, theme]);
+    return () => {
+      map.off("styledata", onStyleData);
+    };
+  }, [map, theme]);
 
   useEffect(() => {
+    dataRef.current = captures?.length
+      ? capturesToGeoJSON(captures)
+      : { type: "FeatureCollection", features: [] };
     if (!map) return;
-    const vis = visible ? "visible" : "none";
-    for (const id of [POINT_DOT, POINT_ARROW]) {
-      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
-    }
-  }, [map, visible]);
+    const src = map.getSource(SOURCE) as maplibregl.GeoJSONSource | undefined;
+    src?.setData(dataRef.current);
+  }, [map, captures]);
 
   const dim = useLayerOpacityMultiplier("captures");
   useEffect(() => {

@@ -43,8 +43,6 @@ function hydrateFromUrl() {
 
   if (params.get("sl") === "0") m.setSatelliteLabels(false);
 
-  if (params.get("pl") === "0") ui.setPlacesLayerVisible(false);
-  if (params.get("ca") === "0") ui.setCapturesLayerVisible(false);
   if (params.get("mt") === "1") ui.setMetroOverlayVisible(true);
   if (params.get("cy") === "1") ui.setCyclingOverlayVisible(true);
   if (params.get("tr") === "1") ui.setTerrainOverlayVisible(true);
@@ -65,8 +63,6 @@ function hydrateFromUrl() {
 hydrateFromUrl();
 
 export function useUrlSync() {
-  const placesLayerVisible = useUiStore((s) => s.placesLayerVisible);
-  const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
   const cyclingOverlayVisible = useUiStore((s) => s.cyclingOverlayVisible);
   const terrainOverlayVisible = useUiStore((s) => s.terrainOverlayVisible);
@@ -92,8 +88,6 @@ export function useUrlSync() {
       basemap === "satellite" && !satelliteLabels ? "0" : null,
     );
 
-    setOrDelete(params, "pl", placesLayerVisible ? null : "0");
-    setOrDelete(params, "ca", capturesLayerVisible ? null : "0");
     setOrDelete(params, "mt", metroOverlayVisible ? "1" : null);
     setOrDelete(params, "cy", cyclingOverlayVisible ? "1" : null);
     setOrDelete(params, "tr", terrainOverlayVisible ? "1" : null);
@@ -118,8 +112,6 @@ export function useUrlSync() {
       );
     }
   }, [
-    placesLayerVisible,
-    capturesLayerVisible,
     metroOverlayVisible,
     cyclingOverlayVisible,
     terrainOverlayVisible,

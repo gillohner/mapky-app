@@ -185,14 +185,12 @@ export function IconRail() {
         <MapPin className="h-5 w-5" />
       </RailButton>
 
-      {isAuthenticated && (
-        <RailButton
-          onClick={() => navigate({ to: "/collections" })}
-          title="Collections"
-        >
-          <FolderHeart className="h-5 w-5" />
-        </RailButton>
-      )}
+      <RailButton
+        onClick={() => navigate({ to: "/collections" })}
+        title="Collections"
+      >
+        <FolderHeart className="h-5 w-5" />
+      </RailButton>
 
       <RailButton
         onClick={() => navigate({ to: "/routes" })}
