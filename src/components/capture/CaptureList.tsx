@@ -3,7 +3,6 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Route as CapturesRoute } from "@/routes/captures";
 import {
   Camera,
-  Plus,
   Loader2,
   Image as ImageIcon,
   Video,
@@ -22,6 +21,7 @@ import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { resolveFileUrl } from "@/lib/api/user";
 import { useMapStore } from "@/stores/map-store";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
+import { DiscoverNewButton } from "@/components/discover/NewButton";
 import type { GeoCaptureDetails, GeoCaptureKind } from "@/types/mapky";
 
 type Tab = "mine" | "viewport";
@@ -60,17 +60,6 @@ export function CaptureList() {
 
   const close = () => navigate({ to: "/" });
 
-  const rightHeader = publicKey ? (
-    <button
-      onClick={openCreate}
-      className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover"
-      title="Capture something here"
-    >
-      <Plus className="h-3.5 w-3.5" />
-      New
-    </button>
-  ) : undefined;
-
   return (
     <DiscoverSidebar
       title="Captures"
@@ -78,8 +67,10 @@ export function CaptureList() {
       activeTab={tab}
       onTabChange={(id) => setTab(id as Tab)}
       onClose={close}
-      rightHeaderSlot={rightHeader}
     >
+      {publicKey && (
+        <DiscoverNewButton onClick={openCreate} label="New capture" />
+      )}
       {list.isLoading && (
         <p className="flex items-center gap-2 text-xs text-muted">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />

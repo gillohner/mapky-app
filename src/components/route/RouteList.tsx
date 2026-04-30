@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Route as RoutesIndexRoute } from "@/routes/routes/index";
-import { Plus, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserRoutes, useViewportRoutes } from "@/lib/api/hooks";
 import {
@@ -11,6 +11,7 @@ import {
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
+import { DiscoverNewButton } from "@/components/discover/NewButton";
 import { RoutesIndexLayer } from "@/components/map/RoutesIndexLayer";
 import { RouteCard } from "./RouteCard";
 
@@ -58,17 +59,6 @@ export function RouteList() {
 
   const list = tab === "mine" ? userRoutes : viewportRoutes;
 
-  const rightHeader = (
-    <button
-      onClick={handleCreate}
-      className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover"
-      title="Plan a new route"
-    >
-      <Plus className="h-3.5 w-3.5" />
-      New
-    </button>
-  );
-
   return (
     <>
       {/* Render every visible route as a polyline + start marker on
@@ -83,8 +73,9 @@ export function RouteList() {
       activeTab={tab}
       onTabChange={(id) => setTab(id as Tab)}
       onClose={close}
-      rightHeaderSlot={rightHeader}
     >
+      <DiscoverNewButton onClick={handleCreate} label="Plan a new route" />
+
       {draftCount > 0 && (
         <button
           onClick={() => navigate({ to: "/directions" })}

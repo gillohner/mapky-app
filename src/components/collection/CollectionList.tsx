@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, FolderHeart, MapPin, Eye, EyeOff, Loader2 } from "lucide-react";
+import { FolderHeart, MapPin, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Route as CollectionsRoute } from "@/routes/collections";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -11,6 +11,7 @@ import { useUiStore, type CollectionOverlayEntry } from "@/stores/ui-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
+import { DiscoverNewButton } from "@/components/discover/NewButton";
 import { CreateCollectionForm } from "./CreateCollectionForm";
 import type { CollectionDetails } from "@/types/mapky";
 
@@ -113,13 +114,10 @@ export function CollectionList() {
         <CreateCollectionForm onClose={() => setCreating(false)} />
       ) : (
         <div className="space-y-3">
-          <button
+          <DiscoverNewButton
             onClick={() => setCreating(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted transition-colors hover:border-accent hover:text-accent"
-          >
-            <Plus className="h-4 w-4" />
-            New Collection
-          </button>
+            label="New collection"
+          />
 
           {isLoading && <LoadingSkeleton />}
 
