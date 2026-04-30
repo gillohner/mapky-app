@@ -61,6 +61,59 @@ export function SearchBar() {
 
   const isLoading = mode === "places" ? placesLoading : tagsLoading;
 
+  // Flat list of selectable rows in the order they render. Powers
+  // ArrowUp/Down navigation in the dropdown — each entry carries a
+  // stable key (used for highlight matching) and the click handler
+  // to fire on Enter.
+  const selectableRows = useMemo<Array<{ key: string; select: () => void }>>(() => {
+    if (mode === "places") {
+      return sortedEnrichedPlaces.map((row) => ({
+        key: `place-${row.result.osm_type}-${row.result.osm_id}`,
+        select: () => handleSelectPlace(row.result),
+      }));
+    }
+    if (mode === "tags" && tagResults) {
+      const rows: Array<{ key: string; select: () => void }> = [];
+      for (const p of tagResults.places ?? []) {
+        rows.push({
+          key: `tagPlace-${p.osm_type}-${p.osm_id}`,
+          select: () => handleSelectTagPlace(p.osm_type, p.osm_id),
+        });
+      }
+      for (const c of tagResults.collections ?? []) {
+        const [authorId, collectionId] = c.id.split(":");
+        rows.push({
+          key: `collection-${c.id}`,
+          select: () => handleSelectCollection(authorId, collectionId),
+        });
+      }
+      for (const post of tagResults.posts ?? []) {
+        rows.push({
+          key: `post-${post.author_id}-${post.id}`,
+          select: () => handleSelectPost(post),
+        });
+      }
+      for (const route of tagResults.routes ?? []) {
+        rows.push({
+          key: `route-${route.id}`,
+          select: () => handleSelectRoute(route),
+        });
+      }
+      return rows;
+    }
+    return [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, sortedEnrichedPlaces, tagResults]);
+
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  // Reset highlight when the underlying row set changes (mode swap,
+  // new query, etc.) so a stale index doesn't trigger the wrong row.
+  useEffect(() => {
+    setSelectedIndex(-1);
+  }, [selectableRows]);
+  const selectedKey =
+    selectedIndex >= 0 ? selectableRows[selectedIndex]?.key : null;
+
   // Debounce input → query
   useEffect(() => {
     clearTimeout(debounceRef.current);
@@ -213,11 +266,36 @@ export function SearchBar() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       setShowResults(false);
+      setSelectedIndex(-1);
       inputRef.current?.blur();
+      return;
     }
-    if (e.key === "Enter" && input.length >= 2) {
-      setShowResults(false);
-      navigate({ to: "/search", search: { q: input, mode } });
+    if (e.key === "ArrowDown") {
+      if (selectableRows.length === 0) return;
+      e.preventDefault();
+      setShowResults(true);
+      setSelectedIndex((i) => Math.min(i + 1, selectableRows.length - 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      if (selectableRows.length === 0) return;
+      e.preventDefault();
+      setSelectedIndex((i) => Math.max(i - 1, -1));
+      return;
+    }
+    if (e.key === "Enter") {
+      // Highlighted row → fire its handler. Otherwise fall back to
+      // the existing "open the full /search panel" behavior.
+      if (selectedIndex >= 0 && selectableRows[selectedIndex]) {
+        e.preventDefault();
+        setShowResults(false);
+        selectableRows[selectedIndex].select();
+        return;
+      }
+      if (input.length >= 2) {
+        setShowResults(false);
+        navigate({ to: "/search", search: { q: input, mode } });
+      }
     }
   };
 
@@ -327,13 +405,17 @@ export function SearchBar() {
 
           {/* Places mode results — enriched with Mapky rating + tags. */}
           {mode === "places" &&
-            sortedEnrichedPlaces.map((row) => (
-              <PlaceResultRow
-                key={`${row.result.osm_type}-${row.result.osm_id}`}
-                row={row}
-                onSelect={() => handleSelectPlace(row.result)}
-              />
-            ))}
+            sortedEnrichedPlaces.map((row) => {
+              const k = `place-${row.result.osm_type}-${row.result.osm_id}`;
+              return (
+                <PlaceResultRow
+                  key={k}
+                  row={row}
+                  highlighted={selectedKey === k}
+                  onSelect={() => handleSelectPlace(row.result)}
+                />
+              );
+            })}
 
           {/* Tags mode results */}
           {mode === "tags" && tagResults && (
@@ -343,15 +425,19 @@ export function SearchBar() {
                   <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
                     Places
                   </div>
-                  {tagResults.places.map((p) => (
-                    <TagPlaceResult
-                      key={`${p.osm_type}-${p.osm_id}`}
-                      place={p}
-                      onSelect={() =>
-                        handleSelectTagPlace(p.osm_type, p.osm_id)
-                      }
-                    />
-                  ))}
+                  {tagResults.places.map((p) => {
+                    const k = `tagPlace-${p.osm_type}-${p.osm_id}`;
+                    return (
+                      <TagPlaceResult
+                        key={k}
+                        place={p}
+                        highlighted={selectedKey === k}
+                        onSelect={() =>
+                          handleSelectTagPlace(p.osm_type, p.osm_id)
+                        }
+                      />
+                    );
+                  })}
                 </div>
               )}
 
@@ -362,13 +448,14 @@ export function SearchBar() {
                   </div>
                   {tagResults.collections.map((c) => {
                     const [authorId, collectionId] = c.id.split(":");
+                    const k = `collection-${c.id}`;
                     return (
                       <button
                         key={c.id}
                         onClick={() =>
                           handleSelectCollection(authorId, collectionId)
                         }
-                        className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-surface"
+                        className={`flex w-full items-center gap-3 px-4 py-2 text-left ${selectedKey === k ? "bg-accent/10" : "hover:bg-surface"}`}
                       >
                         <FolderHeart className="h-4 w-4 flex-shrink-0 text-accent" />
                         <div className="min-w-0 flex-1">
@@ -390,31 +477,34 @@ export function SearchBar() {
                   <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
                     Posts
                   </div>
-                  {tagResults.posts.map((post) => (
-                    <button
-                      key={`${post.author_id}-${post.id}`}
-                      onClick={() => handleSelectPost(post)}
-                      className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-surface"
-                    >
-                      <MessageSquare className="h-4 w-4 flex-shrink-0 text-accent" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-foreground">
-                          {post.content
-                            ? post.content.slice(0, 80) +
-                              (post.content.length > 80 ? "..." : "")
-                            : post.kind === "review"
-                              ? "Review"
-                              : "Post"}
-                        </p>
-                        <p className="text-xs text-muted">
-                          {post.kind === "review" && post.rating
-                            ? `${(post.rating / 2).toFixed(1)} stars · `
-                            : ""}
-                          <OsmPlaceName osmCanonical={post.osm_canonical} />
-                        </p>
-                      </div>
-                    </button>
-                  ))}
+                  {tagResults.posts.map((post) => {
+                    const k = `post-${post.author_id}-${post.id}`;
+                    return (
+                      <button
+                        key={`${post.author_id}-${post.id}`}
+                        onClick={() => handleSelectPost(post)}
+                        className={`flex w-full items-center gap-3 px-4 py-2 text-left ${selectedKey === k ? "bg-accent/10" : "hover:bg-surface"}`}
+                      >
+                        <MessageSquare className="h-4 w-4 flex-shrink-0 text-accent" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm text-foreground">
+                            {post.content
+                              ? post.content.slice(0, 80) +
+                                (post.content.length > 80 ? "..." : "")
+                              : post.kind === "review"
+                                ? "Review"
+                                : "Post"}
+                          </p>
+                          <p className="text-xs text-muted">
+                            {post.kind === "review" && post.rating
+                              ? `${(post.rating / 2).toFixed(1)} stars · `
+                              : ""}
+                            <OsmPlaceName osmCanonical={post.osm_canonical} />
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
@@ -423,23 +513,26 @@ export function SearchBar() {
                   <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
                     Routes
                   </div>
-                  {tagResults.routes.map((route) => (
-                    <button
-                      key={route.id}
-                      onClick={() => handleSelectRoute(route)}
-                      className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-surface"
-                    >
-                      <RouteIcon className="h-4 w-4 flex-shrink-0 text-accent" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-foreground">
-                          {route.name || "Untitled route"}
-                        </p>
-                        <p className="text-xs uppercase text-muted">
-                          {route.activity}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
+                  {tagResults.routes.map((route) => {
+                    const k = `route-${route.id}`;
+                    return (
+                      <button
+                        key={route.id}
+                        onClick={() => handleSelectRoute(route)}
+                        className={`flex w-full items-center gap-3 px-4 py-2 text-left ${selectedKey === k ? "bg-accent/10" : "hover:bg-surface"}`}
+                      >
+                        <RouteIcon className="h-4 w-4 flex-shrink-0 text-accent" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {route.name || "Untitled route"}
+                          </p>
+                          <p className="text-xs uppercase text-muted">
+                            {route.activity}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </>
@@ -465,9 +558,11 @@ export function SearchBar() {
 function PlaceResultRow({
   row,
   onSelect,
+  highlighted,
 }: {
   row: EnrichedResult;
   onSelect: () => void;
+  highlighted?: boolean;
 }) {
   const { result, place, tags } = row;
   const typeLabel = result.type?.replace(/_/g, " ") || "";
@@ -482,7 +577,7 @@ function PlaceResultRow({
   return (
     <button
       onClick={onSelect}
-      className="flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface"
+      className={`flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors ${highlighted ? "bg-accent/10" : "hover:bg-surface"}`}
     >
       <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
       <div className="min-w-0 flex-1">
@@ -548,9 +643,11 @@ function OsmPlaceName({ osmCanonical }: { osmCanonical: string }) {
 function TagPlaceResult({
   place,
   onSelect,
+  highlighted,
 }: {
   place: PlaceDetails;
   onSelect: () => void;
+  highlighted?: boolean;
 }) {
   const { data: nominatim } = useOsmLookup(
     place.osm_type,
@@ -569,7 +666,7 @@ function TagPlaceResult({
   return (
     <button
       onClick={onSelect}
-      className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-surface"
+      className={`flex w-full items-center gap-3 px-4 py-2 text-left ${highlighted ? "bg-accent/10" : "hover:bg-surface"}`}
     >
       <MapPin className="h-4 w-4 flex-shrink-0 text-accent" />
       <div className="min-w-0 flex-1">
