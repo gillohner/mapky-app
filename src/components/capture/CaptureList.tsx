@@ -19,6 +19,10 @@ import {
 import { useCaptureCreationStore } from "@/stores/capture-creation-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
+import {
+  pointsToBounds,
+  useFilterViewport,
+} from "@/hooks/use-filter-viewport";
 import { resolveFileUrl } from "@/lib/api/user";
 import { useMapStore } from "@/stores/map-store";
 import { fetchGeoCaptureTags } from "@/lib/api/mapky";
@@ -150,6 +154,13 @@ export function CaptureList() {
         .some((v) => v.toLowerCase().includes(needle));
     });
   }, [allCaptures, filter, activeTags, activeKind, tagsByCapture]);
+
+  const filterActive =
+    filter.trim().length > 0 || activeTags.length > 0 || activeKind !== null;
+  useFilterViewport({
+    active: filterActive,
+    bounds: pointsToBounds(filtered.map((c) => ({ lat: c.lat, lon: c.lon }))),
+  });
 
   return (
     <DiscoverSidebar

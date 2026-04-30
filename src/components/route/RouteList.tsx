@@ -16,6 +16,7 @@ import {
 } from "@/stores/route-creation-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
+import { useFilterViewport, type FilterBounds } from "@/hooks/use-filter-viewport";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
 import { DiscoverNewButton } from "@/components/discover/NewButton";
 import { RoutesIndexLayer } from "@/components/map/RoutesIndexLayer";
@@ -125,6 +126,11 @@ export function RouteList() {
       .map(([value, count]) => ({ value, label: value, count }));
   }, [allRoutes]);
 
+  const filterActive =
+    filter.trim().length > 0 ||
+    activeTags.length > 0 ||
+    activeActivity !== null;
+
   const filtered = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     return allRoutes.filter((r) => {
@@ -143,6 +149,27 @@ export function RouteList() {
         .some((v) => v.toLowerCase().includes(needle));
     });
   }, [allRoutes, filter, activeTags, activeActivity, tagsByRoute]);
+
+  // Routes have a stored bbox per metadata; union the filtered set's
+  // bboxes for a fit. Snaps the map to whatever's left after filtering
+  // and pans back when the user clears it.
+  const filteredBounds = useMemo<FilterBounds | null>(() => {
+    if (filtered.length === 0) return null;
+    let minLat = Infinity,
+      minLon = Infinity,
+      maxLat = -Infinity,
+      maxLon = -Infinity;
+    for (const r of filtered) {
+      if (r.min_lat < minLat) minLat = r.min_lat;
+      if (r.max_lat > maxLat) maxLat = r.max_lat;
+      if (r.min_lon < minLon) minLon = r.min_lon;
+      if (r.max_lon > maxLon) maxLon = r.max_lon;
+    }
+    if (!Number.isFinite(minLat)) return null;
+    return { minLat, minLon, maxLat, maxLon };
+  }, [filtered]);
+
+  useFilterViewport({ active: filterActive, bounds: filteredBounds });
 
   return (
     <>

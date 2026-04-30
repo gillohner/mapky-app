@@ -7,6 +7,10 @@ import { fetchPlaceTags } from "@/lib/api/mapky";
 import { lookupOsmElement } from "@/lib/api/nominatim";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
+import {
+  pointsToBounds,
+  useFilterViewport,
+} from "@/hooks/use-filter-viewport";
 import { useMapStore } from "@/stores/map-store";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import {
@@ -112,6 +116,9 @@ export function PlaceList() {
       .map(([value, count]) => ({ value, label: value, count }));
   }, [typeByPlace]);
 
+  const filterActive =
+    query.trim().length > 0 || activeTags.length > 0 || activeType !== null;
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return places.filter((p) => {
@@ -140,6 +147,13 @@ export function PlaceList() {
       return haystack.includes(needle);
     });
   }, [places, tagsByPlace, typeByPlace, query, activeTags, tagMode, activeType]);
+
+  // Fit map to whatever's currently filtered; pan back to the previous
+  // viewport when the filter clears.
+  useFilterViewport({
+    active: filterActive,
+    bounds: pointsToBounds(filtered.map((p) => ({ lat: p.lat, lon: p.lon }))),
+  });
 
   return (
     <DiscoverSidebar title="Places" onClose={close}>
