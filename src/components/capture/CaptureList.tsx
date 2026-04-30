@@ -163,9 +163,10 @@ export function CaptureList() {
     active: filterActive,
     bounds: pointsToBounds(filtered.map((c) => ({ lat: c.lat, lon: c.lon }))),
   });
-  // Hide places entirely while filtering captures so the user isn't
-  // distracted by green dots they aren't looking at.
-  useAutoFocusLayer("captures", { hide: filterActive });
+  // Captures sidebar owns the map: hide Mapky places entirely so the
+  // capture markers stand alone. Plain browsing and filtering both
+  // follow the same rule.
+  useAutoFocusLayer("captures", { hide: true });
 
   return (
     <DiscoverSidebar

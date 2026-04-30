@@ -118,11 +118,10 @@ export function PlaceList() {
   const filterActive =
     query.trim().length > 0 || activeTags.length > 0 || activeType !== null;
 
-  // Hide captures entirely while the user is narrowing the list —
-  // they're hunting for something specific, so background dots become
-  // noise. Plain browsing (no filter) keeps captures dimmed for
-  // context.
-  useAutoFocusLayer("places", { hide: filterActive });
+  // Places sidebar owns the map: hide captures entirely so green
+  // place dots stand alone. Plain browsing and filtering both follow
+  // the same rule.
+  useAutoFocusLayer("places", { hide: true });
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();

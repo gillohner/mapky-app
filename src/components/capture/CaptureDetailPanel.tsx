@@ -98,7 +98,9 @@ export function CaptureDetailPanel({
   const [deleting, setDeleting] = useState(false);
   const sphereHandle = useRef<SphereViewerHandle | null>(null);
 
-  useAutoFocusLayer("captures");
+  // Hide Mapky places entirely so the capture stands alone, same
+  // rule the captures list uses.
+  useAutoFocusLayer("captures", { hide: true });
 
   const isOwner = publicKey === authorId;
   const isPanorama = capture?.kind === "panorama";

@@ -175,9 +175,9 @@ export function RouteList() {
 
   useFilterViewport({ active: filterActive, bounds: filteredBounds });
 
-  // Mapky places + captures dim during plain browsing; an active
-  // filter hides them entirely so route polylines own the map.
-  useAutoFocusLayer("routes", { hide: filterActive });
+  // Routes sidebar owns the map: hide Mapky places + captures
+  // entirely so the colored route polylines stand alone.
+  useAutoFocusLayer("routes", { hide: true });
 
   return (
     <>

@@ -50,7 +50,9 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  useAutoFocusLayer("routes");
+  // Hide places + captures entirely so this route's polyline owns
+  // the map, same rule the routes list uses.
+  useAutoFocusLayer("routes", { hide: true });
 
   const decoded: LngLat[] = useMemo(() => {
     if (!body.data) return [];

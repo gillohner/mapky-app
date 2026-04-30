@@ -61,7 +61,9 @@ export function PlacePanel({
   const setSelectedFeature = useUiStore((s) => s.setSelectedFeature);
   const map = useMapStore((s) => s.map);
 
-  useAutoFocusLayer("places");
+  // Hide captures entirely so this place stands alone, same rule the
+  // places list uses.
+  useAutoFocusLayer("places", { hide: true });
 
   // Fly to place when coordinates are available. Delay past the sidebar
   // padding easeTo (300ms) so it doesn't get cancelled.

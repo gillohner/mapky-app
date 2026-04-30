@@ -34,7 +34,9 @@ export function CollectionPanel({
 
   // Dim the always-on Mapky data layers so this collection's overlay
   // owns the visual focus.
-  useAutoFocusLayer("collections");
+  // Hide places + captures entirely — this collection's overlay owns
+  // the map, same rule the collections list uses.
+  useAutoFocusLayer("collections", { hide: true });
 
   // On mount: save the user's pinned overlays, swap to ONLY this
   // collection's overlay so the focused detail isn't visually competing

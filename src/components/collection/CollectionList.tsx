@@ -103,10 +103,10 @@ export function CollectionList() {
 
   const [filter, setFilter] = useState("");
   const [activeTags, setActiveTags] = useState<string[]>([]);
-  const filterActive = filter.trim().length > 0 || activeTags.length > 0;
-  // Hide places + captures while filtering — the focused collection
-  // overlays should own the map. Plain browsing keeps them dimmed.
-  useAutoFocusLayer("collections", { hide: filterActive });
+  // Collections sidebar owns the map: hide places + captures entirely
+  // so the colored collection overlays stand alone. Plain browsing
+  // and filtering both follow the same rule.
+  useAutoFocusLayer("collections", { hide: true });
 
   // Active list depends on tab. Tags are batch-fetched against this
   // unified list so both tabs render chips + tag filter the same way.

@@ -114,7 +114,9 @@ export function MyPostsPanel() {
   const { data: posts, isLoading } = useUserPosts(publicKey);
 
   // Posts are anchored to places, so dim captures while browsing them.
-  useAutoFocusLayer("places");
+  // Posts are anchored to places — hide captures entirely so the
+  // place markers your posts attach to stand alone.
+  useAutoFocusLayer("places", { hide: true });
 
   return (
     <DiscoverSidebar title="My Posts" onClose={() => navigate({ to: "/" })}>
