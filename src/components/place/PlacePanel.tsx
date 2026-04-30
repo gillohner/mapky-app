@@ -17,6 +17,7 @@ import { PlaceDirectionsButton } from "./PlaceDirectionsButton";
 import { PlaceTags } from "./PlaceTags";
 import { PlaceCollections } from "./PlaceCollections";
 import { PlaceRoutes } from "./PlaceRoutes";
+import { BitcoinAcceptance } from "./BitcoinAcceptance";
 
 interface PlacePanelProps {
   osmType: string;
@@ -150,6 +151,7 @@ export function PlacePanel({
           tileName={tileName}
           tileKind={tileKind}
         />
+        <BitcoinAcceptance osmType={osmType} osmId={osmId} />
         <PlaceDirectionsButton osmType={osmType} osmId={osmId} fallbackName={tileName} />
         <div className="border-t border-border pt-4">
           <PlaceActions osmType={osmType} osmId={osmId} />

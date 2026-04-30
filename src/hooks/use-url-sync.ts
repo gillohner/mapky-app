@@ -15,13 +15,12 @@ import { useMapStore } from "@/stores/map-store";
  *
  * Param keys (set only when non-default):
  *   th  theme (light|dark) — only set if differs from system preference
- *   bm  basemap (default|satellite)
+ *   bm  basemap (default|terrain|cycling|satellite)
  *   sl  satellite labels       (0 to hide; default visible when satellite)
  *   pl  places layer       (0 to hide; default visible)
  *   ca  captures layer     (0 to hide; default visible)
  *   mt  metro overlay      (1 to show)
- *   cy  cycling overlay    (1 to show)
- *   tr  terrain overlay    (1 to show)
+ *   bt  bitcoin overlay    (1 to show)
  *   b3  3D buildings       (1 to show)
  *   z   zoom level
  *   c   center as "lat,lon"
@@ -39,13 +38,19 @@ function hydrateFromUrl() {
   }
 
   const bm = params.get("bm");
-  if (bm === "default" || bm === "satellite") m.setBasemap(bm);
+  if (
+    bm === "default" ||
+    bm === "satellite" ||
+    bm === "terrain" ||
+    bm === "cycling"
+  ) {
+    m.setBasemap(bm);
+  }
 
   if (params.get("sl") === "0") m.setSatelliteLabels(false);
 
   if (params.get("mt") === "1") ui.setMetroOverlayVisible(true);
-  if (params.get("cy") === "1") ui.setCyclingOverlayVisible(true);
-  if (params.get("tr") === "1") ui.setTerrainOverlayVisible(true);
+  if (params.get("bt") === "1") ui.setBitcoinOverlayVisible(true);
   if (params.get("b3") === "1") ui.setBuildings3DVisible(true);
 
   const z = parseFloat(params.get("z") ?? "");
@@ -90,8 +95,7 @@ function applyUrlViewportSmoothly() {
 
 export function useUrlSync() {
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
-  const cyclingOverlayVisible = useUiStore((s) => s.cyclingOverlayVisible);
-  const terrainOverlayVisible = useUiStore((s) => s.terrainOverlayVisible);
+  const bitcoinOverlayVisible = useUiStore((s) => s.bitcoinOverlayVisible);
   const buildings3DVisible = useUiStore((s) => s.buildings3DVisible);
 
   const theme = useMapStore((s) => s.theme);
@@ -125,8 +129,7 @@ export function useUrlSync() {
     );
 
     setOrDelete(params, "mt", metroOverlayVisible ? "1" : null);
-    setOrDelete(params, "cy", cyclingOverlayVisible ? "1" : null);
-    setOrDelete(params, "tr", terrainOverlayVisible ? "1" : null);
+    setOrDelete(params, "bt", bitcoinOverlayVisible ? "1" : null);
     setOrDelete(params, "b3", buildings3DVisible ? "1" : null);
 
     setOrDelete(params, "z", zoom.toFixed(2));
@@ -149,8 +152,7 @@ export function useUrlSync() {
     }
   }, [
     metroOverlayVisible,
-    cyclingOverlayVisible,
-    terrainOverlayVisible,
+    bitcoinOverlayVisible,
     buildings3DVisible,
     theme,
     basemap,

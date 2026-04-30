@@ -274,6 +274,9 @@ export function MapkyPlacesLayer() {
   }, [map, updateBounds]);
 
   const { data: places } = useViewportPlaces(bounds);
+  // When the discover sidebar is filtering, only render the matching
+  // subset on the map. Null means "no filter — show everything".
+  const visibleKeys = useUiStore((s) => s.visiblePlaceKeys);
 
   // Hold the latest GeoJSON in a ref so setup() (which can run via the
   // deferred "idle" listener AFTER places has already loaded) can
@@ -316,13 +319,20 @@ export function MapkyPlacesLayer() {
   }, [map, theme]);
 
   useEffect(() => {
-    dataRef.current = places?.length
-      ? placesToGeoJSON(places)
+    const filtered = places?.length
+      ? visibleKeys
+        ? places.filter((p) =>
+            visibleKeys.has(`${p.osm_type}:${p.osm_id}`),
+          )
+        : places
+      : [];
+    dataRef.current = filtered.length
+      ? placesToGeoJSON(filtered)
       : { type: "FeatureCollection", features: [] };
     if (!map) return;
     const src = map.getSource(SOURCE) as maplibregl.GeoJSONSource | undefined;
     src?.setData(dataRef.current);
-  }, [map, places]);
+  }, [map, places, visibleKeys]);
 
   // Apply dim multiplier when this layer is in the background of a focused
   // detail page. Multiplies the baked opacity values; reapplied on every

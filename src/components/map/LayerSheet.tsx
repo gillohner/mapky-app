@@ -4,13 +4,13 @@ import {
   X,
   Camera,
   MapPin,
-  Sun,
-  Moon,
   Satellite,
+  Map as MapIcon,
   TrainFront,
   Bike,
   Mountain,
   Building2,
+  Bitcoin,
 } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
@@ -25,6 +25,7 @@ import { useMapStore } from "@/stores/map-store";
 export function LayerSheet() {
   const open = useUiStore((s) => s.layerSheetOpen);
   const setOpen = useUiStore((s) => s.setLayerSheetOpen);
+  const sidebarOpen = useUiStore((s) => s.sidebarOpen);
 
   const placesLayerVisible = useUiStore((s) => s.placesLayerVisible);
   const togglePlacesLayer = useUiStore((s) => s.togglePlacesLayer);
@@ -34,11 +35,8 @@ export function LayerSheet() {
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
   const toggleMetroOverlay = useUiStore((s) => s.toggleMetroOverlay);
 
-  const cyclingOverlayVisible = useUiStore((s) => s.cyclingOverlayVisible);
-  const toggleCyclingOverlay = useUiStore((s) => s.toggleCyclingOverlay);
-
-  const terrainOverlayVisible = useUiStore((s) => s.terrainOverlayVisible);
-  const toggleTerrainOverlay = useUiStore((s) => s.toggleTerrainOverlay);
+  const bitcoinOverlayVisible = useUiStore((s) => s.bitcoinOverlayVisible);
+  const toggleBitcoinOverlay = useUiStore((s) => s.toggleBitcoinOverlay);
 
   const buildings3DVisible = useUiStore((s) => s.buildings3DVisible);
   const toggleBuildings3D = useUiStore((s) => s.toggleBuildings3D);
@@ -48,8 +46,6 @@ export function LayerSheet() {
     (s) => s.clearAllCollectionOverlays,
   );
 
-  const theme = useMapStore((s) => s.theme);
-  const setTheme = useMapStore((s) => s.setTheme);
   const basemap = useMapStore((s) => s.basemap);
   const setBasemap = useMapStore((s) => s.setBasemap);
   const satelliteLabels = useMapStore((s) => s.satelliteLabels);
@@ -66,28 +62,23 @@ export function LayerSheet() {
 
   if (!open) return null;
 
-  const handleSetTheme = (t: "light" | "dark") => {
-    setTheme(t);
-    document.documentElement.classList.toggle("dark", t === "dark");
-    // Picking a theme also implies the default vector basemap.
-    if (basemap !== "default") setBasemap("default");
-  };
-
-  const handleSetSatellite = () => setBasemap("satellite");
-
   return createPortal(
     <div
-      className="fixed inset-0 z-40 flex items-start justify-end pointer-events-none"
+      className="fixed inset-0 z-40 flex items-end justify-start pointer-events-none"
       onClick={() => setOpen(false)}
     >
       {/* Backdrop captures clicks to dismiss; visible only on mobile. */}
       <div className="pointer-events-auto absolute inset-0 bg-black/30 backdrop-blur-[1px] sm:hidden" />
 
-      {/* Sheet */}
+      {/* Sheet — anchored bottom-left so it pops up above the
+          LayerSheetTrigger button. Mobile: full-width above the
+          trigger row; desktop: 320px panel offset past the rail. */}
       <div
-        className="pointer-events-auto relative m-2 mt-16 w-full max-w-md rounded-2xl border border-border bg-background/95 p-4 shadow-xl backdrop-blur sm:mr-6 sm:mt-20 sm:w-80"
+        className={`pointer-events-auto relative mx-2 w-[calc(100%-1rem)] max-w-md rounded-2xl border border-border bg-background/95 p-4 shadow-xl backdrop-blur transition-[margin] duration-300 sm:w-80 ${
+          sidebarOpen ? "sm:ml-16 md:ml-[440px]" : "sm:ml-16"
+        }`}
         onClick={(e) => e.stopPropagation()}
-        style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+        style={{ marginBottom: "calc(5rem + env(safe-area-inset-bottom))" }}
       >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground">Layers</h2>
@@ -132,26 +123,33 @@ export function LayerSheet() {
           </Section>
         )}
 
-        {/* Basemap */}
+        {/* Basemap — mutually exclusive, OSM convention. Each option
+            is a complete styled map: pick one. */}
         <Section title="Basemap">
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             <BasemapTile
-              icon={<Sun className="h-4 w-4" />}
-              label="Light"
-              active={basemap === "default" && theme === "light"}
-              onClick={() => handleSetTheme("light")}
+              icon={<MapIcon className="h-4 w-4" />}
+              label="Map"
+              active={basemap === "default"}
+              onClick={() => setBasemap("default")}
             />
             <BasemapTile
-              icon={<Moon className="h-4 w-4" />}
-              label="Dark"
-              active={basemap === "default" && theme === "dark"}
-              onClick={() => handleSetTheme("dark")}
+              icon={<Mountain className="h-4 w-4" />}
+              label="Terrain"
+              active={basemap === "terrain"}
+              onClick={() => setBasemap("terrain")}
+            />
+            <BasemapTile
+              icon={<Bike className="h-4 w-4" />}
+              label="Cycling"
+              active={basemap === "cycling"}
+              onClick={() => setBasemap("cycling")}
             />
             <BasemapTile
               icon={<Satellite className="h-4 w-4" />}
               label="Satellite"
               active={basemap === "satellite"}
-              onClick={handleSetSatellite}
+              onClick={() => setBasemap("satellite")}
             />
           </div>
           {basemap === "satellite" && (
@@ -177,18 +175,11 @@ export function LayerSheet() {
             onChange={toggleMetroOverlay}
           />
           <Toggle
-            icon={<Bike className="h-4 w-4" />}
-            label="Cycling"
-            description="CyclOSM — bike lanes, paths, infrastructure"
-            on={cyclingOverlayVisible}
-            onChange={toggleCyclingOverlay}
-          />
-          <Toggle
-            icon={<Mountain className="h-4 w-4" />}
-            label="Terrain"
-            description="Hillshade relief from elevation tiles"
-            on={terrainOverlayVisible}
-            onChange={toggleTerrainOverlay}
+            icon={<Bitcoin className="h-4 w-4" />}
+            label="Bitcoin accepted"
+            description="OSM merchants tagged for on-chain, Lightning, or contactless"
+            on={bitcoinOverlayVisible}
+            onChange={toggleBitcoinOverlay}
           />
           <Toggle
             icon={<Building2 className="h-4 w-4" />}

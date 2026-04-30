@@ -144,12 +144,20 @@ export function SearchBar() {
   // below would immediately bounce the user back. When we detect a
   // /search → / transition, clear the input so the close actually
   // sticks. The user can re-type to start a new search.
+  //
+  // `setInput` / `setQuery` only apply on the next render, but the
+  // auto-push effect runs in the same render as the leave-search
+  // transition — so on its own this clear isn't enough; the auto-push
+  // would still see the old query and re-navigate. The ref below is
+  // read by the auto-push effect to suppress that one render.
   const prevOnSearchRef = useRef(isOnSearchRoute);
+  const justLeftSearchRef = useRef(false);
   useEffect(() => {
     if (prevOnSearchRef.current && !isOnSearchRoute) {
       setInput("");
       setQuery("");
       setShowResults(false);
+      justLeftSearchRef.current = true;
     }
     prevOnSearchRef.current = isOnSearchRoute;
   }, [isOnSearchRoute]);
@@ -176,6 +184,10 @@ export function SearchBar() {
   // reload anyway; the search-stickiness sweet spot is the home / map
   // browsing flow.
   useEffect(() => {
+    if (justLeftSearchRef.current) {
+      justLeftSearchRef.current = false;
+      return;
+    }
     if (query.length < 2) return;
     if (isOnSearchRoute) {
       // Already on /search — keep params in sync without navigation.
@@ -329,7 +341,7 @@ export function SearchBar() {
   return (
     <div
       ref={containerRef}
-      className={`pointer-events-auto absolute top-3 z-20 left-14 right-16 md:right-auto md:w-[380px] transition-[left] duration-300 ${
+      className={`pointer-events-auto absolute top-3 z-20 left-14 right-3 md:right-auto md:w-[380px] transition-[left] duration-300 ${
         sidebarOpen ? "md:left-[440px]" : "md:left-14"
       }`}
     >

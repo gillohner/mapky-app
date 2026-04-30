@@ -81,16 +81,6 @@ export function CollectionList() {
 
   const targetCollections =
     tab === "mine" ? collections : viewportQuery.data;
-  useEffect(() => {
-    if (!targetCollections) return;
-    const top = targetCollections.slice(0, AUTO_PIN_LIMIT);
-    const s = useUiStore.getState();
-    s.clearAllCollectionOverlays();
-    for (const c of top) {
-      const [authorId, collectionId] = c.id.split(":");
-      s.addCollectionOverlay(authorId, collectionId, c.color ?? undefined);
-    }
-  }, [targetCollections]);
 
   const tabs: DiscoverTab[] = useMemo(() => {
     const list: DiscoverTab[] = [];
@@ -140,6 +130,47 @@ export function CollectionList() {
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeList, tagQueries.map((q) => q.dataUpdatedAt).join(",")]);
+
+  // Auto-pin: only the filtered subset gets colored on the map. As the
+  // user types a filter or picks tag chips, overlays update to match
+  // what they see in the list. The full unfiltered set is what shows
+  // when there's no filter active.
+  //
+  // Two guards keep this from blowing away overlays unnecessarily:
+  //   1. Skip while targetCollections is undefined (tab switch / first
+  //      load of viewportQuery) — without this, an empty filteredTarget
+  //      from "no data yet" would clear pins and only re-add them once
+  //      the request settles.
+  //   2. Drive the effect off a stable id-key so tag-query refetches
+  //      that don't change the visible-collection set don't retrigger
+  //      the clear-then-re-add cycle.
+  const filteredTarget = useMemo(
+    () =>
+      targetCollections
+        ? filterCollections(targetCollections, filter, activeTags, tagsByCollection)
+        : null,
+    [targetCollections, filter, activeTags, tagsByCollection],
+  );
+  const filteredKey = useMemo(
+    () =>
+      filteredTarget
+        ? filteredTarget.slice(0, AUTO_PIN_LIMIT).map((c) => c.id).join(",")
+        : null,
+    [filteredTarget],
+  );
+  useEffect(() => {
+    if (!filteredTarget) return;
+    const top = filteredTarget.slice(0, AUTO_PIN_LIMIT);
+    const s = useUiStore.getState();
+    s.clearAllCollectionOverlays();
+    for (const c of top) {
+      const [authorId, collectionId] = c.id.split(":");
+      s.addCollectionOverlay(authorId, collectionId, c.color ?? undefined);
+    }
+    // filteredKey gates the effect; filteredTarget is the actual data
+    // we read. ESLint can't see through the gate so silence it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredKey]);
 
   const suggestedTags = useMemo(() => {
     const counts = new Map<string, number>();

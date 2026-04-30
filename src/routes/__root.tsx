@@ -9,9 +9,8 @@ import { PoiClickHandler } from "@/components/map/PoiClickHandler";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
 import { CollectionOverlays } from "@/components/map/CollectionOverlays";
 import { RailOverlayLayer } from "@/components/map/RailOverlayLayer";
-import { CyclingOverlayLayer } from "@/components/map/CyclingOverlayLayer";
+import { BitcoinOverlayLayer } from "@/components/map/BitcoinOverlayLayer";
 import { MapLegends } from "@/components/map/MapLegends";
-import { TerrainOverlayLayer } from "@/components/map/TerrainOverlayLayer";
 import { Buildings3DLayer } from "@/components/map/Buildings3DLayer";
 import { LayerSheet } from "@/components/map/LayerSheet";
 import { LayerSheetTrigger } from "@/components/map/LayerSheetTrigger";
@@ -39,9 +38,8 @@ function RootLayout() {
           <SequenceCoverageLayer />
           <MainMapCaptureOverlay />
           <CollectionOverlays />
-          <TerrainOverlayLayer />
           <RailOverlayLayer />
-          <CyclingOverlayLayer />
+          <BitcoinOverlayLayer />
           <Buildings3DLayer />
           <PoiClickHandler />
           <SelectedPlaceMarker />

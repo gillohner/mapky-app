@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { Star, FileDown, ImageOff, Reply, MessageSquare, ChevronLeft, Pencil } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { usePlacePosts } from "@/lib/api/hooks";
+import { usePlacePosts, useUserProfile } from "@/lib/api/hooks";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { truncatePublicKey, resolveFileUrl } from "@/lib/api/user";
 import type { PostDetails } from "@/types/mapky";
@@ -150,6 +150,8 @@ function PostContent({
   const { isAuthenticated, publicKey } = useAuth();
   const [replyOpen, setReplyOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const { data: authorProfile } = useUserProfile(post.author_id);
+  const authorName = authorProfile?.name?.trim() || null;
 
   const preview = post.content
     ? post.content.slice(0, 60) + (post.content.length > 60 ? "..." : "")
@@ -192,8 +194,10 @@ function PostContent({
         <UserAvatar userId={post.author_id} size={depth > 0 ? 6 : 8} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate font-mono text-xs text-muted">
-              {truncatePublicKey(post.author_id, 6)}
+            <span
+              className={`truncate text-xs ${authorName ? "font-medium text-foreground" : "font-mono text-muted"}`}
+            >
+              {authorName ?? truncatePublicKey(post.author_id, 6)}
             </span>
             <span className="text-xs text-muted">
               {timeAgo(post.indexed_at)}

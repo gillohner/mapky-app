@@ -7,6 +7,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
+import { useMapStore } from "@/stores/map-store";
 
 interface LegendItem {
   label: string;
@@ -157,20 +158,20 @@ function LegendCard({
 }
 
 /**
- * Stacked legend column for active overlays. Cards appear in the
- * bottom-left of the map and only when their overlay is actually on.
- * Multiple cards stack vertically so users can keep both rail and
- * cycling overlays enabled without UI collisions.
+ * Stacked legend column for active overlays/basemaps. Cards appear
+ * in the bottom-left of the map and only when their layer is actually
+ * on. Cycling is now a basemap (read from map-store), rail/metro is
+ * still an overlay (ui-store).
  */
 export function MapLegends() {
-  const cycling = useUiStore((s) => s.cyclingOverlayVisible);
+  const cycling = useMapStore((s) => s.basemap === "cycling");
   const metro = useUiStore((s) => s.metroOverlayVisible);
 
   if (!cycling && !metro) return null;
 
   return (
     <div
-      className="pointer-events-none absolute bottom-4 left-4 z-20 flex max-w-[16rem] flex-col gap-2 md:left-16"
+      className="pointer-events-none absolute bottom-20 left-14 z-20 flex max-w-[16rem] flex-col gap-2 sm:left-16"
       style={{ paddingBottom: "max(0px, env(safe-area-inset-bottom))" }}
     >
       {cycling && (

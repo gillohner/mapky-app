@@ -2,7 +2,7 @@ import type { LayerSpecification, StyleSpecification } from "maplibre-gl";
 import { layers, namedFlavor } from "@protomaps/basemaps";
 import { config } from "@/lib/config";
 
-export type Basemap = "default" | "satellite";
+export type Basemap = "default" | "terrain" | "cycling" | "satellite";
 
 export interface CreateMapStyleOptions {
   /** When basemap === "satellite", overlay vector labels on top of imagery. */
@@ -16,6 +16,12 @@ export function createMapStyle(
 ): StyleSpecification {
   if (basemap === "satellite") {
     return createSatelliteStyle(options.satelliteLabels ?? true);
+  }
+  if (basemap === "terrain") {
+    return createTerrainStyle();
+  }
+  if (basemap === "cycling") {
+    return createCyclingStyle();
   }
   return createDefaultStyle(theme);
 }
@@ -39,6 +45,121 @@ function createDefaultStyle(theme: "light" | "dark"): StyleSpecification {
       },
     },
     layers: layers("protomaps", flavor, { lang: "en" }),
+  };
+}
+
+/**
+ * Terrain basemap — Protomaps grayscale flavor with AWS Open Data
+ * Terrarium hillshade baked in underneath the road/POI layers. The
+ * grayscale background lets the relief shading read clearly without
+ * competing with colored land-use polygons. Theme is ignored: terrain
+ * is one cohesive look regardless of light/dark mode.
+ */
+function createTerrainStyle(): StyleSpecification {
+  const flavor = namedFlavor("grayscale");
+  const key = config.protomaps.key;
+  const protomapsLayers = layers("protomaps", flavor, { lang: "en" });
+
+  // Insert hillshade just BEFORE the first symbol layer (labels) so:
+  //   - all fills (earth, landuse, water) and lines (roads, water lines,
+  //     boundaries, buildings) get tinted by the relief
+  //   - labels stay crisp on top, unaffected by shading
+  // Putting hillshade earlier (just after `background`) doesn't work
+  // because the opaque earth/landuse fills above it cover the relief —
+  // exactly the "map laid over terrain" issue otherwise.
+  const symbolStart = protomapsLayers.findIndex((l) => l.type === "symbol");
+  const splitAt = symbolStart >= 0 ? symbolStart : protomapsLayers.length;
+  const hillshade: LayerSpecification = {
+    id: "aws-terrain-hillshade",
+    type: "hillshade",
+    source: "aws-terrain",
+    paint: {
+      // Same exaggeration ramp the standalone overlay used: strong at
+      // regional scales, fade to 0 by z=16 (Terrarium maxzoom is 15).
+      "hillshade-exaggeration": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        6, 0.7,
+        12, 0.55,
+        14, 0.4,
+        15, 0.25,
+        16, 0,
+      ],
+      "hillshade-shadow-color": "#222",
+      "hillshade-highlight-color": "#fff",
+      "hillshade-accent-color": "#5a5a5a",
+    },
+  };
+
+  return {
+    version: 8,
+    glyphs:
+      "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+    sprite:
+      "https://protomaps.github.io/basemaps-assets/sprites/v4/light",
+    sources: {
+      protomaps: {
+        type: "vector",
+        url: `https://api.protomaps.com/tiles/v4.json?key=${key}`,
+        attribution:
+          '<a href="https://protomaps.com">Protomaps</a> | &copy; <a href="https://openstreetmap.org">OpenStreetMap</a>',
+      },
+      "aws-terrain": {
+        type: "raster-dem",
+        tiles: [
+          "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+        ],
+        tileSize: 256,
+        minzoom: 0,
+        maxzoom: 15,
+        encoding: "terrarium",
+        attribution:
+          'Terrain &copy; <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Open Data — Terrain Tiles</a>',
+      },
+    },
+    layers: [
+      ...protomapsLayers.slice(0, splitAt),
+      hillshade,
+      ...protomapsLayers.slice(splitAt),
+    ],
+  };
+}
+
+/**
+ * Cycling basemap — CyclOSM raster tiles. A complete styled basemap
+ * (full coverage of land/water/roads/labels) focused on cycling
+ * infrastructure. OpenStreetMap.org lists CyclOSM as a base layer
+ * alongside Standard / Transport / Humanitarian, so we treat it the
+ * same here: mutually exclusive with the other basemaps.
+ */
+function createCyclingStyle(): StyleSpecification {
+  return {
+    version: 8,
+    glyphs:
+      "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+    sources: {
+      cyclosm: {
+        type: "raster",
+        tiles: [
+          "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+          "https://b.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+          "https://c.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+        ],
+        tileSize: 256,
+        minzoom: 2,
+        maxzoom: 20,
+        attribution:
+          '<a href="https://www.cyclosm.org" target="_blank" rel="noopener">CyclOSM</a> | hosted by <a href="https://openstreetmap.fr" target="_blank" rel="noopener">OSM-FR</a>',
+      },
+    },
+    layers: [
+      {
+        id: "cyclosm",
+        type: "raster",
+        source: "cyclosm",
+      },
+    ],
   };
 }
 

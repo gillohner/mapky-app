@@ -1,8 +1,7 @@
 import { FolderHeart, MapPin } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useCollectionsForPlace } from "@/lib/api/hooks";
-import { UserAvatar } from "@/components/shared/UserAvatar";
-import { truncatePublicKey } from "@/lib/api/user";
+import { CreatorBadge } from "@/components/discover/CreatorBadge";
 
 interface PlaceCollectionsProps {
   osmType: string;
@@ -40,8 +39,7 @@ export function PlaceCollections({ osmType, osmId }: PlaceCollectionsProps) {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-foreground">{c.name}</p>
                 <div className="flex items-center gap-2 text-xs text-muted">
-                  <UserAvatar userId={authorId} size={5} />
-                  <span>{truncatePublicKey(authorId)}</span>
+                  <CreatorBadge authorId={authorId} />
                   <span className="flex items-center gap-0.5">
                     <MapPin className="h-3 w-3" />
                     {c.items.length}

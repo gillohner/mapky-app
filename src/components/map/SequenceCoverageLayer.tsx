@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import type maplibregl from "maplibre-gl";
 import { useNavigate } from "@tanstack/react-router";
 import { useMapStore } from "@/stores/map-store";
+import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useViewportCaptures } from "@/lib/api/hooks";
 import { useLayerOpacityMultiplier } from "@/lib/map/dim";
@@ -126,11 +127,27 @@ export function SequenceCoverageLayer() {
   }, [map, updateBounds]);
 
   const { data: captures } = useViewportCaptures(bounds);
+  const visibleIds = useUiStore((s) => s.visibleCaptureIds);
+  const pinned = useUiStore((s) => s.pinnedCaptures);
 
-  const geojson = useMemo(
-    () => (captures?.length ? buildCoverageGeoJSON(captures) : null),
-    [captures],
-  );
+  const geojson = useMemo(() => {
+    const base = captures?.length
+      ? visibleIds
+        ? captures.filter((c) => visibleIds.has(c.id))
+        : captures
+      : [];
+    // Same union as CaptureMarkersLayer — pinned siblings keep the
+    // coverage line from breaking up when the user zooms in past the
+    // sequence's bbox.
+    const merged = pinned?.length
+      ? (() => {
+          const seen = new Set(base.map((c) => c.id));
+          const extras = pinned.filter((c) => !seen.has(c.id));
+          return extras.length ? [...base, ...extras] : base;
+        })()
+      : base;
+    return merged.length ? buildCoverageGeoJSON(merged) : null;
+  }, [captures, visibleIds, pinned]);
 
   // Hold latest GeoJSON in a ref so the deferred "idle" / styledata
   // re-attach can populate without waiting for another React render.

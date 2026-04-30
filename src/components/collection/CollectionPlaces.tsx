@@ -2,7 +2,12 @@ import { useState } from "react";
 import { MapPin } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
-import { useOsmLookup } from "@/lib/api/hooks";
+import {
+  useOsmLookup,
+  usePlaceDetail,
+  usePlaceTags,
+} from "@/lib/api/hooks";
+import { placeStarsLabel } from "@/lib/places/enrich-search";
 
 interface CollectionPlacesProps {
   items: string[];
@@ -26,7 +31,7 @@ export function CollectionPlaces({ items, authorId, collectionId }: CollectionPl
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       {visible.map((url) => {
         const parsed = parseOsmCanonical(url);
         if (!parsed) return null;
@@ -65,6 +70,11 @@ function PlaceItem({
 }) {
   const navigate = useNavigate();
   const { data: nominatim, isLoading } = useOsmLookup(osmType, osmId, true);
+  // Rating + tags live on the indexer side (mapky-nexus-plugin), not
+  // in Nominatim. Fetch both per row — hooks share TanStack cache keys
+  // with PlaceList / PlacePanel so opening a place is instant.
+  const { data: place } = usePlaceDetail(osmType, osmId);
+  const { data: tags } = usePlaceTags(osmType, osmId);
 
   const name =
     nominatim?.name ||
@@ -72,6 +82,9 @@ function PlaceItem({
     fallbackPlaceLabel(osmType, osmId);
 
   const typeLabel = nominatim?.type?.replace(/_/g, " ") ?? "";
+  const stars = placeStarsLabel(place ?? null);
+  const topTags = (tags ?? []).slice(0, 3);
+  const overflow = (tags?.length ?? 0) - topTags.length;
 
   const handleClick = () => {
     navigate({
@@ -90,21 +103,43 @@ function PlaceItem({
   return (
     <button
       onClick={handleClick}
-      className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-surface"
+      className="flex w-full items-start gap-2 rounded-md border border-border bg-surface p-2 text-left transition-colors hover:border-accent"
     >
-      <MapPin className="h-4 w-4 flex-shrink-0 text-accent" />
+      <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
       <div className="min-w-0 flex-1">
         {isLoading ? (
           <div className="h-4 w-32 animate-pulse rounded bg-border" />
         ) : (
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm text-foreground">{name}</span>
-            {typeLabel && typeLabel !== "yes" && (
-              <span className="flex-shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10px] capitalize text-muted">
-                {typeLabel}
-              </span>
+          <>
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm text-foreground">{name}</span>
+              {typeLabel && typeLabel !== "yes" && (
+                <span className="flex-shrink-0 rounded bg-background px-1.5 py-0.5 text-[10px] capitalize text-muted">
+                  {typeLabel}
+                </span>
+              )}
+              {stars && (
+                <span className="flex-shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                  {stars}
+                </span>
+              )}
+            </div>
+            {topTags.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {topTags.map((t) => (
+                  <span
+                    key={t.label}
+                    className="rounded-full bg-background px-2 py-0.5 text-[11px] text-muted"
+                  >
+                    {t.label}
+                  </span>
+                ))}
+                {overflow > 0 && (
+                  <span className="text-[10px] text-muted">+{overflow}</span>
+                )}
+              </div>
             )}
-          </div>
+          </>
         )}
       </div>
     </button>

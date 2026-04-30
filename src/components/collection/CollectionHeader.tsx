@@ -1,7 +1,6 @@
 import { MapPin } from "lucide-react";
 import type { CollectionDetails } from "@/types/mapky";
-import { UserAvatar } from "@/components/shared/UserAvatar";
-import { truncatePublicKey } from "@/lib/api/user";
+import { CreatorBadge } from "@/components/discover/CreatorBadge";
 
 interface CollectionHeaderProps {
   collection?: CollectionDetails;
@@ -23,11 +22,8 @@ export function CollectionHeader({ collection, authorId }: CollectionHeaderProps
         </p>
       )}
 
-      <div className="mt-2 flex items-center gap-2">
-        <UserAvatar userId={authorId} size={6} />
-        <span className="text-xs text-muted">
-          {truncatePublicKey(authorId)}
-        </span>
+      <div className="mt-2">
+        <CreatorBadge authorId={authorId} size="sm" />
       </div>
 
       <div className="mt-2 flex items-center gap-2 text-xs text-muted">

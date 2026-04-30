@@ -20,6 +20,12 @@ export interface NominatimResult {
   address: Record<string, string>;
   lat: number | null;
   lon: number | null;
+  /**
+   * Raw OSM tags beyond the structured fields, populated when the
+   * lookup is called with `extratags=1`. Used by `BitcoinAcceptance`
+   * to read `currency:XBT` / `payment:*` without a second API call.
+   */
+  extratags?: Record<string, string>;
 }
 
 export async function reverseGeocode(
@@ -238,6 +244,9 @@ export async function lookupOsmElement(
   url.searchParams.set("osm_ids", `${prefix}${osmId}`);
   url.searchParams.set("format", "json");
   url.searchParams.set("addressdetails", "1");
+  // Extra tags include the BTCMap payment:* / currency:XBT signals
+  // that the place card reads to render the Bitcoin acceptance row.
+  url.searchParams.set("extratags", "1");
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
@@ -270,6 +279,7 @@ export async function lookupOsmElement(
     address: r.address ?? {},
     lat: r.lat ? Number(r.lat) : null,
     lon: r.lon ? Number(r.lon) : null,
+    extratags: r.extratags ?? undefined,
   };
 
   setCache(cacheKey, result);

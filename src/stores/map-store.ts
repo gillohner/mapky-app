@@ -13,8 +13,8 @@ interface MapStore {
   theme: "light" | "dark";
   setTheme: (theme: "light" | "dark") => void;
 
-  basemap: "default" | "satellite";
-  setBasemap: (basemap: "default" | "satellite") => void;
+  basemap: "default" | "terrain" | "cycling" | "satellite";
+  setBasemap: (basemap: "default" | "terrain" | "cycling" | "satellite") => void;
 
   /** Show vector labels on top of satellite imagery (hybrid mode). */
   satelliteLabels: boolean;

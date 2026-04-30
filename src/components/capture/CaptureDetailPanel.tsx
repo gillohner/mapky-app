@@ -48,6 +48,7 @@ async function fetchParallel<A, B>(
 }
 import { VideoSphereViewer } from "./VideoSphereViewer";
 import { useUiStore } from "@/stores/ui-store";
+import { useMapStore } from "@/stores/map-store";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import type { GeoCaptureDetails, GeoCaptureKind } from "@/types/mapky";
 
@@ -91,6 +92,7 @@ export function CaptureDetailPanel({
   const queryClient = useQueryClient();
   const setStreetViewActive = useUiStore((s) => s.setStreetViewActive);
   const setStreetViewCenter = useUiStore((s) => s.setStreetViewCenter);
+  const map = useMapStore((s) => s.map);
   const streetViewExpanded = useUiStore((s) => s.streetViewExpanded);
   const toggleStreetViewExpanded = useUiStore((s) => s.toggleStreetViewExpanded);
 
@@ -119,6 +121,33 @@ export function CaptureDetailPanel({
     };
   }, [isImmersive, capture, setStreetViewActive, setStreetViewCenter]);
 
+  // Fly the main map to the capture's location once the data arrives.
+  // Immersive captures already drive the map via streetViewCenter →
+  // MapView, so skip this for them. Delay 350ms to let the sidebar's
+  // padding ease finish first (otherwise it cancels the fly).
+  const flyDone = useRef(false);
+  useEffect(() => {
+    if (!map || !capture || isImmersive) return;
+    if (flyDone.current) return;
+    flyDone.current = true;
+    const t = setTimeout(() => {
+      map.flyTo({
+        center: [capture.lon, capture.lat],
+        zoom: 17,
+        duration: 1500,
+      });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [map, capture, isImmersive]);
+
+  // Re-arm the fly when the user navigates between captures (sequence
+  // siblings, "next" / "prev"): the panel stays mounted, only the
+  // captureId in the URL changes, so the ref above would otherwise
+  // pin to the first capture.
+  useEffect(() => {
+    flyDone.current = false;
+  }, [captureId]);
+
   // Sequence siblings for navigation
   const seqRef = useMemo(
     () => parseSequenceUri(capture?.sequence_uri ?? null),
@@ -134,6 +163,24 @@ export function CaptureDetailPanel({
       (a, b) => (a.sequence_index ?? 0) - (b.sequence_index ?? 0),
     );
   }, [siblings]);
+
+  // Pin the active sequence's captures (plus the current capture) on
+  // the map so the coverage line stays drawn even when the user zooms
+  // in past the bbox of the siblings. Cleared on unmount.
+  const setPinnedCaptures = useUiStore((s) => s.setPinnedCaptures);
+  useEffect(() => {
+    if (!capture) {
+      setPinnedCaptures(null);
+      return;
+    }
+    const merged = orderedSiblings.length > 0
+      ? orderedSiblings.some((s) => s.id === capture.id)
+        ? orderedSiblings
+        : [capture, ...orderedSiblings]
+      : [capture];
+    setPinnedCaptures(merged);
+    return () => setPinnedCaptures(null);
+  }, [capture, orderedSiblings, setPinnedCaptures]);
   const currentIdx = useMemo(() => {
     if (!capture || orderedSiblings.length === 0) return -1;
     return orderedSiblings.findIndex((s) => s.id === capture.id);

@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueries } from "@tanstack/react-query";
-import { Loader2, MapPin, Star, Tag as TagIcon } from "lucide-react";
+import { Loader2, MapPin } from "lucide-react";
+import { placeStarsLabel } from "@/lib/places/enrich-search";
 import { useViewportPlaces, useOsmLookup } from "@/lib/api/hooks";
 import { fetchPlaceTags } from "@/lib/api/mapky";
 import { lookupOsmElement } from "@/lib/api/nominatim";
@@ -13,6 +14,7 @@ import {
 } from "@/hooks/use-filter-viewport";
 import { useFrozenWhile } from "@/hooks/use-frozen-while";
 import { useMapStore } from "@/stores/map-store";
+import { useUiStore } from "@/stores/ui-store";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import {
   DiscoverFilter,
@@ -168,6 +170,19 @@ export function PlaceList() {
     bounds: pointsToBounds(filtered.map((p) => ({ lat: p.lat, lon: p.lon }))),
   });
 
+  // Push filtered keys into ui-store so MapkyPlacesLayer can match
+  // the sidebar — only show dots for the places the user can see in
+  // the list. Clear on unmount.
+  useEffect(() => {
+    const keys = new Set(filtered.map((p) => `${p.osm_type}:${p.osm_id}`));
+    useUiStore.getState().setVisiblePlaceKeys(keys);
+  }, [filtered]);
+  useEffect(() => {
+    return () => {
+      useUiStore.getState().setVisiblePlaceKeys(null);
+    };
+  }, []);
+
   return (
     <DiscoverSidebar title="Places" onClose={close}>
       <DiscoverFilter
@@ -273,18 +288,9 @@ function PlaceRow({
               {typeLabel}
             </span>
           )}
-        </div>
-        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted">
-          {place.review_count > 0 && (
-            <span className="flex items-center gap-0.5">
-              <Star className="h-3 w-3" />
-              {place.review_count}
-            </span>
-          )}
-          {place.tag_count > 0 && (
-            <span className="flex items-center gap-0.5">
-              <TagIcon className="h-3 w-3" />
-              {place.tag_count}
+          {placeStarsLabel(place) && (
+            <span className="flex-shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+              {placeStarsLabel(place)}
             </span>
           )}
         </div>

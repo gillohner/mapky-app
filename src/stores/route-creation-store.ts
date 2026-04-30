@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import type {
   RouteActivity,
   RouteFullJson,
@@ -209,8 +208,7 @@ function bump(state: { computeNonce: number }): { computeNonce: number } {
 }
 
 export const useRouteCreationStore = create<RouteCreationState>()(
-  persist(
-    (set) => ({
+  (set) => ({
   ...INITIAL,
 
   open: (mode = "create") =>
@@ -372,33 +370,18 @@ export const useRouteCreationStore = create<RouteCreationState>()(
     }));
   },
 }),
-    {
-      name: "mapky-directions",
-      version: 1,
-      // Persist only the user-authored bits — slots, activity, prefs, and
-      // the save-form draft (name/description). Don't persist the snapped
-      // result itself: it's expensive to serialize, depends on Valhalla
-      // being callable, and we want a fresh snap on rehydrate anyway.
-      // Don't persist isOpen either — opening directions on every app
-      // boot would be intrusive.
-      partialize: (state) => ({
-        slots: state.slots,
-        activity: state.activity,
-        name: state.name,
-        description: state.description,
-        imageUri: state.imageUri,
-        preferences: state.preferences,
-      }),
-      // Bump computeNonce after rehydrate so the snap effect fires once
-      // we land in directions mode again.
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          state.computeNonce = (state.computeNonce ?? 0) + 1;
-        }
-      },
-    },
-  ),
 );
+
+// Old `mapky-directions` localStorage entry from when this store was
+// persisted. Drop it once on module load so users don't carry stale
+// slots/snaps from previous sessions.
+if (typeof window !== "undefined") {
+  try {
+    window.localStorage.removeItem("mapky-directions");
+  } catch {
+    // private browsing / disabled storage — nothing to clean up
+  }
+}
 
 // Dev-only: expose the store on window for E2E tests / quick debugging.
 // Bundled out of production builds via the Vite import.meta.env.DEV gate.

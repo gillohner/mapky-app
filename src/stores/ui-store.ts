@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { GeoCaptureDetails } from "@/types/mapky";
 
 export interface PendingPoiClick {
   lng: number;
@@ -71,15 +72,10 @@ interface UiStore {
   setMetroOverlayVisible: (visible: boolean) => void;
   toggleMetroOverlay: () => void;
 
-  /** CyclOSM cycling overlay — bike infrastructure, lanes, paths. */
-  cyclingOverlayVisible: boolean;
-  setCyclingOverlayVisible: (visible: boolean) => void;
-  toggleCyclingOverlay: () => void;
-
-  /** AWS Terrarium hillshade — terrain relief from elevation tiles. */
-  terrainOverlayVisible: boolean;
-  setTerrainOverlayVisible: (visible: boolean) => void;
-  toggleTerrainOverlay: () => void;
+  /** Bitcoin Accepted overlay — OSM POIs with currency:XBT=yes. */
+  bitcoinOverlayVisible: boolean;
+  setBitcoinOverlayVisible: (visible: boolean) => void;
+  toggleBitcoinOverlay: () => void;
 
   /** Extrude buildings using the height field from Protomaps tiles. */
   buildings3DVisible: boolean;
@@ -104,6 +100,39 @@ interface UiStore {
   hiddenLayers: Set<DimmableLayer>;
   setHidden: (layer: DimmableLayer, on: boolean) => void;
   clearHidden: () => void;
+
+  /**
+   * Per-list filter projection onto the map. When set, the matching
+   * map layer only renders features whose key is present in the set.
+   * `null` means "no filter — show every feature".
+   *
+   * Driven by the discover sidebars: PlaceList / CaptureList / etc.
+   * push the keys of their currently-visible (post-filter) items so
+   * the green dots / camera icons / collection overlays match what
+   * the user sees in the sidebar.
+   *
+   * Place keys are `${osm_type}:${osm_id}`; capture keys are the
+   * compound `${author}:${id}` used by the indexer; collection keys
+   * are also the compound id. Each layer uses its own field to avoid
+   * coupling.
+   */
+  visiblePlaceKeys: Set<string> | null;
+  setVisiblePlaceKeys: (s: Set<string> | null) => void;
+
+  visibleCaptureIds: Set<string> | null;
+  setVisibleCaptureIds: (s: Set<string> | null) => void;
+
+  visibleCollectionIds: Set<string> | null;
+  setVisibleCollectionIds: (s: Set<string> | null) => void;
+
+  /**
+   * Captures that should always render on the map regardless of the
+   * current viewport bbox. Set by CaptureDetailPanel to the active
+   * sequence's siblings, so zooming in on a single capture doesn't
+   * lose the connecting coverage line. Cleared on unmount.
+   */
+  pinnedCaptures: GeoCaptureDetails[] | null;
+  setPinnedCaptures: (c: GeoCaptureDetails[] | null) => void;
 
   layerSheetOpen: boolean;
   setLayerSheetOpen: (open: boolean) => void;
@@ -153,17 +182,11 @@ export const useUiStore = create<UiStore>()(
       toggleMetroOverlay: () =>
         set((s) => ({ metroOverlayVisible: !s.metroOverlayVisible })),
 
-      cyclingOverlayVisible: false,
-      setCyclingOverlayVisible: (visible) =>
-        set({ cyclingOverlayVisible: visible }),
-      toggleCyclingOverlay: () =>
-        set((s) => ({ cyclingOverlayVisible: !s.cyclingOverlayVisible })),
-
-      terrainOverlayVisible: false,
-      setTerrainOverlayVisible: (visible) =>
-        set({ terrainOverlayVisible: visible }),
-      toggleTerrainOverlay: () =>
-        set((s) => ({ terrainOverlayVisible: !s.terrainOverlayVisible })),
+      bitcoinOverlayVisible: false,
+      setBitcoinOverlayVisible: (visible) =>
+        set({ bitcoinOverlayVisible: visible }),
+      toggleBitcoinOverlay: () =>
+        set((s) => ({ bitcoinOverlayVisible: !s.bitcoinOverlayVisible })),
 
       buildings3DVisible: false,
       setBuildings3DVisible: (visible) =>
@@ -180,6 +203,18 @@ export const useUiStore = create<UiStore>()(
           return { hiddenLayers: next };
         }),
       clearHidden: () => set({ hiddenLayers: new Set() }),
+
+      visiblePlaceKeys: null,
+      setVisiblePlaceKeys: (s) => set({ visiblePlaceKeys: s }),
+
+      visibleCaptureIds: null,
+      setVisibleCaptureIds: (s) => set({ visibleCaptureIds: s }),
+
+      visibleCollectionIds: null,
+      setVisibleCollectionIds: (s) => set({ visibleCollectionIds: s }),
+
+      pinnedCaptures: null,
+      setPinnedCaptures: (c) => set({ pinnedCaptures: c }),
 
       dimmedLayers: new Set<DimmableLayer>(),
       setDimmed: (layer, on) =>
@@ -244,12 +279,9 @@ export const useUiStore = create<UiStore>()(
     }),
     {
       name: "mapky-layers",
-      // v3: re-introduce placesLayerVisible / capturesLayerVisible
-      // alongside the raster overlay toggles. Detail panels and
-      // sidebar lists still drive visibility via useAutoFocusLayer
-      // when one is open; these flags only kick in on the bare home
-      // map where there's no focused surface.
-      version: 3,
+      // v6: add bitcoinOverlayVisible — BTCMap-style OSM Bitcoin
+      // acceptance overlay (currency:XBT=yes).
+      version: 6,
       // Persist user-controlled toggles only. Theme/basemap lives in
       // map-store; dimmedLayers / hiddenLayers / sheet open-state /
       // sidebar / streetview / POI-click context are all ephemeral
@@ -258,8 +290,7 @@ export const useUiStore = create<UiStore>()(
         placesLayerVisible: state.placesLayerVisible,
         capturesLayerVisible: state.capturesLayerVisible,
         metroOverlayVisible: state.metroOverlayVisible,
-        cyclingOverlayVisible: state.cyclingOverlayVisible,
-        terrainOverlayVisible: state.terrainOverlayVisible,
+        bitcoinOverlayVisible: state.bitcoinOverlayVisible,
         buildings3DVisible: state.buildings3DVisible,
       }),
     },

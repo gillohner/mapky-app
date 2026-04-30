@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueries } from "@tanstack/react-query";
 import { Route as CapturesRoute } from "@/routes/captures";
@@ -26,6 +26,7 @@ import {
 } from "@/hooks/use-filter-viewport";
 import { resolveFileUrl } from "@/lib/api/user";
 import { useMapStore } from "@/stores/map-store";
+import { useUiStore } from "@/stores/ui-store";
 import { fetchGeoCaptureTags } from "@/lib/api/mapky";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
 import { DiscoverNewButton } from "@/components/discover/NewButton";
@@ -174,6 +175,19 @@ export function CaptureList() {
   // capture markers stand alone. Plain browsing and filtering both
   // follow the same rule.
   useAutoFocusLayer("captures", { hide: true });
+
+  // Project the filtered list onto the map: capture markers + sequence
+  // lines only render for captures the user can see in the sidebar.
+  // Clear on unmount so the home map shows everything again.
+  useEffect(() => {
+    const ids = new Set(filtered.map((c) => c.id));
+    useUiStore.getState().setVisibleCaptureIds(ids);
+  }, [filtered]);
+  useEffect(() => {
+    return () => {
+      useUiStore.getState().setVisibleCaptureIds(null);
+    };
+  }, []);
 
   return (
     <DiscoverSidebar
