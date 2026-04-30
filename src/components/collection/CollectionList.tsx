@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, FolderHeart, MapPin, Eye, EyeOff, Layers, Loader2 } from "lucide-react";
+import { Plus, FolderHeart, MapPin, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Route as CollectionsRoute } from "@/routes/collections";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -31,9 +31,6 @@ export function CollectionList() {
   const search = CollectionsRoute.useSearch();
   const { isAuthenticated, publicKey } = useAuth();
   const { data: collections, isLoading } = useUserCollections(publicKey);
-  const overlays = useUiStore((s) => s.activeCollectionOverlays);
-  const addOverlay = useUiStore((s) => s.addCollectionOverlay);
-  const clearAllOverlays = useUiStore((s) => s.clearAllCollectionOverlays);
   const [creating, setCreating] = useState(false);
 
   // Tab lives in the URL so reload + history-back from a collection
@@ -96,32 +93,7 @@ export function CollectionList() {
     return list;
   }, [publicKey]);
 
-  const anyVisible = overlays.size > 0;
-  const toggleAll = () => {
-    if (anyVisible) {
-      clearAllOverlays();
-    } else if (collections) {
-      for (const c of collections) {
-        const [authorId, collectionId] = c.id.split(":");
-        addOverlay(authorId, collectionId, c.color ?? undefined);
-      }
-    }
-  };
-
   const close = () => navigate({ to: "/" });
-
-  const rightHeader =
-    collections && collections.length > 0 ? (
-      <button
-        onClick={toggleAll}
-        title={anyVisible ? "Hide all on map" : "Show all on map"}
-        className="rounded-lg p-1 text-muted transition-colors hover:bg-surface hover:text-foreground"
-      >
-        <Layers
-          className={`h-4 w-4 ${anyVisible ? "text-accent" : ""}`}
-        />
-      </button>
-    ) : undefined;
 
   return (
     <DiscoverSidebar
@@ -130,7 +102,6 @@ export function CollectionList() {
       activeTab={tab}
       onTabChange={(id) => setTab(id as Tab)}
       onClose={close}
-      rightHeaderSlot={rightHeader}
     >
       {tab === "viewport" ? (
         <ViewportCollections query={viewportQuery} />
