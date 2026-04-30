@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Bike,
   Car,
   ChevronDown,
+  ChevronLeft,
   Footprints,
   Mountain,
   Plus,
   Settings2,
   X,
 } from "lucide-react";
+import { useBackOr } from "@/hooks/use-back-or";
 import {
   slotToWaypoint,
   useRouteCreationStore,
@@ -79,12 +82,17 @@ const ALL_MODES = [...FOOT_MODES, ...VEHICLE_MODES];
 const RECOMPUTE_DEBOUNCE_MS = 500;
 
 export function DirectionsBar() {
+  const navigate = useNavigate();
   const isOpen = useRouteCreationStore((s) => s.isOpen);
   const slots = useRouteCreationStore((s) => s.slots);
   const activity = useRouteCreationStore((s) => s.activity);
   const setActivity = useRouteCreationStore((s) => s.setActivity);
   const addStop = useRouteCreationStore((s) => s.addStop);
   const close = useRouteCreationStore((s) => s.close);
+  // Back → history.back so the user lands on whatever opened the
+  // directions panel (the routes list, a route detail, etc.) without
+  // tearing down the in-progress draft. Deep-link fallback: /routes.
+  const back = useBackOr(() => navigate({ to: "/routes" }));
   const computeNonce = useRouteCreationStore((s) => s.computeNonce);
   const setComputedBundle = useRouteCreationStore((s) => s.setComputedBundle);
   const setComputing = useRouteCreationStore((s) => s.setComputing);
@@ -236,14 +244,17 @@ export function DirectionsBar() {
   return (
     <div className="border-b border-border bg-background p-3">
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-muted">
-          Directions
-        </h2>
+        <button
+          onClick={back}
+          className="flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
+          aria-label="Back"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+          Routes
+        </button>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => {
-              close();
-            }}
+            onClick={() => close()}
             className="rounded-md p-1.5 text-muted hover:bg-surface hover:text-foreground"
             aria-label="Close directions"
           >
