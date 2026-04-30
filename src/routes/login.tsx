@@ -160,7 +160,7 @@ function LoginPage() {
         profile.json,
       );
 
-      const testPassphrase = "testnet123";
+      const testPassphrase = "localhost.ko18e@simplelogin.com";
       const recoveryFileData = keypair.createRecoveryFile(testPassphrase);
       const blob = new Blob([new Uint8Array(recoveryFileData)], {
         type: "application/octet-stream",

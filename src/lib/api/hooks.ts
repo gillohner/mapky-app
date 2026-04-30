@@ -7,6 +7,7 @@ import {
   fetchPostTags,
   fetchCollection,
   fetchUserCollections,
+  fetchViewportCollections,
   fetchCollectionsForPlace,
   fetchCollectionTags,
   fetchUserPosts,
@@ -157,6 +158,15 @@ export function useUserCollections(userId: string | null) {
     queryKey: ["mapky", "collections", "user", userId],
     queryFn: () => fetchUserCollections(userId!),
     enabled: !!userId,
+  });
+}
+
+export function useViewportCollections(bounds: ViewportBounds | null) {
+  return useQuery({
+    queryKey: ["mapky", "collections", "viewport", bounds],
+    queryFn: () => fetchViewportCollections(bounds!),
+    enabled: !!bounds,
+    staleTime: 30_000,
   });
 }
 

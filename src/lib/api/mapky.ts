@@ -103,6 +103,26 @@ export async function fetchUserCollections(
   return data;
 }
 
+/** Public collections that contain at least one Place inside the bbox. */
+export async function fetchViewportCollections(
+  bounds: ViewportBounds,
+  limit = 100,
+): Promise<CollectionDetails[]> {
+  const { data } = await nexusClient.get<CollectionDetails[]>(
+    "/v0/mapky/collections/viewport",
+    {
+      params: {
+        min_lat: bounds.minLat,
+        min_lon: bounds.minLon,
+        max_lat: bounds.maxLat,
+        max_lon: bounds.maxLon,
+        limit,
+      },
+    },
+  );
+  return data;
+}
+
 export async function fetchCollectionsForPlace(
   osmType: string,
   osmId: number,

@@ -1,8 +1,11 @@
 import { useMemo, useState } from "react";
-import { Plus, FolderHeart, MapPin, Eye, EyeOff, Layers } from "lucide-react";
+import { Plus, FolderHeart, MapPin, Eye, EyeOff, Layers, Loader2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { useUserCollections, useViewportPlaces } from "@/lib/api/hooks";
+import {
+  useUserCollections,
+  useViewportCollections,
+} from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
@@ -27,26 +30,13 @@ export function CollectionList() {
   const [creating, setCreating] = useState(false);
   const [tab, setTab] = useState<Tab>(publicKey ? "mine" : "viewport");
 
-  // Viewport-filtered collections: intersect each collection's `items`
-  // (OSM canonical URLs) with the OSM URLs of indexed places currently
-  // in view. A public-collections viewport endpoint is the proper fix
-  // (mapky-nexus-plugin todo); until then, this surfaces my own
-  // collections that are relevant to where I'm looking.
+  // Public viewport: backed by the indexer's
+  // /v0/mapky/collections/viewport endpoint, which returns every
+  // collection (any author) with at least one place inside the bbox.
   const bbox = useViewportBounds(tab === "viewport");
-  const { data: viewportPlaces } = useViewportPlaces(
+  const viewportQuery = useViewportCollections(
     tab === "viewport" ? bbox : null,
   );
-  const viewportCanonicals = useMemo(
-    () => new Set((viewportPlaces ?? []).map((p) => p.osm_canonical)),
-    [viewportPlaces],
-  );
-  const viewportCollections = useMemo(() => {
-    if (!collections) return [];
-    if (viewportCanonicals.size === 0) return [];
-    return collections.filter((c) =>
-      c.items.some((u) => viewportCanonicals.has(u)),
-    );
-  }, [collections, viewportCanonicals]);
 
   const tabs: DiscoverTab[] = useMemo(() => {
     const list: DiscoverTab[] = [];
@@ -92,10 +82,7 @@ export function CollectionList() {
       rightHeaderSlot={rightHeader}
     >
       {tab === "viewport" ? (
-        <ViewportCollections
-          collections={viewportCollections}
-          isAuthenticated={isAuthenticated}
-        />
+        <ViewportCollections query={viewportQuery} />
       ) : !isAuthenticated ? (
         <p className="py-8 text-center text-sm text-muted">
           Sign in to create and view collections
@@ -130,30 +117,33 @@ export function CollectionList() {
 }
 
 function ViewportCollections({
-  collections,
-  isAuthenticated,
+  query,
 }: {
-  collections: CollectionDetails[];
-  isAuthenticated: boolean;
+  query: ReturnType<typeof useViewportCollections>;
 }) {
-  if (!isAuthenticated) {
+  if (query.isLoading) {
     return (
-      <p className="py-8 text-center text-sm text-muted">
-        Sign in to see your collections that intersect the map view.
+      <p className="flex items-center gap-2 text-xs text-muted">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Loading…
       </p>
     );
   }
-  if (collections.length === 0) {
+  if (query.error) {
+    return (
+      <p className="text-xs text-red-500">{(query.error as Error).message}</p>
+    );
+  }
+  if (!query.data || query.data.length === 0) {
     return (
       <p className="text-xs text-muted">
-        None of your collections have places in this area. Pan or zoom out
-        to find them.
+        No collections in this area yet. Pan or zoom out to find more.
       </p>
     );
   }
   return (
     <div className="space-y-3">
-      {collections.map((c) => (
+      {query.data.map((c) => (
         <CollectionCard key={c.id} collection={c} />
       ))}
     </div>
