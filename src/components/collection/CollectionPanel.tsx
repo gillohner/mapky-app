@@ -5,6 +5,7 @@ import type { CollectionOverlayEntry } from "@/stores/ui-store";
 import { useNavigate } from "@tanstack/react-router";
 import { useCollection } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
+import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { CollectionHeader } from "./CollectionHeader";
 import { CollectionActions } from "./CollectionActions";
 import { CollectionTags } from "./CollectionTags";
@@ -30,6 +31,10 @@ export function CollectionPanel({ authorId, collectionId, fromSearchQuery, fromS
     setSidebarOpen(true);
     return () => setSidebarOpen(false);
   }, [setSidebarOpen]);
+
+  // Dim the always-on Mapky data layers so this collection's overlay
+  // owns the visual focus.
+  useAutoFocusLayer("collections");
 
   // On mount: save the user's pinned overlays, swap to ONLY this
   // collection's overlay so the focused detail isn't visually competing

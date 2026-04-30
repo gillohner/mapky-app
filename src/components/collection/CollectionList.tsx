@@ -37,7 +37,7 @@ export function CollectionList() {
 
   // Browsing collections → fade Mapky places + captures so the
   // collection overlays pop. Cleared on unmount by useAutoFocusLayer.
-  useAutoFocusLayer("places");
+  useAutoFocusLayer("collections");
 
   // Public viewport: backed by the indexer's
   // /v0/mapky/collections/viewport endpoint, which returns every
