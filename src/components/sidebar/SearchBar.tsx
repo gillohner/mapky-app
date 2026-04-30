@@ -509,9 +509,9 @@ function PlaceResultRow({
             {topTags.map((t) => (
               <span
                 key={t.label}
-                className="rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted"
+                className="rounded-full bg-background px-2 py-0.5 text-[11px] text-muted"
               >
-                #{t.label}
+                {t.label}
               </span>
             ))}
             {tags.length > topTags.length && (

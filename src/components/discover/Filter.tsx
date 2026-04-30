@@ -105,10 +105,10 @@ export function DiscoverFilter({
             <button
               key={t}
               onClick={() => onRemoveTag?.(t)}
-              className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white hover:bg-accent-hover"
+              className="flex items-center gap-1 rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-white hover:bg-accent-hover"
               aria-label={`Remove tag ${t}`}
             >
-              <span>#{t}</span>
+              <span>{t}</span>
               <X className="h-3 w-3" />
             </button>
           ))}
@@ -136,9 +136,9 @@ export function DiscoverFilter({
             <button
               key={t}
               onClick={() => onAddTag?.(t)}
-              className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted transition-colors hover:border-accent hover:text-foreground"
+              className="rounded-full border border-border bg-background px-2.5 py-0.5 text-xs text-muted transition-colors hover:border-accent hover:text-foreground"
             >
-              #{t}
+              {t}
             </button>
           ))}
         </div>
