@@ -14,6 +14,7 @@ import { emitGpx, gpxFilename } from "@/lib/gpx/emit";
 import type { LngLat } from "@/lib/routing/types";
 import type { RouteDetails } from "@/types/mapky";
 import { RoutePolylineLayer } from "@/components/map/RoutePolylineLayer";
+import { RouteWaypointPins } from "@/components/map/RouteWaypointPins";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import { RouteStats } from "./RouteStats";
 import { RouteTags } from "./RouteTags";
@@ -174,6 +175,9 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   return (
     <>
       <RoutePolylineLayer coords={decoded} dashed={!body.data?.geometry} />
+      {body.data && body.data.waypoints.length > 0 && (
+        <RouteWaypointPins waypoints={body.data.waypoints} />
+      )}
 
       <DiscoverSidebar title="Route" onClose={close} onBack={back} backLabel="Routes" mobileCollapsible>
         <div className="space-y-3">
