@@ -9,18 +9,28 @@ export const DIM_FACTOR = 0.4;
 
 /**
  * Returns the current opacity multiplier for a Mapky data layer:
- *   - 0   when the layer is hidden via focus mode (sidebar / detail /
- *         search) OR the user toggled it off in the Layers sheet.
- *   - 0.4 when the layer is dimmed (default focus behavior — visible
- *         but de-emphasized so the focused content stands out).
+ *   - 0   when focus mode hides this layer, OR no sidebar is open
+ *         and the user has it toggled off in the Layers sheet.
+ *   - 0.4 when the layer is dimmed (visible context behind a focused
+ *         surface — currently unused since we hide instead of dim,
+ *         but the tier is kept for future tweaks).
  *   - 1   otherwise.
  *
- * Hidden / off both take precedence over dimmed. Each map-layer
- * component multiplies its baked opacity values by the result and
- * reapplies via setPaintProperty.
+ * Focus-mode detail: when any list / detail / search panel calls
+ * `useAutoFocusLayer`, every non-focused Mapky layer ends up in
+ * `hiddenLayers`. The remaining (un-hidden) Mapky layer is the
+ * focused one — the user explicitly opened a sidebar for it, so we
+ * override their Layers-sheet toggle and force it visible. The
+ * toggle re-applies as soon as the sidebar closes.
+ *
+ * Each map-layer component multiplies its baked opacity values by
+ * the result and reapplies via setPaintProperty.
  */
 export function useLayerOpacityMultiplier(layer: DimmableLayer): number {
   const focusHidden = useUiStore((s) => s.hiddenLayers.has(layer));
+  const focusActive = useUiStore(
+    (s) => s.hiddenLayers.size > 0 || s.dimmedLayers.size > 0,
+  );
   const dimmed = useUiStore((s) => s.dimmedLayers.has(layer));
   const userVisible = useUiStore((s) =>
     layer === "places"
@@ -29,6 +39,8 @@ export function useLayerOpacityMultiplier(layer: DimmableLayer): number {
         ? s.capturesLayerVisible
         : true,
   );
-  if (focusHidden || !userVisible) return 0;
+  if (focusHidden) return 0;
+  // No focus active → the user's toggle in the Layers sheet wins.
+  if (!focusActive && !userVisible) return 0;
   return dimmed ? DIM_FACTOR : 1;
 }
