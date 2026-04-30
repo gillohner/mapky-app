@@ -28,7 +28,12 @@ export function RouteList() {
   const { publicKey } = useAuth();
   const reset = useRouteCreationStore((s) => s.reset);
   const slots = useRouteCreationStore((s) => s.slots);
-  const draftCount = readySlotCount(slots);
+  const mode = useRouteCreationStore((s) => s.mode);
+  // Only treat populated slots as a "draft" when we're in create mode.
+  // Viewing a saved route (loadFromExisting) sets mode to "edit" and
+  // hydrates the slots — that's not a draft, it's the saved route's
+  // waypoints, so the resume banner shouldn't appear.
+  const draftCount = mode === "create" ? readySlotCount(slots) : 0;
 
   // Browsing routes → fade Mapky places + captures so route markers pop.
   useAutoFocusLayer("routes");
