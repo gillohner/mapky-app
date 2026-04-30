@@ -1,10 +1,15 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueries } from "@tanstack/react-query";
 import { Route as RoutesIndexRoute } from "@/routes/routes/index";
 import { Loader2 } from "lucide-react";
-import { DiscoverFilter } from "@/components/discover/Filter";
+import {
+  DiscoverFilter,
+  type CategoryOption,
+} from "@/components/discover/Filter";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserRoutes, useViewportRoutes } from "@/lib/api/hooks";
+import { fetchRouteTags } from "@/lib/api/mapky";
 import {
   readySlotCount,
   useRouteCreationStore,
@@ -15,6 +20,7 @@ import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/Discove
 import { DiscoverNewButton } from "@/components/discover/NewButton";
 import { RoutesIndexLayer } from "@/components/map/RoutesIndexLayer";
 import { RouteCard } from "./RouteCard";
+import type { PostTagDetails } from "@/types/mapky";
 
 type Tab = "mine" | "viewport";
 
@@ -66,15 +72,77 @@ export function RouteList() {
   const list = tab === "mine" ? userRoutes : viewportRoutes;
 
   const [filter, setFilter] = useState("");
+  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [activeActivity, setActiveActivity] = useState<string | null>(null);
+
+  const allRoutes = list.data ?? [];
+
+  // Batch-fetch tags for every route in the list. Cache key matches
+  // the detail view's useRouteTags so opening a route is instant.
+  const tagQueries = useQueries({
+    queries: allRoutes.map((r) => {
+      const idx = r.id.indexOf(":");
+      const authorId = idx >= 0 ? r.id.slice(0, idx) : r.author_id;
+      const routeId = idx >= 0 ? r.id.slice(idx + 1) : r.id;
+      return {
+        queryKey: ["mapky", "route", authorId, routeId, "tags"] as const,
+        queryFn: () => fetchRouteTags(authorId, routeId),
+        staleTime: 60_000,
+        retry: false,
+      };
+    }),
+  });
+  const tagsByRoute = useMemo(() => {
+    const map = new Map<string, PostTagDetails[]>();
+    allRoutes.forEach((r, i) => {
+      map.set(r.id, tagQueries[i].data ?? []);
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allRoutes, tagQueries.map((q) => q.dataUpdatedAt).join(",")]);
+
+  const suggestedTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const tags of tagsByRoute.values()) {
+      for (const t of tags) {
+        counts.set(t.label, (counts.get(t.label) ?? 0) + t.taggers_count);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([l]) => l)
+      .filter((l) => !activeTags.includes(l))
+      .slice(0, 12);
+  }, [tagsByRoute, activeTags]);
+
+  // Activity categories ranked by count in the visible list.
+  const activityCategories = useMemo<CategoryOption[]>(() => {
+    const counts = new Map<string, number>();
+    for (const r of allRoutes)
+      counts.set(r.activity, (counts.get(r.activity) ?? 0) + 1);
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([value, count]) => ({ value, label: value, count }));
+  }, [allRoutes]);
+
   const filtered = useMemo(() => {
     const needle = filter.trim().toLowerCase();
-    if (!needle) return list.data ?? [];
-    return (list.data ?? []).filter((r) =>
-      [r.name, r.description, r.activity]
+    return allRoutes.filter((r) => {
+      if (activeActivity && r.activity !== activeActivity) return false;
+      const tags = tagsByRoute.get(r.id) ?? [];
+      const tagLabels = tags.map((t) => t.label);
+      if (
+        activeTags.length > 0 &&
+        !activeTags.every((t) => tagLabels.includes(t))
+      ) {
+        return false;
+      }
+      if (!needle) return true;
+      return [r.name, r.description, r.activity, ...tagLabels]
         .filter((v): v is string => !!v)
-        .some((v) => v.toLowerCase().includes(needle)),
-    );
-  }, [list.data, filter]);
+        .some((v) => v.toLowerCase().includes(needle));
+    });
+  }, [allRoutes, filter, activeTags, activeActivity, tagsByRoute]);
 
   return (
     <>
@@ -95,7 +163,18 @@ export function RouteList() {
       <DiscoverFilter
         value={filter}
         onChange={setFilter}
-        placeholder="Filter by name, activity…"
+        placeholder="Filter by name, tag, activity…"
+        activeTags={activeTags}
+        onRemoveTag={(t) =>
+          setActiveTags((prev) => prev.filter((x) => x !== t))
+        }
+        suggestedTags={suggestedTags}
+        onAddTag={(t) =>
+          setActiveTags((prev) => (prev.includes(t) ? prev : [...prev, t]))
+        }
+        categories={activityCategories}
+        activeCategory={activeActivity}
+        onCategoryChange={setActiveActivity}
       />
 
       {draftCount > 0 && (
@@ -126,7 +205,13 @@ export function RouteList() {
         </p>
       )}
       <div className="space-y-1.5">
-        {filtered.map((r) => <RouteCard key={r.id} route={r} />)}
+        {filtered.map((r) => (
+          <RouteCard
+            key={r.id}
+            route={r}
+            tags={tagsByRoute.get(r.id) ?? []}
+          />
+        ))}
       </div>
     </DiscoverSidebar>
     </>

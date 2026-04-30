@@ -1,20 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FolderHeart, MapPin, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueries } from "@tanstack/react-query";
 import { Route as CollectionsRoute } from "@/routes/collections";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
   useUserCollections,
   useViewportCollections,
 } from "@/lib/api/hooks";
+import { fetchCollectionTags } from "@/lib/api/mapky";
 import { useUiStore, type CollectionOverlayEntry } from "@/stores/ui-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
 import { DiscoverNewButton } from "@/components/discover/NewButton";
 import { DiscoverFilter } from "@/components/discover/Filter";
+import { CreatorBadge } from "@/components/discover/CreatorBadge";
 import { CreateCollectionForm } from "./CreateCollectionForm";
-import type { CollectionDetails } from "@/types/mapky";
+import type { CollectionDetails, PostTagDetails } from "@/types/mapky";
 
 /** Cap auto-pinned overlays to the OVERLAY_COLORS palette length so
  * each collection gets a distinct hue. */
@@ -98,6 +101,54 @@ export function CollectionList() {
   const close = () => navigate({ to: "/" });
 
   const [filter, setFilter] = useState("");
+  const [activeTags, setActiveTags] = useState<string[]>([]);
+
+  // Active list depends on tab. Tags are batch-fetched against this
+  // unified list so both tabs render chips + tag filter the same way.
+  const activeList: CollectionDetails[] =
+    tab === "mine"
+      ? collections ?? []
+      : viewportQuery.data ?? [];
+
+  const tagQueries = useQueries({
+    queries: activeList.map((c) => {
+      const [authorId, collectionId] = c.id.split(":");
+      return {
+        queryKey: [
+          "mapky",
+          "collection",
+          authorId,
+          collectionId,
+          "tags",
+        ] as const,
+        queryFn: () => fetchCollectionTags(authorId, collectionId),
+        staleTime: 60_000,
+        retry: false,
+      };
+    }),
+  });
+  const tagsByCollection = useMemo(() => {
+    const map = new Map<string, PostTagDetails[]>();
+    activeList.forEach((c, i) => {
+      map.set(c.id, tagQueries[i].data ?? []);
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeList, tagQueries.map((q) => q.dataUpdatedAt).join(",")]);
+
+  const suggestedTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const tags of tagsByCollection.values()) {
+      for (const t of tags) {
+        counts.set(t.label, (counts.get(t.label) ?? 0) + t.taggers_count);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([l]) => l)
+      .filter((l) => !activeTags.includes(l))
+      .slice(0, 12);
+  }, [tagsByCollection, activeTags]);
 
   return (
     <DiscoverSidebar
@@ -112,9 +163,24 @@ export function CollectionList() {
           <DiscoverFilter
             value={filter}
             onChange={setFilter}
-            placeholder="Filter by name or description…"
+            placeholder="Filter by name, tag, description…"
+            activeTags={activeTags}
+            onRemoveTag={(t) =>
+              setActiveTags((prev) => prev.filter((x) => x !== t))
+            }
+            suggestedTags={suggestedTags}
+            onAddTag={(t) =>
+              setActiveTags((prev) =>
+                prev.includes(t) ? prev : [...prev, t],
+              )
+            }
           />
-          <ViewportCollections query={viewportQuery} filter={filter} />
+          <ViewportCollections
+            query={viewportQuery}
+            filter={filter}
+            activeTags={activeTags}
+            tagsByCollection={tagsByCollection}
+          />
         </>
       ) : !isAuthenticated ? (
         <p className="py-8 text-center text-sm text-muted">
@@ -131,7 +197,17 @@ export function CollectionList() {
           <DiscoverFilter
             value={filter}
             onChange={setFilter}
-            placeholder="Filter by name or description…"
+            placeholder="Filter by name, tag, description…"
+            activeTags={activeTags}
+            onRemoveTag={(t) =>
+              setActiveTags((prev) => prev.filter((x) => x !== t))
+            }
+            suggestedTags={suggestedTags}
+            onAddTag={(t) =>
+              setActiveTags((prev) =>
+                prev.includes(t) ? prev : [...prev, t],
+              )
+            }
           />
 
           {isLoading && <LoadingSkeleton />}
@@ -142,12 +218,23 @@ export function CollectionList() {
             </p>
           )}
 
-          {filterCollections(collections, filter).map((c) => (
-            <CollectionCard key={c.id} collection={c} />
-          ))}
+          {filterCollections(collections, filter, activeTags, tagsByCollection).map(
+            (c) => (
+              <CollectionCard
+                key={c.id}
+                collection={c}
+                tags={tagsByCollection.get(c.id) ?? []}
+              />
+            ),
+          )}
           {!isLoading &&
             (collections?.length ?? 0) > 0 &&
-            filterCollections(collections, filter).length === 0 && (
+            filterCollections(
+              collections,
+              filter,
+              activeTags,
+              tagsByCollection,
+            ).length === 0 && (
               <p className="text-xs text-muted">
                 No collections match your filter.
               </p>
@@ -161,23 +248,38 @@ export function CollectionList() {
 function filterCollections(
   cs: CollectionDetails[] | undefined,
   q: string,
+  activeTags: string[],
+  tagsByCollection: Map<string, PostTagDetails[]>,
 ): CollectionDetails[] {
   if (!cs) return [];
   const needle = q.trim().toLowerCase();
-  if (!needle) return cs;
-  return cs.filter(
-    (c) =>
-      c.name.toLowerCase().includes(needle) ||
-      (c.description ?? "").toLowerCase().includes(needle),
-  );
+  return cs.filter((c) => {
+    const tags = tagsByCollection.get(c.id) ?? [];
+    const tagLabels = tags.map((t) => t.label);
+    if (
+      activeTags.length > 0 &&
+      !activeTags.every((t) => tagLabels.includes(t))
+    ) {
+      return false;
+    }
+    if (!needle) return true;
+    const haystack = [c.name, c.description ?? "", ...tagLabels]
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(needle);
+  });
 }
 
 function ViewportCollections({
   query,
   filter,
+  activeTags,
+  tagsByCollection,
 }: {
   query: ReturnType<typeof useViewportCollections>;
   filter: string;
+  activeTags: string[];
+  tagsByCollection: Map<string, PostTagDetails[]>;
 }) {
   if (query.isLoading) {
     return (
@@ -199,7 +301,12 @@ function ViewportCollections({
       </p>
     );
   }
-  const filtered = filterCollections(query.data, filter);
+  const filtered = filterCollections(
+    query.data,
+    filter,
+    activeTags,
+    tagsByCollection,
+  );
   if (filtered.length === 0) {
     return (
       <p className="text-xs text-muted">No collections match your filter.</p>
@@ -208,13 +315,23 @@ function ViewportCollections({
   return (
     <div className="space-y-3">
       {filtered.map((c) => (
-        <CollectionCard key={c.id} collection={c} />
+        <CollectionCard
+          key={c.id}
+          collection={c}
+          tags={tagsByCollection.get(c.id) ?? []}
+        />
       ))}
     </div>
   );
 }
 
-function CollectionCard({ collection }: { collection: CollectionDetails }) {
+function CollectionCard({
+  collection,
+  tags,
+}: {
+  collection: CollectionDetails;
+  tags: PostTagDetails[];
+}) {
   const navigate = useNavigate();
   const overlays = useUiStore((s) => s.activeCollectionOverlays);
   const toggleOverlay = useUiStore((s) => s.toggleCollectionOverlay);
@@ -222,6 +339,8 @@ function CollectionCard({ collection }: { collection: CollectionDetails }) {
 
   const overlay = overlays.get(collectionId);
   const isVisible = !!overlay;
+  const topTags = tags.slice(0, 3);
+  const overflow = tags.length - topTags.length;
 
   return (
     <div className="flex items-start gap-2 rounded-lg border border-border p-3 transition-colors hover:bg-surface">
@@ -242,10 +361,28 @@ function CollectionCard({ collection }: { collection: CollectionDetails }) {
               {collection.description}
             </p>
           )}
-          <div className="mt-1 flex items-center gap-1 text-xs text-muted">
-            <MapPin className="h-3 w-3" />
-            {collection.items.length} places
+          <div className="mt-1 flex items-center gap-2 text-xs text-muted">
+            <span className="flex items-center gap-1">
+              <MapPin className="h-3 w-3" />
+              {collection.items.length} places
+            </span>
+            <CreatorBadge authorId={authorId} />
           </div>
+          {topTags.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {topTags.map((t) => (
+                <span
+                  key={t.label}
+                  className="rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted"
+                >
+                  #{t.label}
+                </span>
+              ))}
+              {overflow > 0 && (
+                <span className="text-[10px] text-muted">+{overflow}</span>
+              )}
+            </div>
+          )}
         </div>
       </button>
 

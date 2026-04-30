@@ -1,20 +1,25 @@
 import { Link } from "@tanstack/react-router";
 import { Bike, Car, Footprints, Mountain, Route as RouteIcon } from "lucide-react";
-import type { RouteActivity, RouteDetails } from "@/types/mapky";
+import type {
+  PostTagDetails,
+  RouteActivity,
+  RouteDetails,
+} from "@/types/mapky";
 import { routeColor } from "@/components/map/RoutesIndexLayer";
+import { CreatorBadge } from "@/components/discover/CreatorBadge";
 import { RouteStats } from "./RouteStats";
 
 interface RouteCardProps {
   route: RouteDetails;
+  tags?: PostTagDetails[];
 }
 
-export function RouteCard({ route }: RouteCardProps) {
+export function RouteCard({ route, tags = [] }: RouteCardProps) {
   const Icon = activityIcon(route.activity);
   const routeId = extractRouteId(route.id);
-  // Same hash as RoutesIndexLayer so the left stripe matches the
-  // polyline color on the map. Lets users connect a list row to its
-  // line at a glance.
   const color = routeColor(route.author_id, routeId);
+  const topTags = tags.slice(0, 3);
+  const overflow = tags.length - topTags.length;
   return (
     <Link
       to="/route/$authorId/$routeId"
@@ -50,6 +55,24 @@ export function RouteCard({ route }: RouteCardProps) {
               elevation_loss_m={route.elevation_loss_m}
               compact
             />
+          </div>
+          {topTags.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {topTags.map((t) => (
+                <span
+                  key={t.label}
+                  className="rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted"
+                >
+                  #{t.label}
+                </span>
+              ))}
+              {overflow > 0 && (
+                <span className="text-[10px] text-muted">+{overflow}</span>
+              )}
+            </div>
+          )}
+          <div className="mt-1.5">
+            <CreatorBadge authorId={route.author_id} />
           </div>
         </div>
       </div>

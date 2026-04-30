@@ -4,11 +4,16 @@ import { useQueries } from "@tanstack/react-query";
 import { Loader2, MapPin, Star, Tag as TagIcon } from "lucide-react";
 import { useViewportPlaces, useOsmLookup } from "@/lib/api/hooks";
 import { fetchPlaceTags } from "@/lib/api/mapky";
+import { lookupOsmElement } from "@/lib/api/nominatim";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { useMapStore } from "@/stores/map-store";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
-import { DiscoverFilter } from "@/components/discover/Filter";
+import {
+  DiscoverFilter,
+  type CategoryOption,
+  type TagMode,
+} from "@/components/discover/Filter";
 import { fallbackPlaceLabel } from "@/lib/map/osm-url";
 import type { PlaceDetails, PostTagDetails } from "@/types/mapky";
 
@@ -49,10 +54,34 @@ export function PlaceList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [places, tagQueries.map((q) => q.dataUpdatedAt).join(",")]);
 
-  // Filter state — text + selected tag chips. Stays local; URL-backing
-  // can come later if shareable filtered views become a real need.
+  // Batch Nominatim lookups so the parent has each place's type for
+  // the location-type filter chips. Cache key matches the per-row
+  // useOsmLookup so PlaceRow doesn't re-fetch.
+  const nominatimQueries = useQueries({
+    queries: places.map((p) => ({
+      queryKey: ["nominatim", "lookup", p.osm_type, p.osm_id] as const,
+      queryFn: () => lookupOsmElement(p.osm_type, p.osm_id),
+      staleTime: Infinity,
+      gcTime: Infinity,
+      retry: false,
+    })),
+  });
+  const typeByPlace = useMemo(() => {
+    const map = new Map<string, string>();
+    places.forEach((p, i) => {
+      const nom = nominatimQueries[i].data;
+      const t = nom?.type?.replace(/_/g, " ");
+      if (t && t !== "yes" && t !== "unclassified") map.set(placeKey(p), t);
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [places, nominatimQueries.map((q) => q.dataUpdatedAt).join(",")]);
+
+  // Filter state — text + tags + location-type. Stays local for now.
   const [query, setQuery] = useState("");
   const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [tagMode, setTagMode] = useState<TagMode>("all");
+  const [activeType, setActiveType] = useState<string | null>(null);
 
   // Suggest tag chips ranked by frequency across the visible places,
   // capped at 12 and excluding ones already active.
@@ -70,29 +99,47 @@ export function PlaceList() {
       .slice(0, 12);
   }, [tagsByPlace, activeTags]);
 
+  // Location-type categories: ranked by count across the visible
+  // places, capped to keep the chip strip from overwhelming the panel.
+  const typeCategories = useMemo<CategoryOption[]>(() => {
+    const counts = new Map<string, number>();
+    for (const t of typeByPlace.values()) {
+      counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([value, count]) => ({ value, label: value, count }));
+  }, [typeByPlace]);
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return places.filter((p) => {
-      const tags = tagsByPlace.get(placeKey(p)) ?? [];
+      const key = placeKey(p);
+      const tags = tagsByPlace.get(key) ?? [];
       const tagLabels = tags.map((t) => t.label);
-      // Active-tag filter: every selected tag must be present.
-      if (
-        activeTags.length > 0 &&
-        !activeTags.every((t) => tagLabels.includes(t))
-      ) {
-        return false;
+      // Location-type filter (single-select).
+      if (activeType && typeByPlace.get(key) !== activeType) return false;
+      // Active-tag filter: ALL or ANY based on tagMode.
+      if (activeTags.length > 0) {
+        const ok =
+          tagMode === "all"
+            ? activeTags.every((t) => tagLabels.includes(t))
+            : activeTags.some((t) => tagLabels.includes(t));
+        if (!ok) return false;
       }
       // Text filter matches osm canonical, type, and any tag label.
       if (!needle) return true;
       const haystack = [
         p.osm_canonical,
+        typeByPlace.get(key) ?? "",
         ...tagLabels,
       ]
         .join(" ")
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [places, tagsByPlace, query, activeTags]);
+  }, [places, tagsByPlace, typeByPlace, query, activeTags, tagMode, activeType]);
 
   return (
     <DiscoverSidebar title="Places" onClose={close}>
@@ -106,6 +153,11 @@ export function PlaceList() {
         onAddTag={(t) =>
           setActiveTags((prev) => (prev.includes(t) ? prev : [...prev, t]))
         }
+        tagMode={tagMode}
+        onTagModeChange={setTagMode}
+        categories={typeCategories}
+        activeCategory={activeType}
+        onCategoryChange={setActiveType}
       />
 
       {viewport.isLoading && (

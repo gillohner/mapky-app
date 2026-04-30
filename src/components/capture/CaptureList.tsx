@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useQueries } from "@tanstack/react-query";
 import { Route as CapturesRoute } from "@/routes/captures";
 import {
   Camera,
@@ -20,10 +21,19 @@ import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { resolveFileUrl } from "@/lib/api/user";
 import { useMapStore } from "@/stores/map-store";
+import { fetchGeoCaptureTags } from "@/lib/api/mapky";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
 import { DiscoverNewButton } from "@/components/discover/NewButton";
-import { DiscoverFilter } from "@/components/discover/Filter";
-import type { GeoCaptureDetails, GeoCaptureKind } from "@/types/mapky";
+import {
+  DiscoverFilter,
+  type CategoryOption,
+} from "@/components/discover/Filter";
+import { CreatorBadge } from "@/components/discover/CreatorBadge";
+import type {
+  GeoCaptureDetails,
+  GeoCaptureKind,
+  PostTagDetails,
+} from "@/types/mapky";
 
 type Tab = "mine" | "viewport";
 
@@ -62,15 +72,84 @@ export function CaptureList() {
   const close = () => navigate({ to: "/" });
 
   const [filter, setFilter] = useState("");
+  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [activeKind, setActiveKind] = useState<string | null>(null);
+
+  const allCaptures = list.data ?? [];
+
+  // Batch-fetch tags via useQueries; cache key matches the detail
+  // view's useGeoCaptureTags so opening a capture is instant.
+  const tagQueries = useQueries({
+    queries: allCaptures.map((c) => {
+      const [authorId, captureId] = splitCompound(c.id, c.author_id);
+      return {
+        queryKey: [
+          "mapky",
+          "geo_capture",
+          authorId,
+          captureId,
+          "tags",
+        ] as const,
+        queryFn: () => fetchGeoCaptureTags(authorId, captureId),
+        staleTime: 60_000,
+        retry: false,
+      };
+    }),
+  });
+  const tagsByCapture = useMemo(() => {
+    const map = new Map<string, PostTagDetails[]>();
+    allCaptures.forEach((c, i) => {
+      map.set(c.id, tagQueries[i].data ?? []);
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allCaptures, tagQueries.map((q) => q.dataUpdatedAt).join(",")]);
+
+  const suggestedTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const tags of tagsByCapture.values()) {
+      for (const t of tags) {
+        counts.set(t.label, (counts.get(t.label) ?? 0) + t.taggers_count);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([l]) => l)
+      .filter((l) => !activeTags.includes(l))
+      .slice(0, 12);
+  }, [tagsByCapture, activeTags]);
+
+  const kindCategories = useMemo<CategoryOption[]>(() => {
+    const counts = new Map<string, number>();
+    for (const c of allCaptures)
+      counts.set(c.kind, (counts.get(c.kind) ?? 0) + 1);
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([value, count]) => ({
+        value,
+        label: KIND_LABELS[value as GeoCaptureKind] ?? value,
+        count,
+      }));
+  }, [allCaptures]);
+
   const filtered = useMemo(() => {
     const needle = filter.trim().toLowerCase();
-    if (!needle) return list.data ?? [];
-    return (list.data ?? []).filter((c) =>
-      [c.caption, c.kind]
+    return allCaptures.filter((c) => {
+      if (activeKind && c.kind !== activeKind) return false;
+      const tags = tagsByCapture.get(c.id) ?? [];
+      const tagLabels = tags.map((t) => t.label);
+      if (
+        activeTags.length > 0 &&
+        !activeTags.every((t) => tagLabels.includes(t))
+      ) {
+        return false;
+      }
+      if (!needle) return true;
+      return [c.caption, c.kind, ...tagLabels]
         .filter((v): v is string => !!v)
-        .some((v) => v.toLowerCase().includes(needle)),
-    );
-  }, [list.data, filter]);
+        .some((v) => v.toLowerCase().includes(needle));
+    });
+  }, [allCaptures, filter, activeTags, activeKind, tagsByCapture]);
 
   return (
     <DiscoverSidebar
@@ -86,7 +165,18 @@ export function CaptureList() {
       <DiscoverFilter
         value={filter}
         onChange={setFilter}
-        placeholder="Filter by caption or kind…"
+        placeholder="Filter by caption or tag…"
+        activeTags={activeTags}
+        onRemoveTag={(t) =>
+          setActiveTags((prev) => prev.filter((x) => x !== t))
+        }
+        suggestedTags={suggestedTags}
+        onAddTag={(t) =>
+          setActiveTags((prev) => (prev.includes(t) ? prev : [...prev, t]))
+        }
+        categories={kindCategories}
+        activeCategory={activeKind}
+        onCategoryChange={setActiveKind}
       />
       {list.isLoading && (
         <p className="flex items-center gap-2 text-xs text-muted">
@@ -110,18 +200,29 @@ export function CaptureList() {
       )}
       <div className="grid grid-cols-2 gap-2">
         {filtered.map((c) => (
-          <CaptureCard key={c.id} capture={c} />
+          <CaptureCard
+            key={c.id}
+            capture={c}
+            tags={tagsByCapture.get(c.id) ?? []}
+          />
         ))}
       </div>
     </DiscoverSidebar>
   );
 }
 
-function CaptureCard({ capture }: { capture: GeoCaptureDetails }) {
+function CaptureCard({
+  capture,
+  tags = [],
+}: {
+  capture: GeoCaptureDetails;
+  tags?: PostTagDetails[];
+}) {
   const map = useMapStore((s) => s.map);
   const [authorId, captureId] = splitCompound(capture.id, capture.author_id);
   const thumb = thumbnailUrl(capture);
   const Icon = kindIcon(capture.kind);
+  const topTags = tags.slice(0, 2);
 
   return (
     <Link
@@ -154,11 +255,30 @@ function CaptureCard({ capture }: { capture: GeoCaptureDetails }) {
         <Icon className="h-3 w-3" />
         {KIND_LABELS[capture.kind]}
       </span>
-      {capture.caption && (
-        <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-1.5 py-1 text-[10px] text-white">
-          {capture.caption}
-        </span>
-      )}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-gradient-to-t from-black/80 to-transparent px-1.5 py-1">
+        {capture.caption && (
+          <span className="truncate text-[10px] text-white">
+            {capture.caption}
+          </span>
+        )}
+        {topTags.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {topTags.map((t) => (
+              <span
+                key={t.label}
+                className="rounded-full bg-white/15 px-1.5 py-0.5 text-[9px] text-white"
+              >
+                #{t.label}
+              </span>
+            ))}
+          </div>
+        )}
+        <CreatorBadge
+          authorId={authorId}
+          showName={false}
+          className="self-end"
+        />
+      </div>
     </Link>
   );
 }
