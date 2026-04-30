@@ -72,6 +72,21 @@ export function SearchBar() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
+  // Closing /search (X button) navigates to "/", but the SearchBar
+  // still holds the typed query — and the "auto-push to /search" effect
+  // below would immediately bounce the user back. When we detect a
+  // /search → / transition, clear the input so the close actually
+  // sticks. The user can re-type to start a new search.
+  const prevOnSearchRef = useRef(isOnSearchRoute);
+  useEffect(() => {
+    if (prevOnSearchRef.current && !isOnSearchRoute) {
+      setInput("");
+      setQuery("");
+      setShowResults(false);
+    }
+    prevOnSearchRef.current = isOnSearchRoute;
+  }, [isOnSearchRoute]);
+
   // Sync SearchBar input with /search route query param. The /search
   // route is what we navigate TO when the user types — so a reload of
   // either / or /search?q=... preserves the active search, and a copy of
