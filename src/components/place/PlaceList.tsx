@@ -11,6 +11,7 @@ import {
   pointsToBounds,
   useFilterViewport,
 } from "@/hooks/use-filter-viewport";
+import { useFrozenWhile } from "@/hooks/use-frozen-while";
 import { useMapStore } from "@/stores/map-store";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import {
@@ -29,7 +30,20 @@ import type { PlaceDetails, PostTagDetails } from "@/types/mapky";
  */
 export function PlaceList() {
   const navigate = useNavigate();
-  const bbox = useViewportBounds();
+  // Filter state moves up so we can freeze the viewport bbox while
+  // any filter is on. Without the freeze, useFilterViewport's
+  // fitBounds would tighten the map → useViewportPlaces refetches a
+  // smaller bbox → places disappear from the source list and the
+  // visible matches shrink as the user types.
+  const [query, setQuery] = useState("");
+  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [tagMode, setTagMode] = useState<TagMode>("all");
+  const [activeType, setActiveType] = useState<string | null>(null);
+  const filterActive =
+    query.trim().length > 0 || activeTags.length > 0 || activeType !== null;
+
+  const liveBbox = useViewportBounds();
+  const bbox = useFrozenWhile(liveBbox, filterActive);
   const viewport = useViewportPlaces(bbox);
   const close = () => navigate({ to: "/" });
 
@@ -80,11 +94,9 @@ export function PlaceList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [places, nominatimQueries.map((q) => q.dataUpdatedAt).join(",")]);
 
-  // Filter state — text + tags + location-type. Stays local for now.
-  const [query, setQuery] = useState("");
-  const [activeTags, setActiveTags] = useState<string[]>([]);
-  const [tagMode, setTagMode] = useState<TagMode>("all");
-  const [activeType, setActiveType] = useState<string | null>(null);
+  // Filter state lives at the top of the component (declared above
+  // so it can drive the bbox freeze) — re-stated as a comment here
+  // for readers scanning the body.
 
   // Suggest tag chips ranked by frequency across the visible places,
   // capped at 12 and excluding ones already active.
@@ -114,9 +126,6 @@ export function PlaceList() {
       .slice(0, 8)
       .map(([value, count]) => ({ value, label: value, count }));
   }, [typeByPlace]);
-
-  const filterActive =
-    query.trim().length > 0 || activeTags.length > 0 || activeType !== null;
 
   // Places sidebar owns the map: hide captures entirely so green
   // place dots stand alone. Plain browsing and filtering both follow

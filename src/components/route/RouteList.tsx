@@ -15,6 +15,7 @@ import {
   useRouteCreationStore,
 } from "@/stores/route-creation-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
+import { useFrozenWhile } from "@/hooks/use-frozen-while";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { useFilterViewport, type FilterBounds } from "@/hooks/use-filter-viewport";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
@@ -55,7 +56,17 @@ export function RouteList() {
     navigate({ to: "/routes", search: { tab: next }, replace: true });
   };
 
-  const bbox = useViewportBounds();
+  // Filter state lifted up so the bbox can freeze while filtering.
+  const [filter, setFilter] = useState("");
+  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [activeActivity, setActiveActivity] = useState<string | null>(null);
+  const filterActive =
+    filter.trim().length > 0 ||
+    activeTags.length > 0 ||
+    activeActivity !== null;
+
+  const liveBbox = useViewportBounds();
+  const bbox = useFrozenWhile(liveBbox, filterActive);
 
   const userRoutes = useUserRoutes(tab === "mine" ? publicKey : null);
   const viewportRoutes = useViewportRoutes(tab === "viewport" ? bbox : null);
@@ -75,10 +86,6 @@ export function RouteList() {
   const close = () => navigate({ to: "/" });
 
   const list = tab === "mine" ? userRoutes : viewportRoutes;
-
-  const [filter, setFilter] = useState("");
-  const [activeTags, setActiveTags] = useState<string[]>([]);
-  const [activeActivity, setActiveActivity] = useState<string | null>(null);
 
   const allRoutes = list.data ?? [];
 
@@ -129,11 +136,6 @@ export function RouteList() {
       .sort((a, b) => b[1] - a[1])
       .map(([value, count]) => ({ value, label: value, count }));
   }, [allRoutes]);
-
-  const filterActive =
-    filter.trim().length > 0 ||
-    activeTags.length > 0 ||
-    activeActivity !== null;
 
   const filtered = useMemo(() => {
     const needle = filter.trim().toLowerCase();

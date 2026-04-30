@@ -18,6 +18,7 @@ import {
 } from "@/lib/api/hooks";
 import { useCaptureCreationStore } from "@/stores/capture-creation-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
+import { useFrozenWhile } from "@/hooks/use-frozen-while";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import {
   pointsToBounds,
@@ -62,7 +63,19 @@ export function CaptureList() {
   const setTab = (next: Tab) => {
     navigate({ to: "/captures", search: { tab: next }, replace: true });
   };
-  const bbox = useViewportBounds(tab === "viewport");
+
+  // Filter state lifted up so the bbox can freeze while filtering —
+  // otherwise useFilterViewport's fitBounds would tighten the map,
+  // shrink the viewport-bbox query, and the source list would shed
+  // captures as the user types.
+  const [filter, setFilter] = useState("");
+  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [activeKind, setActiveKind] = useState<string | null>(null);
+  const filterActive =
+    filter.trim().length > 0 || activeTags.length > 0 || activeKind !== null;
+
+  const liveBbox = useViewportBounds(tab === "viewport");
+  const bbox = useFrozenWhile(liveBbox, filterActive);
 
   const userCaptures = useUserGeoCaptures(tab === "mine" ? publicKey : null);
   const viewport = useViewportCaptures(tab === "viewport" ? bbox : null);
@@ -76,10 +89,6 @@ export function CaptureList() {
   }, [publicKey]);
 
   const close = () => navigate({ to: "/" });
-
-  const [filter, setFilter] = useState("");
-  const [activeTags, setActiveTags] = useState<string[]>([]);
-  const [activeKind, setActiveKind] = useState<string | null>(null);
 
   const allCaptures = list.data ?? [];
 
@@ -157,8 +166,6 @@ export function CaptureList() {
     });
   }, [allCaptures, filter, activeTags, activeKind, tagsByCapture]);
 
-  const filterActive =
-    filter.trim().length > 0 || activeTags.length > 0 || activeKind !== null;
   useFilterViewport({
     active: filterActive,
     bounds: pointsToBounds(filtered.map((c) => ({ lat: c.lat, lon: c.lon }))),
