@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronUp, X } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 
 export interface DiscoverTab {
@@ -13,7 +13,20 @@ interface Props {
   tabs?: DiscoverTab[];
   activeTab?: string;
   onTabChange?: (id: string) => void;
+  /**
+   * Top-right X button. Always closes the sidebar entirely (typically
+   * navigates to "/"). Detail panels also pass `onBack` for the
+   * top-left back arrow that pops history.
+   */
   onClose: () => void;
+  /**
+   * Optional top-left back button. Detail panels pass this to step
+   * back to the parent list (history.back). When absent the title text
+   * shows in its place — list views don't need a back arrow.
+   */
+  onBack?: () => void;
+  /** Optional label for the back button (defaults to "Back"). */
+  backLabel?: string;
   /** Right-side header slot for actions like "New" or visibility toggles. */
   rightHeaderSlot?: React.ReactNode;
   /** Free slot below tabs, above body — typically a search input. */
@@ -38,6 +51,8 @@ export function DiscoverSidebar({
   activeTab,
   onTabChange,
   onClose,
+  onBack,
+  backLabel,
   rightHeaderSlot,
   toolbar,
   mobileCollapsible = false,
@@ -73,9 +88,20 @@ export function DiscoverSidebar({
       {/* Desktop: left-anchored full-height sidebar */}
       <div className="pointer-events-auto absolute inset-y-0 left-12 z-10 hidden w-[380px] flex-col border-r border-border bg-background shadow-xl md:flex">
         <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted">
-            {title}
-          </span>
+          {onBack ? (
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
+              aria-label="Back"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              {backLabel ?? "Back"}
+            </button>
+          ) : (
+            <span className="text-xs font-medium uppercase tracking-wide text-muted">
+              {title}
+            </span>
+          )}
           <div className="flex items-center gap-1">
             {rightHeaderSlot}
             <button
@@ -100,6 +126,8 @@ export function DiscoverSidebar({
       <MobileSheet
         title={title}
         onClose={onClose}
+        onBack={onBack}
+        backLabel={backLabel}
         rightHeaderSlot={rightHeaderSlot}
         tabStrip={tabStrip}
         toolbar={toolbar}
@@ -114,6 +142,8 @@ export function DiscoverSidebar({
 function MobileSheet({
   title,
   onClose,
+  onBack,
+  backLabel,
   rightHeaderSlot,
   tabStrip,
   toolbar,
@@ -122,6 +152,8 @@ function MobileSheet({
 }: {
   title: string;
   onClose: () => void;
+  onBack?: () => void;
+  backLabel?: string;
   rightHeaderSlot?: React.ReactNode;
   tabStrip?: React.ReactNode;
   toolbar?: React.ReactNode;
@@ -142,7 +174,18 @@ function MobileSheet({
       <div className="flex-shrink-0 px-4 pt-2 pb-3">
         <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium text-foreground">{title}</span>
+          {onBack ? (
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
+              aria-label="Back"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              {backLabel ?? "Back"}
+            </button>
+          ) : (
+            <span className="text-sm font-medium text-foreground">{title}</span>
+          )}
           <div className="flex items-center gap-1">
             {rightHeaderSlot}
             {collapsible && (

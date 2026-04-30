@@ -154,9 +154,12 @@ export function CaptureDetailPanel({
     [navigate],
   );
 
-  // Close → history.back so the user lands on /captures (with its
-  // tab) or wherever they came from. Falls back to "/" for deep links.
-  const handleClose = useBackOr(() => navigate({ to: "/" }));
+  // Top-right X always closes the entire sidebar back to the map.
+  const handleClose = () => navigate({ to: "/" });
+  // Top-left back arrow steps back to /captures (or wherever the
+  // capture was opened from) with that surface's tab + scroll
+  // preserved. Deep links fall back to a direct /captures navigate.
+  const handleBack = useBackOr(() => navigate({ to: "/captures" }));
 
   const handleDelete = async () => {
     if (!session || !isOwner) return;
@@ -359,6 +362,9 @@ export function CaptureDetailPanel({
                   {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                 </button>
               )}
+              <button type="button" onClick={handleBack} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-foreground" aria-label="Back">
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
               <button type="button" onClick={handleClose} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-foreground" aria-label="Close">
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -423,6 +429,9 @@ export function CaptureDetailPanel({
                 {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               </button>
             )}
+            <button type="button" onClick={handleBack} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-foreground" aria-label="Back">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
             <button type="button" onClick={handleClose} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-foreground" aria-label="Close">
               <X className="h-4 w-4" />
             </button>

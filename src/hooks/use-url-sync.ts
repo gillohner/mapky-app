@@ -62,6 +62,32 @@ function hydrateFromUrl() {
 
 hydrateFromUrl();
 
+/**
+ * popstate (browser back/forward) handler — re-reads the URL's c/z
+ * params and asks MapLibre to flyTo them smoothly. This is what makes
+ * /collection/$id → back → /collections feel cohesive: the user's
+ * pre-click viewport is captured in the /collections URL via the
+ * store→URL effect, so popping back can restore it.
+ */
+function applyUrlViewportSmoothly() {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  const z = parseFloat(params.get("z") ?? "");
+  const c = params.get("c");
+  if (Number.isNaN(z) || !c) return;
+  const [latStr, lonStr] = c.split(",");
+  const lat = parseFloat(latStr);
+  const lon = parseFloat(lonStr);
+  if (Number.isNaN(lat) || Number.isNaN(lon)) return;
+  const map = useMapStore.getState().map;
+  if (map) {
+    map.flyTo({ center: [lon, lat], zoom: z, duration: 700 });
+  } else {
+    // Map not ready yet (rare on popstate, but happens during HMR).
+    useMapStore.getState().setView([lon, lat], z);
+  }
+}
+
 export function useUrlSync() {
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
   const cyclingOverlayVisible = useUiStore((s) => s.cyclingOverlayVisible);
@@ -73,6 +99,16 @@ export function useUrlSync() {
   const satelliteLabels = useMapStore((s) => s.satelliteLabels);
   const center = useMapStore((s) => s.center);
   const zoom = useMapStore((s) => s.zoom);
+
+  // Hook into browser back/forward so the map smoothly returns to the
+  // viewport that was in the URL at that history entry. replaceState
+  // (used by the store→URL effect below) doesn't fire popstate, so
+  // there's no infinite loop with our own writes.
+  useEffect(() => {
+    const onPop = () => applyUrlViewportSmoothly();
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

@@ -98,14 +98,16 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
     );
   }, [map, data]);
 
-  // Close → history.back so the user lands on /routes with the tab
-  // they came from preserved (e.g. ?tab=viewport). Falls back to a
-  // direct /routes navigate when there's no history (deep link).
-  const close = useBackOr(() => navigate({ to: "/routes" }));
+  // Top-right X always closes the entire sidebar back to the map.
+  const close = () => navigate({ to: "/" });
+  // Top-left back arrow steps back to the parent list (history pop)
+  // so the tab + scroll position are preserved. Deep links fall back
+  // to a direct /routes navigate.
+  const back = useBackOr(() => navigate({ to: "/routes" }));
 
   if (isLoading) {
     return (
-      <DiscoverSidebar title="Route" onClose={close} mobileCollapsible>
+      <DiscoverSidebar title="Route" onClose={close} onBack={back} backLabel="Routes" mobileCollapsible>
         <p className="flex items-center gap-2 text-xs text-muted">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Loading route…
@@ -115,7 +117,7 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   }
   if (error || !data) {
     return (
-      <DiscoverSidebar title="Route" onClose={close} mobileCollapsible>
+      <DiscoverSidebar title="Route" onClose={close} onBack={back} backLabel="Routes" mobileCollapsible>
         <p className="text-sm text-red-500">
           {error?.message ?? "Route not found"}
         </p>
@@ -173,7 +175,7 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
     <>
       <RoutePolylineLayer coords={decoded} dashed={!body.data?.geometry} />
 
-      <DiscoverSidebar title="Route" onClose={close} mobileCollapsible>
+      <DiscoverSidebar title="Route" onClose={close} onBack={back} backLabel="Routes" mobileCollapsible>
         <div className="space-y-3">
           <div>
             <h2 className="truncate text-base font-semibold text-foreground">
