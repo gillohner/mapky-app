@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   X,
   ChevronUp,
@@ -21,6 +21,12 @@ import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
 import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
 import { SearchResultsOverlay } from "@/components/map/SearchResultsOverlay";
+import {
+  placeStarsLabel,
+  sortByRating,
+  useEnrichedSearchResults,
+  type EnrichedResult,
+} from "@/lib/places/enrich-search";
 
 interface SearchPanelProps {
   query: string;
@@ -120,6 +126,49 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
   );
   const allPlaceResults = [...nearbyResults, ...globalResults];
 
+  // Enrich every Nominatim result with the indexer's PlaceDetails +
+  // tags via batched useQueries. Sort the nearby and global subsets
+  // independently so the highest-rated nearby is at the top of its
+  // section (we don't reorder across sections — "in this area" stays
+  // a separate group).
+  const allAccumulated = useMemo(
+    () => Array.from(accumulatedRef.current.values()),
+    // accumulatedRef is mutated imperatively above; re-read whenever
+    // the upstream queries deliver fresh results.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      latestNearby,
+      globalResultsRaw,
+      accumulatedRef.current.size,
+    ],
+  );
+  const enrichedAll = useEnrichedSearchResults(allAccumulated);
+  const enrichedByKey = useMemo(() => {
+    const map = new Map<string, EnrichedResult>();
+    for (const e of enrichedAll) {
+      map.set(`${e.result.osm_type}:${e.result.osm_id}`, e);
+    }
+    return map;
+  }, [enrichedAll]);
+  const enrichedNearby = useMemo(
+    () =>
+      sortByRating(
+        nearbyResults
+          .map((r) => enrichedByKey.get(`${r.osm_type}:${r.osm_id}`))
+          .filter((e): e is EnrichedResult => !!e),
+      ),
+    [nearbyResults, enrichedByKey],
+  );
+  const enrichedGlobal = useMemo(
+    () =>
+      sortByRating(
+        globalResults
+          .map((r) => enrichedByKey.get(`${r.osm_type}:${r.osm_id}`))
+          .filter((e): e is EnrichedResult => !!e),
+      ),
+    [globalResults, enrichedByKey],
+  );
+
   useEffect(() => {
     setSidebarOpen(true);
     return () => setSidebarOpen(false);
@@ -212,28 +261,28 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
         </p>
       )}
 
-      {/* Places mode — nearby section */}
-      {mode === "places" && nearbyResults.length > 0 && (
+      {/* Places mode — nearby section, sorted by rating. */}
+      {mode === "places" && enrichedNearby.length > 0 && (
         <div>
           <div className="mb-1 flex items-center gap-2 px-2">
             <div className="h-2 w-2 rounded-full bg-amber-500" />
             <span className="text-[10px] font-medium uppercase tracking-wide text-muted">
-              In this area ({nearbyResults.length})
+              In this area ({enrichedNearby.length})
             </span>
           </div>
-          <PlaceResultList results={nearbyResults} onSelect={handleSelectPlace} />
+          <PlaceResultList rows={enrichedNearby} onSelect={handleSelectPlace} />
         </div>
       )}
 
-      {/* Places mode — global section */}
-      {mode === "places" && globalResults.length > 0 && (
-        <div className={nearbyResults.length > 0 ? "mt-2 border-t border-border pt-2" : ""}>
+      {/* Places mode — global section, also sorted by rating. */}
+      {mode === "places" && enrichedGlobal.length > 0 && (
+        <div className={enrichedNearby.length > 0 ? "mt-2 border-t border-border pt-2" : ""}>
           <div className="mb-1 px-2">
             <span className="text-[10px] font-medium uppercase tracking-wide text-muted">
-              Other results ({globalResults.length})
+              Other results ({enrichedGlobal.length})
             </span>
           </div>
-          <PlaceResultList results={globalResults} onSelect={handleSelectPlace} />
+          <PlaceResultList rows={enrichedGlobal} onSelect={handleSelectPlace} />
         </div>
       )}
 
@@ -347,10 +396,12 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
 
   return (
     <>
-      {/* Map overlay — show ALL accumulated results so markers persist across pans */}
-      {mode === "places" && accumulatedRef.current.size > 0 && (
+      {/* Map overlay — show ALL accumulated results so markers persist
+          across pans. Pass enriched rows so the overlay can render
+          rating badges where Mapky has reviews. */}
+      {mode === "places" && enrichedAll.length > 0 && (
         <SearchResultsOverlay
-          results={Array.from(accumulatedRef.current.values())}
+          results={enrichedAll}
           searchQuery={query}
           searchMode={mode}
         />
@@ -442,21 +493,23 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
 
 /** Reusable place result list for nearby/global sections */
 function PlaceResultList({
-  results,
+  rows,
   onSelect,
 }: {
-  results: NominatimSearchResult[];
+  rows: EnrichedResult[];
   onSelect: (result: NominatimSearchResult) => void;
 }) {
   return (
     <div className="space-y-0.5">
-      {results.map((result) => {
+      {rows.map(({ result, place, tags }) => {
         const typeLabel = result.type?.replace(/_/g, " ") || "";
         const categoryLabel = result.category?.replace(/_/g, " ") || "";
         const badge =
           typeLabel === "yes" || typeLabel === "unclassified"
             ? categoryLabel
             : typeLabel;
+        const stars = placeStarsLabel(place);
+        const topTags = tags.slice(0, 2);
 
         return (
           <button
@@ -475,10 +528,32 @@ function PlaceResultList({
                     {badge}
                   </span>
                 )}
+                {stars && (
+                  <span className="flex-shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                    {stars}
+                  </span>
+                )}
               </div>
               <p className="text-xs leading-relaxed text-muted">
                 {result.display_name}
               </p>
+              {topTags.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {topTags.map((t) => (
+                    <span
+                      key={t.label}
+                      className="rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted"
+                    >
+                      #{t.label}
+                    </span>
+                  ))}
+                  {tags.length > topTags.length && (
+                    <span className="text-[10px] text-muted">
+                      +{tags.length - topTags.length}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </button>
         );
@@ -521,6 +596,7 @@ function TagPlaceResult({
     fallbackPlaceLabel(place.osm_type, place.osm_id);
 
   const typeLabel = nominatim?.type?.replace(/_/g, " ") ?? "";
+  const stars = placeStarsLabel(place);
 
   return (
     <button
@@ -536,10 +612,19 @@ function TagPlaceResult({
               {typeLabel}
             </span>
           )}
+          {stars && (
+            <span className="flex-shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+              {stars}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 text-xs text-muted">
           {place.tag_count > 0 && <span>{place.tag_count} tags</span>}
-          {place.review_count > 0 && <span>{place.review_count} reviews</span>}
+          {place.review_count > 0 && (
+            <span>
+              {place.review_count} review{place.review_count === 1 ? "" : "s"}
+            </span>
+          )}
         </div>
       </div>
     </button>

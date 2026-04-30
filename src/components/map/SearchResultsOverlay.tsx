@@ -2,10 +2,10 @@ import { useEffect, useRef, useCallback } from "react";
 import type maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
-import type { NominatimSearchResult } from "@/lib/api/nominatim";
+import type { EnrichedResult } from "@/lib/places/enrich-search";
 
 interface SearchResultsOverlayProps {
-  results: NominatimSearchResult[];
+  results: EnrichedResult[];
   searchQuery: string;
   searchMode: string;
 }
@@ -15,22 +15,31 @@ const CLUSTER_ID = SOURCE_ID + "-clusters";
 const CLUSTER_COUNT_ID = SOURCE_ID + "-cluster-count";
 const RING_ID = SOURCE_ID + "-ring";
 const DOT_ID = SOURCE_ID + "-dot";
+const RATED_HALO_ID = SOURCE_ID + "-rated-halo";
+const RATED_LABEL_ID = SOURCE_ID + "-rated-label";
 const COLOR = "#f59e0b"; // amber — distinct from green (places) and blue/purple (collections)
 
 function resultsToGeoJSON(
-  results: NominatimSearchResult[],
+  results: EnrichedResult[],
 ): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
-    features: results.map((r) => ({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [r.lon, r.lat] },
-      properties: {
-        osm_type: r.osm_type,
-        osm_id: r.osm_id,
-        name: r.name,
-      },
-    })),
+    features: results.map(({ result, place }) => {
+      const rating =
+        place && place.review_count > 0
+          ? (place.avg_rating / 2).toFixed(1)
+          : null;
+      return {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [result.lon, result.lat] },
+        properties: {
+          osm_type: result.osm_type,
+          osm_id: result.osm_id,
+          name: result.name,
+          ...(rating != null ? { rating } : {}),
+        },
+      };
+    }),
   };
 }
 
@@ -87,13 +96,18 @@ function ensureLayers(map: maplibregl.Map) {
     });
   }
 
+  // Unrated points: small amber dot with a soft ring around it.
   if (!map.getLayer(RING_ID)) {
     map.addLayer(
       {
         id: RING_ID,
         type: "circle",
         source: SOURCE_ID,
-        filter: ["!", ["has", "point_count"]],
+        filter: [
+          "all",
+          ["!", ["has", "point_count"]],
+          ["!", ["has", "rating"]],
+        ],
         paint: {
           "circle-radius": [
             "interpolate", ["linear"], ["zoom"],
@@ -116,7 +130,11 @@ function ensureLayers(map: maplibregl.Map) {
         id: DOT_ID,
         type: "circle",
         source: SOURCE_ID,
-        filter: ["!", ["has", "point_count"]],
+        filter: [
+          "all",
+          ["!", ["has", "point_count"]],
+          ["!", ["has", "rating"]],
+        ],
         paint: {
           "circle-radius": [
             "interpolate", ["linear"], ["zoom"],
@@ -128,6 +146,56 @@ function ensureLayers(map: maplibregl.Map) {
       },
       beforePois,
     );
+  }
+
+  // Rated points: bigger filled badge with a white ring so the rating
+  // text on top stays legible even on satellite imagery.
+  if (!map.getLayer(RATED_HALO_ID)) {
+    map.addLayer(
+      {
+        id: RATED_HALO_ID,
+        type: "circle",
+        source: SOURCE_ID,
+        filter: [
+          "all",
+          ["!", ["has", "point_count"]],
+          ["has", "rating"],
+        ],
+        paint: {
+          "circle-radius": 12,
+          "circle-color": COLOR,
+          "circle-opacity": 0.95,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      },
+      beforePois,
+    );
+  }
+
+  if (!map.getLayer(RATED_LABEL_ID)) {
+    map.addLayer({
+      id: RATED_LABEL_ID,
+      type: "symbol",
+      source: SOURCE_ID,
+      filter: [
+        "all",
+        ["!", ["has", "point_count"]],
+        ["has", "rating"],
+      ],
+      layout: {
+        "text-field": ["get", "rating"],
+        "text-size": 10,
+        "text-font": ["Noto Sans Medium"],
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+      },
+      paint: {
+        "text-color": "#ffffff",
+        "text-halo-color": COLOR,
+        "text-halo-width": 1,
+      },
+    });
   }
 }
 
@@ -201,7 +269,9 @@ export function SearchResultsOverlay({
 
     const onPointClick = (e: maplibregl.MapMouseEvent) => {
       const features = map.queryRenderedFeatures(e.point, {
-        layers: [RING_ID, DOT_ID].filter((id) => map.getLayer(id)),
+        layers: [RING_ID, DOT_ID, RATED_HALO_ID, RATED_LABEL_ID].filter((id) =>
+          map.getLayer(id),
+        ),
       });
       if (!features.length) return;
 
@@ -229,23 +299,32 @@ export function SearchResultsOverlay({
       });
     };
 
+    const pointLayers = [RING_ID, DOT_ID, RATED_HALO_ID, RATED_LABEL_ID];
     if (map.getLayer(CLUSTER_ID)) map.on("click", CLUSTER_ID, onClusterClick);
-    if (map.getLayer(RING_ID)) map.on("click", RING_ID, onPointClick);
-    if (map.getLayer(DOT_ID)) map.on("click", DOT_ID, onPointClick);
+    for (const id of pointLayers) {
+      if (map.getLayer(id)) map.on("click", id, onPointClick);
+    }
     return () => {
       if (map.getLayer(CLUSTER_ID)) map.off("click", CLUSTER_ID, onClusterClick);
-      if (map.getLayer(RING_ID)) map.off("click", RING_ID, onPointClick);
-      if (map.getLayer(DOT_ID)) map.off("click", DOT_ID, onPointClick);
+      for (const id of pointLayers) {
+        if (map.getLayer(id)) map.off("click", id, onPointClick);
+      }
     };
   }, [map, searchQuery, searchMode]);
 
   // Cleanup on unmount
   const cleanup = useCallback(() => {
     if (!map) return;
-    if (map.getLayer(DOT_ID)) map.removeLayer(DOT_ID);
-    if (map.getLayer(RING_ID)) map.removeLayer(RING_ID);
-    if (map.getLayer(CLUSTER_COUNT_ID)) map.removeLayer(CLUSTER_COUNT_ID);
-    if (map.getLayer(CLUSTER_ID)) map.removeLayer(CLUSTER_ID);
+    for (const id of [
+      RATED_LABEL_ID,
+      RATED_HALO_ID,
+      DOT_ID,
+      RING_ID,
+      CLUSTER_COUNT_ID,
+      CLUSTER_ID,
+    ]) {
+      if (map.getLayer(id)) map.removeLayer(id);
+    }
     if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
   }, [map]);
 

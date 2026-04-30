@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import {
   Search,
   X,
@@ -20,6 +20,12 @@ import { useRouteCreationStore } from "@/stores/route-creation-store";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
 import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
 import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
+import {
+  placeStarsLabel,
+  sortByRating,
+  useEnrichedSearchResults,
+  type EnrichedResult,
+} from "@/lib/places/enrich-search";
 
 type SearchMode = "places" | "tags";
 
@@ -43,6 +49,14 @@ export function SearchBar() {
     useNominatimSearch(mode === "places" ? query : "");
   const { data: tagResults, isLoading: tagsLoading } = useTagSearch(
     mode === "tags" ? query : "",
+  );
+
+  // Decorate Nominatim results with rating + tags via the indexer's
+  // PlaceDetails cache, then re-rank highly-rated places to the top.
+  const enrichedPlaces = useEnrichedSearchResults(placeResults ?? []);
+  const sortedEnrichedPlaces = useMemo(
+    () => sortByRating(enrichedPlaces),
+    [enrichedPlaces],
   );
 
   const isLoading = mode === "places" ? placesLoading : tagsLoading;
@@ -311,41 +325,15 @@ export function SearchBar() {
             <div className="px-4 py-3 text-sm text-muted">No results found</div>
           )}
 
-          {/* Places mode results */}
+          {/* Places mode results — enriched with Mapky rating + tags. */}
           {mode === "places" &&
-            placeResults?.map((result) => {
-              const typeLabel = result.type?.replace(/_/g, " ") || "";
-              const categoryLabel = result.category?.replace(/_/g, " ") || "";
-              const badge =
-                typeLabel === "yes" || typeLabel === "unclassified"
-                  ? categoryLabel
-                  : typeLabel;
-
-              return (
-                <button
-                  key={`${result.osm_type}-${result.osm_id}`}
-                  onClick={() => handleSelectPlace(result)}
-                  className="flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface"
-                >
-                  <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {result.name}
-                      </p>
-                      {badge && (
-                        <span className="flex-shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10px] capitalize text-muted">
-                          {badge}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs leading-relaxed text-muted">
-                      {result.display_name}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
+            sortedEnrichedPlaces.map((row) => (
+              <PlaceResultRow
+                key={`${row.result.osm_type}-${row.result.osm_id}`}
+                row={row}
+                onSelect={() => handleSelectPlace(row.result)}
+              />
+            ))}
 
           {/* Tags mode results */}
           {mode === "tags" && tagResults && (
@@ -472,6 +460,70 @@ export function SearchBar() {
       params: { authorId: route.author_id, routeId },
     });
   }
+}
+
+function PlaceResultRow({
+  row,
+  onSelect,
+}: {
+  row: EnrichedResult;
+  onSelect: () => void;
+}) {
+  const { result, place, tags } = row;
+  const typeLabel = result.type?.replace(/_/g, " ") || "";
+  const categoryLabel = result.category?.replace(/_/g, " ") || "";
+  const badge =
+    typeLabel === "yes" || typeLabel === "unclassified"
+      ? categoryLabel
+      : typeLabel;
+  const stars = placeStarsLabel(place);
+  const topTags = tags.slice(0, 2);
+
+  return (
+    <button
+      onClick={onSelect}
+      className="flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface"
+    >
+      <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-medium text-foreground">
+            {result.name}
+          </p>
+          {badge && (
+            <span className="flex-shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10px] capitalize text-muted">
+              {badge}
+            </span>
+          )}
+          {stars && (
+            <span className="flex-shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+              {stars}
+            </span>
+          )}
+        </div>
+        <p className="text-xs leading-relaxed text-muted">
+          {result.display_name}
+        </p>
+        {topTags.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {topTags.map((t) => (
+              <span
+                key={t.label}
+                className="rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted"
+              >
+                #{t.label}
+              </span>
+            ))}
+            {tags.length > topTags.length && (
+              <span className="text-[10px] text-muted">
+                +{tags.length - topTags.length}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </button>
+  );
 }
 
 function OsmPlaceName({ osmCanonical }: { osmCanonical: string }) {
