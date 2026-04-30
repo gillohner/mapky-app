@@ -64,6 +64,7 @@ export interface TagSearchResult {
   places: PlaceDetails[];
   collections: CollectionDetails[];
   posts: PostDetails[];
+  routes: RouteDetails[];
 }
 
 export type GeoCaptureKind =

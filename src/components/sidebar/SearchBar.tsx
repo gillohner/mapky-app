@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Search,
   X,
@@ -13,17 +13,15 @@ import {
   useNominatimSearch,
   useTagSearch,
   useOsmLookup,
-  useViewportRoutes,
 } from "@/lib/api/hooks";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
-import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
 import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
 import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
 
-type SearchMode = "places" | "tags" | "routes";
+type SearchMode = "places" | "tags";
 
 export function SearchBar() {
   const [input, setInput] = useState("");
@@ -46,24 +44,8 @@ export function SearchBar() {
   const { data: tagResults, isLoading: tagsLoading } = useTagSearch(
     mode === "tags" ? query : "",
   );
-  // Routes search is client-side filter against the viewport route list:
-  // server-side route search by name isn't exposed yet. Surfaces routes
-  // visible on the map narrowed by the typed query.
-  const bbox = useViewportBounds(mode === "routes");
-  const { data: viewportRoutes, isLoading: routesLoading } = useViewportRoutes(
-    mode === "routes" ? bbox : null,
-  );
-  const routeResults = useMemo(
-    () => filterRoutes(viewportRoutes ?? null, query),
-    [viewportRoutes, query],
-  );
 
-  const isLoading =
-    mode === "places"
-      ? placesLoading
-      : mode === "tags"
-        ? tagsLoading
-        : routesLoading;
+  const isLoading = mode === "places" ? placesLoading : tagsLoading;
 
   // Debounce input → query
   useEffect(() => {
@@ -98,9 +80,7 @@ export function SearchBar() {
     if (isOnSearchRoute && typeof searchParams === "object" && searchParams !== null) {
       const sp = searchParams as Record<string, unknown>;
       const q = sp.q ? String(sp.q) : "";
-      const rawMode = sp.mode;
-      const m: SearchMode =
-        rawMode === "tags" || rawMode === "routes" ? rawMode : "places";
+      const m: SearchMode = sp.mode === "tags" ? "tags" : "places";
       if (q && q !== input) setInput(q);
       if (m !== mode) setMode(m);
     }
@@ -222,12 +202,11 @@ export function SearchBar() {
   const hasResults =
     mode === "places"
       ? placeResults && placeResults.length > 0
-      : mode === "routes"
-        ? routeResults.length > 0
-        : tagResults &&
-          ((tagResults.places?.length ?? 0) > 0 ||
-            (tagResults.collections?.length ?? 0) > 0 ||
-            (tagResults.posts?.length ?? 0) > 0);
+      : tagResults &&
+        ((tagResults.places?.length ?? 0) > 0 ||
+          (tagResults.collections?.length ?? 0) > 0 ||
+          (tagResults.posts?.length ?? 0) > 0 ||
+          (tagResults.routes?.length ?? 0) > 0);
 
   // Hide whenever the directions sidebar is actually visible — it
   // takes the same left slot and owns the search/picker UX. The store's
@@ -269,20 +248,9 @@ export function SearchBar() {
                 ? "bg-background text-accent shadow-sm"
                 : "text-muted hover:text-foreground"
             }`}
-            title="Search by tag"
+            title="Search by tag (places, collections, posts, routes)"
           >
             <Tag className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={() => switchMode("routes")}
-            className={`rounded-md p-1.5 transition-colors ${
-              mode === "routes"
-                ? "bg-background text-accent shadow-sm"
-                : "text-muted hover:text-foreground"
-            }`}
-            title="Search routes in this area"
-          >
-            <RouteIcon className="h-3.5 w-3.5" />
           </button>
         </div>
 
@@ -299,11 +267,7 @@ export function SearchBar() {
           onFocus={() => setShowResults(true)}
           onKeyDown={handleKeyDown}
           placeholder={
-            mode === "places"
-              ? "Search places..."
-              : mode === "routes"
-                ? "Search routes in this area..."
-                : "Search by tag..."
+            mode === "places" ? "Search places..." : "Search by tag..."
           }
           className="w-full bg-transparent text-sm text-foreground placeholder:text-muted focus:outline-none"
         />
@@ -450,26 +414,33 @@ export function SearchBar() {
                   ))}
                 </div>
               )}
+
+              {tagResults.routes?.length > 0 && (
+                <div>
+                  <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                    Routes
+                  </div>
+                  {tagResults.routes.map((route) => (
+                    <button
+                      key={route.id}
+                      onClick={() => handleSelectRoute(route)}
+                      className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-surface"
+                    >
+                      <RouteIcon className="h-4 w-4 flex-shrink-0 text-accent" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {route.name || "Untitled route"}
+                        </p>
+                        <p className="text-xs uppercase text-muted">
+                          {route.activity}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </>
           )}
-
-          {/* Routes mode results */}
-          {mode === "routes" &&
-            routeResults.map((route) => (
-              <button
-                key={route.id}
-                onClick={() => handleSelectRoute(route)}
-                className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-surface"
-              >
-                <RouteIcon className="h-4 w-4 flex-shrink-0 text-accent" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {route.name || "Untitled route"}
-                  </p>
-                  <p className="text-xs uppercase text-muted">{route.activity}</p>
-                </div>
-              </button>
-            ))}
         </div>
       )}
     </div>
@@ -486,20 +457,6 @@ export function SearchBar() {
       params: { authorId: route.author_id, routeId },
     });
   }
-}
-
-function filterRoutes(
-  routes: RouteDetails[] | null,
-  q: string,
-): RouteDetails[] {
-  if (!routes) return [];
-  if (!q.trim()) return routes;
-  const needle = q.toLowerCase();
-  return routes.filter(
-    (r) =>
-      (r.name ?? "").toLowerCase().includes(needle) ||
-      (r.description ?? "").toLowerCase().includes(needle),
-  );
 }
 
 function OsmPlaceName({ osmCanonical }: { osmCanonical: string }) {
