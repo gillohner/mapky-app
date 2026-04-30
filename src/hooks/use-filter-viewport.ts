@@ -33,18 +33,29 @@ export function useFilterViewport({
     null,
   );
   const wasActiveRef = useRef(false);
+  const lastBoundsKeyRef = useRef<string | null>(null);
+
+  // Content-based key: identity of the `bounds` object changes every
+  // render (it's recomputed from the filtered list each time), and
+  // fitBounds itself moves the map → new viewport query → new
+  // filtered list → new bounds object → infinite loop. Compare by
+  // value so we only fit when the box actually moved.
+  const boundsKey = bounds ? boundsToKey(bounds) : null;
 
   useEffect(() => {
     if (!map) return;
 
     if (active && bounds) {
-      // First activation in this session: snapshot the current view so
-      // we can flyTo back to it when the filter clears.
+      // First activation in this session: snapshot the current view.
       if (!wasActiveRef.current) {
         const c = map.getCenter();
         savedRef.current = { center: [c.lng, c.lat], zoom: map.getZoom() };
         wasActiveRef.current = true;
       }
+      // Skip duplicate fits to the same box — that's what was driving
+      // the update-depth-exceeded cascade.
+      if (boundsKey === lastBoundsKeyRef.current) return;
+      lastBoundsKeyRef.current = boundsKey;
       const isDesktop =
         typeof window !== "undefined" && window.innerWidth >= 640;
       map.fitBounds(
@@ -64,8 +75,6 @@ export function useFilterViewport({
         },
       );
     } else if (!active && wasActiveRef.current) {
-      // Filter just cleared — pan back to where the user was before
-      // they started filtering.
       if (savedRef.current) {
         map.flyTo({
           center: savedRef.current.center,
@@ -75,8 +84,16 @@ export function useFilterViewport({
       }
       savedRef.current = null;
       wasActiveRef.current = false;
+      lastBoundsKeyRef.current = null;
     }
-  }, [map, active, bounds]);
+  }, [map, active, bounds, boundsKey]);
+}
+
+/** Round to 4 decimals (~11m) so tiny float jitter doesn't refire a
+ * fit on every viewport-query refresh. */
+function boundsToKey(b: FilterBounds): string {
+  const r = (n: number) => n.toFixed(4);
+  return `${r(b.minLat)},${r(b.minLon)},${r(b.maxLat)},${r(b.maxLon)}`;
 }
 
 /** Build a bounding box from a list of points. Returns null when empty. */
