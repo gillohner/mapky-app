@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Route as CapturesRoute } from "@/routes/captures";
 import {
@@ -22,6 +22,7 @@ import { resolveFileUrl } from "@/lib/api/user";
 import { useMapStore } from "@/stores/map-store";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
 import { DiscoverNewButton } from "@/components/discover/NewButton";
+import { DiscoverFilter } from "@/components/discover/Filter";
 import type { GeoCaptureDetails, GeoCaptureKind } from "@/types/mapky";
 
 type Tab = "mine" | "viewport";
@@ -60,6 +61,17 @@ export function CaptureList() {
 
   const close = () => navigate({ to: "/" });
 
+  const [filter, setFilter] = useState("");
+  const filtered = useMemo(() => {
+    const needle = filter.trim().toLowerCase();
+    if (!needle) return list.data ?? [];
+    return (list.data ?? []).filter((c) =>
+      [c.caption, c.kind]
+        .filter((v): v is string => !!v)
+        .some((v) => v.toLowerCase().includes(needle)),
+    );
+  }, [list.data, filter]);
+
   return (
     <DiscoverSidebar
       title="Captures"
@@ -71,6 +83,11 @@ export function CaptureList() {
       {publicKey && (
         <DiscoverNewButton onClick={openCreate} label="New capture" />
       )}
+      <DiscoverFilter
+        value={filter}
+        onChange={setFilter}
+        placeholder="Filter by caption or kind…"
+      />
       {list.isLoading && (
         <p className="flex items-center gap-2 text-xs text-muted">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -80,17 +97,21 @@ export function CaptureList() {
       {list.error && (
         <p className="text-xs text-red-500">{(list.error as Error).message}</p>
       )}
-      {list.data && list.data.length === 0 && (
+      {list.data && filtered.length === 0 && (
         <p className="text-xs text-muted">
-          {tab === "mine"
-            ? publicKey
-              ? "You haven't created any captures yet."
-              : "Sign in to see your captures."
-            : "No captures in this area yet."}
+          {filter
+            ? "No captures match your filter."
+            : tab === "mine"
+              ? publicKey
+                ? "You haven't created any captures yet."
+                : "Sign in to see your captures."
+              : "No captures in this area yet."}
         </p>
       )}
       <div className="grid grid-cols-2 gap-2">
-        {list.data?.map((c) => <CaptureCard key={c.id} capture={c} />)}
+        {filtered.map((c) => (
+          <CaptureCard key={c.id} capture={c} />
+        ))}
       </div>
     </DiscoverSidebar>
   );

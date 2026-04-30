@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Route as RoutesIndexRoute } from "@/routes/routes/index";
 import { Loader2 } from "lucide-react";
+import { DiscoverFilter } from "@/components/discover/Filter";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserRoutes, useViewportRoutes } from "@/lib/api/hooks";
 import {
@@ -64,13 +65,24 @@ export function RouteList() {
 
   const list = tab === "mine" ? userRoutes : viewportRoutes;
 
+  const [filter, setFilter] = useState("");
+  const filtered = useMemo(() => {
+    const needle = filter.trim().toLowerCase();
+    if (!needle) return list.data ?? [];
+    return (list.data ?? []).filter((r) =>
+      [r.name, r.description, r.activity]
+        .filter((v): v is string => !!v)
+        .some((v) => v.toLowerCase().includes(needle)),
+    );
+  }, [list.data, filter]);
+
   return (
     <>
       {/* Render every visible route as a polyline + start marker on
           the map. Bodies are fetched in parallel (TanStack useQueries),
           same cache as the detail view's useRouteBody, so opening any
           route's detail page is instant. */}
-      <RoutesIndexLayer routes={list.data} />
+      <RoutesIndexLayer routes={filtered} />
 
       <DiscoverSidebar
       title="Routes"
@@ -80,6 +92,11 @@ export function RouteList() {
       onClose={close}
     >
       <DiscoverNewButton onClick={handleCreate} label="Plan a new route" />
+      <DiscoverFilter
+        value={filter}
+        onChange={setFilter}
+        placeholder="Filter by name, activity…"
+      />
 
       {draftCount > 0 && (
         <button
@@ -99,15 +116,17 @@ export function RouteList() {
       {list.error && (
         <p className="text-xs text-red-500">{(list.error as Error).message}</p>
       )}
-      {list.data && list.data.length === 0 && (
+      {list.data && filtered.length === 0 && (
         <p className="text-xs text-muted">
-          {tab === "mine"
-            ? "You haven't saved any routes yet."
-            : "No routes in this area yet."}
+          {filter
+            ? "No routes match your filter."
+            : tab === "mine"
+              ? "You haven't saved any routes yet."
+              : "No routes in this area yet."}
         </p>
       )}
       <div className="space-y-1.5">
-        {list.data?.map((r) => <RouteCard key={r.id} route={r} />)}
+        {filtered.map((r) => <RouteCard key={r.id} route={r} />)}
       </div>
     </DiscoverSidebar>
     </>

@@ -12,6 +12,7 @@ import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
 import { DiscoverNewButton } from "@/components/discover/NewButton";
+import { DiscoverFilter } from "@/components/discover/Filter";
 import { CreateCollectionForm } from "./CreateCollectionForm";
 import type { CollectionDetails } from "@/types/mapky";
 
@@ -96,6 +97,8 @@ export function CollectionList() {
 
   const close = () => navigate({ to: "/" });
 
+  const [filter, setFilter] = useState("");
+
   return (
     <DiscoverSidebar
       title="Collections"
@@ -105,7 +108,14 @@ export function CollectionList() {
       onClose={close}
     >
       {tab === "viewport" ? (
-        <ViewportCollections query={viewportQuery} />
+        <>
+          <DiscoverFilter
+            value={filter}
+            onChange={setFilter}
+            placeholder="Filter by name or description…"
+          />
+          <ViewportCollections query={viewportQuery} filter={filter} />
+        </>
       ) : !isAuthenticated ? (
         <p className="py-8 text-center text-sm text-muted">
           Sign in to create and view collections
@@ -118,6 +128,11 @@ export function CollectionList() {
             onClick={() => setCreating(true)}
             label="New collection"
           />
+          <DiscoverFilter
+            value={filter}
+            onChange={setFilter}
+            placeholder="Filter by name or description…"
+          />
 
           {isLoading && <LoadingSkeleton />}
 
@@ -127,19 +142,42 @@ export function CollectionList() {
             </p>
           )}
 
-          {collections?.map((c) => (
+          {filterCollections(collections, filter).map((c) => (
             <CollectionCard key={c.id} collection={c} />
           ))}
+          {!isLoading &&
+            (collections?.length ?? 0) > 0 &&
+            filterCollections(collections, filter).length === 0 && (
+              <p className="text-xs text-muted">
+                No collections match your filter.
+              </p>
+            )}
         </div>
       )}
     </DiscoverSidebar>
   );
 }
 
+function filterCollections(
+  cs: CollectionDetails[] | undefined,
+  q: string,
+): CollectionDetails[] {
+  if (!cs) return [];
+  const needle = q.trim().toLowerCase();
+  if (!needle) return cs;
+  return cs.filter(
+    (c) =>
+      c.name.toLowerCase().includes(needle) ||
+      (c.description ?? "").toLowerCase().includes(needle),
+  );
+}
+
 function ViewportCollections({
   query,
+  filter,
 }: {
   query: ReturnType<typeof useViewportCollections>;
+  filter: string;
 }) {
   if (query.isLoading) {
     return (
@@ -161,9 +199,15 @@ function ViewportCollections({
       </p>
     );
   }
+  const filtered = filterCollections(query.data, filter);
+  if (filtered.length === 0) {
+    return (
+      <p className="text-xs text-muted">No collections match your filter.</p>
+    );
+  }
   return (
     <div className="space-y-3">
-      {query.data.map((c) => (
+      {filtered.map((c) => (
         <CollectionCard key={c.id} collection={c} />
       ))}
     </div>

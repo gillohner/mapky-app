@@ -1,28 +1,113 @@
+import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueries } from "@tanstack/react-query";
 import { Loader2, MapPin, Star, Tag as TagIcon } from "lucide-react";
 import { useViewportPlaces, useOsmLookup } from "@/lib/api/hooks";
+import { fetchPlaceTags } from "@/lib/api/mapky";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { useMapStore } from "@/stores/map-store";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
+import { DiscoverFilter } from "@/components/discover/Filter";
 import { fallbackPlaceLabel } from "@/lib/map/osm-url";
-import type { PlaceDetails } from "@/types/mapky";
+import type { PlaceDetails, PostTagDetails } from "@/types/mapky";
 
 /**
  * Places discover sidebar — feed of indexed places in the current map
- * viewport. Search lives in the global top SearchBar (places / tags /
- * routes modes), so this list is just a clean preview-of-places.
+ * viewport. Each row shows its top tags inline; a filter box at the
+ * top searches by name/tag and clicking suggested tag chips narrows
+ * the list further.
  */
 export function PlaceList() {
   const navigate = useNavigate();
   const bbox = useViewportBounds();
   const viewport = useViewportPlaces(bbox);
-  // Browsing places → fade other Mapky data so the focused layer pops.
   useAutoFocusLayer("places");
   const close = () => navigate({ to: "/" });
 
+  // Batch-fetch tags for every place in the viewport. TanStack caches
+  // each per (osmType, osmId), so opening a place detail later reuses
+  // the same query. With ~20–50 places per viewport this stays cheap.
+  const places = viewport.data ?? [];
+  const tagQueries = useQueries({
+    queries: places.map((p) => ({
+      queryKey: ["mapky", "place", p.osm_type, p.osm_id, "tags"] as const,
+      queryFn: () => fetchPlaceTags(p.osm_type, p.osm_id),
+      enabled: p.tag_count > 0,
+      staleTime: 60_000,
+      retry: false,
+    })),
+  });
+
+  const tagsByPlace = useMemo(() => {
+    const map = new Map<string, PostTagDetails[]>();
+    places.forEach((p, i) => {
+      const tags = tagQueries[i].data ?? [];
+      map.set(placeKey(p), tags);
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [places, tagQueries.map((q) => q.dataUpdatedAt).join(",")]);
+
+  // Filter state — text + selected tag chips. Stays local; URL-backing
+  // can come later if shareable filtered views become a real need.
+  const [query, setQuery] = useState("");
+  const [activeTags, setActiveTags] = useState<string[]>([]);
+
+  // Suggest tag chips ranked by frequency across the visible places,
+  // capped at 12 and excluding ones already active.
+  const suggestedTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const tags of tagsByPlace.values()) {
+      for (const t of tags) {
+        counts.set(t.label, (counts.get(t.label) ?? 0) + t.taggers_count);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([label]) => label)
+      .filter((l) => !activeTags.includes(l))
+      .slice(0, 12);
+  }, [tagsByPlace, activeTags]);
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return places.filter((p) => {
+      const tags = tagsByPlace.get(placeKey(p)) ?? [];
+      const tagLabels = tags.map((t) => t.label);
+      // Active-tag filter: every selected tag must be present.
+      if (
+        activeTags.length > 0 &&
+        !activeTags.every((t) => tagLabels.includes(t))
+      ) {
+        return false;
+      }
+      // Text filter matches osm canonical, type, and any tag label.
+      if (!needle) return true;
+      const haystack = [
+        p.osm_canonical,
+        ...tagLabels,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [places, tagsByPlace, query, activeTags]);
+
   return (
     <DiscoverSidebar title="Places" onClose={close}>
+      <DiscoverFilter
+        value={query}
+        onChange={setQuery}
+        placeholder="Filter by name or tag…"
+        activeTags={activeTags}
+        onRemoveTag={(t) => setActiveTags((prev) => prev.filter((x) => x !== t))}
+        suggestedTags={suggestedTags}
+        onAddTag={(t) =>
+          setActiveTags((prev) => (prev.includes(t) ? prev : [...prev, t]))
+        }
+      />
+
       {viewport.isLoading && (
         <p className="flex items-center gap-2 text-xs text-muted">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -34,21 +119,40 @@ export function PlaceList() {
           {(viewport.error as Error).message}
         </p>
       )}
-      {viewport.data && viewport.data.length === 0 && (
+      {!viewport.isLoading && places.length === 0 && (
         <p className="text-xs text-muted">
           No indexed places in this area yet. Try zooming out or panning.
         </p>
       )}
+      {!viewport.isLoading && places.length > 0 && filtered.length === 0 && (
+        <p className="text-xs text-muted">
+          No places match your filter.
+        </p>
+      )}
       <div className="space-y-1.5">
-        {viewport.data?.map((p) => (
-          <PlaceRow key={`${p.osm_type}-${p.osm_id}`} place={p} />
+        {filtered.map((p) => (
+          <PlaceRow
+            key={placeKey(p)}
+            place={p}
+            tags={tagsByPlace.get(placeKey(p)) ?? []}
+          />
         ))}
       </div>
     </DiscoverSidebar>
   );
 }
 
-function PlaceRow({ place }: { place: PlaceDetails }) {
+function placeKey(p: PlaceDetails): string {
+  return `${p.osm_type}-${p.osm_id}`;
+}
+
+function PlaceRow({
+  place,
+  tags,
+}: {
+  place: PlaceDetails;
+  tags: PostTagDetails[];
+}) {
   const navigate = useNavigate();
   const map = useMapStore((s) => s.map);
   const { data: nominatim } = useOsmLookup(place.osm_type, place.osm_id, true);
@@ -58,6 +162,11 @@ function PlaceRow({ place }: { place: PlaceDetails }) {
     nominatim?.display_name?.split(",")[0] ||
     fallbackPlaceLabel(place.osm_type, place.osm_id);
   const typeLabel = nominatim?.type?.replace(/_/g, " ") ?? "";
+
+  // Show the top 3 tags inline; a "+N" badge surfaces overflow without
+  // overwhelming the row.
+  const topTags = tags.slice(0, 3);
+  const overflow = tags.length - topTags.length;
 
   return (
     <button
@@ -100,6 +209,21 @@ function PlaceRow({ place }: { place: PlaceDetails }) {
             </span>
           )}
         </div>
+        {topTags.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {topTags.map((t) => (
+              <span
+                key={t.label}
+                className="rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted"
+              >
+                #{t.label}
+              </span>
+            ))}
+            {overflow > 0 && (
+              <span className="text-[10px] text-muted">+{overflow}</span>
+            )}
+          </div>
+        )}
       </div>
     </button>
   );
