@@ -33,8 +33,9 @@ const ROUTE_COLORS = [
 ];
 
 /** Stable color per (authorId, routeId) — same route across re-renders
- * keeps its color even as the routes list reorders. */
-function colorFor(authorId: string, routeId: string): string {
+ * keeps its color even as the routes list reorders. Exported so the
+ * RouteCard list rows can show a matching color stripe. */
+export function routeColor(authorId: string, routeId: string): string {
   const key = `${authorId}:${routeId}`;
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
@@ -91,7 +92,7 @@ export function RoutesIndexLayer({ routes }: Props) {
         route_id: r.routeId,
         name: r.meta.name ?? "",
         activity: r.meta.activity,
-        color: colorFor(r.authorId, r.routeId),
+        color: routeColor(r.authorId, r.routeId),
       };
       if (body?.geometry?.polyline) {
         const coords = decodePolyline(body.geometry.polyline);
