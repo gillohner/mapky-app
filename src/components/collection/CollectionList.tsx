@@ -47,9 +47,10 @@ export function CollectionList() {
     navigate({ to: "/collections", search: { tab: next }, replace: true });
   };
 
-  // Browsing collections → fade Mapky places + captures so the
-  // collection overlays pop. Cleared on unmount by useAutoFocusLayer.
-  useAutoFocusLayer("collections");
+  // Browsing collections fades Mapky places + captures; an active
+  // filter (text or tag chip) hides them entirely so the focused
+  // collection overlays own the map. The hook re-runs when the
+  // boolean changes — see further down for `filterActive`.
 
   // Public viewport: backed by the indexer's
   // /v0/mapky/collections/viewport endpoint, which returns every
@@ -102,6 +103,10 @@ export function CollectionList() {
 
   const [filter, setFilter] = useState("");
   const [activeTags, setActiveTags] = useState<string[]>([]);
+  const filterActive = filter.trim().length > 0 || activeTags.length > 0;
+  // Hide places + captures while filtering — the focused collection
+  // overlays should own the map. Plain browsing keeps them dimmed.
+  useAutoFocusLayer("collections", { hide: filterActive });
 
   // Active list depends on tab. Tags are batch-fetched against this
   // unified list so both tabs render chips + tag filter the same way.

@@ -80,6 +80,17 @@ interface UiStore {
   setDimmed: (layer: DimmableLayer, on: boolean) => void;
   clearDimmed: () => void;
 
+  /**
+   * Layers that should be fully hidden. Stronger than `dimmedLayers`:
+   * a layer in this set returns opacity 0. Used when the user is in a
+   * focused mode (search active, list filter active, detail panel
+   * open) and wants the map to drop the surrounding noise entirely.
+   * Hidden takes precedence over dimmed.
+   */
+  hiddenLayers: Set<DimmableLayer>;
+  setHidden: (layer: DimmableLayer, on: boolean) => void;
+  clearHidden: () => void;
+
   layerSheetOpen: boolean;
   setLayerSheetOpen: (open: boolean) => void;
   toggleLayerSheet: () => void;
@@ -134,6 +145,16 @@ export const useUiStore = create<UiStore>()(
         set({ buildings3DVisible: visible }),
       toggleBuildings3D: () =>
         set((s) => ({ buildings3DVisible: !s.buildings3DVisible })),
+
+      hiddenLayers: new Set<DimmableLayer>(),
+      setHidden: (layer, on) =>
+        set((s) => {
+          const next = new Set(s.hiddenLayers);
+          if (on) next.add(layer);
+          else next.delete(layer);
+          return { hiddenLayers: next };
+        }),
+      clearHidden: () => set({ hiddenLayers: new Set() }),
 
       dimmedLayers: new Set<DimmableLayer>(),
       setDimmed: (layer, on) =>

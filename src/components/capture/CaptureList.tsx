@@ -54,7 +54,9 @@ export function CaptureList() {
   const openCreate = useCaptureCreationStore((s) => s.open);
 
   // Browsing captures → fade places so the focused layer pops.
-  useAutoFocusLayer("captures");
+  // useAutoFocusLayer call moves below `filterActive` so we can flip
+  // hide on/off as the user narrows the list (active filter → hide
+  // places entirely; plain browsing → places dimmed for context).
 
   const tab: Tab = search.tab ?? (publicKey ? "mine" : "viewport");
   const setTab = (next: Tab) => {
@@ -161,6 +163,9 @@ export function CaptureList() {
     active: filterActive,
     bounds: pointsToBounds(filtered.map((c) => ({ lat: c.lat, lon: c.lon }))),
   });
+  // Hide places entirely while filtering captures so the user isn't
+  // distracted by green dots they aren't looking at.
+  useAutoFocusLayer("captures", { hide: filterActive });
 
   return (
     <DiscoverSidebar

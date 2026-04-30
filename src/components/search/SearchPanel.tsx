@@ -17,6 +17,7 @@ import {
 } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
+import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
 import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
@@ -173,6 +174,13 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
     setSidebarOpen(true);
     return () => setSidebarOpen(false);
   }, [setSidebarOpen]);
+
+  // Search is the loudest "focus mode" the app has — the user typed a
+  // query expecting an answer, so kill every other Mapky data layer
+  // until they leave /search. Orange-dot search markers and any pinned
+  // collection overlays still render (they're not in the dimmable
+  // set), so the user keeps the context they actually asked for.
+  useAutoFocusLayer("places", { hide: true });
 
   const close = () => navigate({ to: "/" });
 

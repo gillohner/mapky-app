@@ -43,8 +43,12 @@ export function RouteList() {
   // waypoints, so the resume banner shouldn't appear.
   const draftCount = mode === "create" ? readySlotCount(slots) : 0;
 
-  // Browsing routes → fade Mapky places + captures so route markers pop.
-  useAutoFocusLayer("routes");
+  // Browsing routes fades Mapky places + captures; an active filter
+  // hides them entirely so the user can focus on the routes they're
+  // narrowing down to. (filterActive is computed below; the hook
+  // re-runs when the boolean changes.)
+  // The `useAutoFocusLayer` call lives further down once filterActive
+  // is in scope.
 
   const tab: Tab = search.tab ?? (publicKey ? "mine" : "viewport");
   const setTab = (next: Tab) => {
@@ -170,6 +174,10 @@ export function RouteList() {
   }, [filtered]);
 
   useFilterViewport({ active: filterActive, bounds: filteredBounds });
+
+  // Mapky places + captures dim during plain browsing; an active
+  // filter hides them entirely so route polylines own the map.
+  useAutoFocusLayer("routes", { hide: filterActive });
 
   return (
     <>

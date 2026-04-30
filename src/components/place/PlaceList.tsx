@@ -31,7 +31,6 @@ export function PlaceList() {
   const navigate = useNavigate();
   const bbox = useViewportBounds();
   const viewport = useViewportPlaces(bbox);
-  useAutoFocusLayer("places");
   const close = () => navigate({ to: "/" });
 
   // Batch-fetch tags for every place in the viewport. TanStack caches
@@ -118,6 +117,12 @@ export function PlaceList() {
 
   const filterActive =
     query.trim().length > 0 || activeTags.length > 0 || activeType !== null;
+
+  // Hide captures entirely while the user is narrowing the list —
+  // they're hunting for something specific, so background dots become
+  // noise. Plain browsing (no filter) keeps captures dimmed for
+  // context.
+  useAutoFocusLayer("places", { hide: filterActive });
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
