@@ -2,6 +2,7 @@ import { Star, MessageSquare, MapPin } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserPosts, useOsmLookup } from "@/lib/api/hooks";
+import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
 import type { PostDetails } from "@/types/mapky";
@@ -111,6 +112,9 @@ export function MyPostsPanel() {
   const navigate = useNavigate();
   const { isAuthenticated, publicKey } = useAuth();
   const { data: posts, isLoading } = useUserPosts(publicKey);
+
+  // Posts are anchored to places, so dim captures while browsing them.
+  useAutoFocusLayer("places");
 
   return (
     <DiscoverSidebar title="My Posts" onClose={() => navigate({ to: "/" })}>

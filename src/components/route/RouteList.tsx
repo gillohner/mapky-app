@@ -8,6 +8,7 @@ import {
   useRouteCreationStore,
 } from "@/stores/route-creation-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
+import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
 import { RouteCard } from "./RouteCard";
 
@@ -24,6 +25,9 @@ export function RouteList() {
   const reset = useRouteCreationStore((s) => s.reset);
   const slots = useRouteCreationStore((s) => s.slots);
   const draftCount = readySlotCount(slots);
+
+  // Browsing routes → fade Mapky places + captures so route markers pop.
+  useAutoFocusLayer("routes");
 
   const [tab, setTab] = useState<Tab>(publicKey ? "mine" : "viewport");
 

@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Loader2, MapPin, Star, Tag as TagIcon } from "lucide-react";
 import { useViewportPlaces, useOsmLookup } from "@/lib/api/hooks";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
+import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { useMapStore } from "@/stores/map-store";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import { fallbackPlaceLabel } from "@/lib/map/osm-url";
@@ -16,6 +17,8 @@ export function PlaceList() {
   const navigate = useNavigate();
   const bbox = useViewportBounds();
   const viewport = useViewportPlaces(bbox);
+  // Browsing places → fade other Mapky data so the focused layer pops.
+  useAutoFocusLayer("places");
   const close = () => navigate({ to: "/" });
 
   return (

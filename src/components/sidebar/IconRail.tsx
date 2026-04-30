@@ -11,7 +11,7 @@ import {
   Sun,
   User,
 } from "lucide-react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useMapStore } from "@/stores/map-store";
@@ -21,6 +21,29 @@ import {
   truncatePublicKey,
 } from "@/lib/api/user";
 import { useUserProfile } from "@/lib/api/hooks";
+
+/**
+ * Map a rail button's target path to the URL prefix that counts as
+ * "active" for it. The Places button stays lit while the user is on
+ * /place/$id (a place detail), Collections covers /collection/$id,
+ * etc. — each detail view "belongs" to its list nav.
+ */
+function navMatch(
+  to: "/places" | "/collections" | "/routes" | "/captures" | "/my-posts",
+): string {
+  switch (to) {
+    case "/places":
+      return "/place"; // matches /places, /place/...
+    case "/collections":
+      return "/collection"; // matches /collections, /collection/...
+    case "/routes":
+      return "/route"; // matches /routes, /route/...
+    case "/captures":
+      return "/capture"; // matches /captures, /capture/...
+    case "/my-posts":
+      return "/my-posts";
+  }
+}
 
 function RailButton({
   onClick,
@@ -60,8 +83,21 @@ function RailButton({
 export function IconRail() {
   const { isAuthenticated, publicKey, logout } = useAuth();
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const theme = useMapStore((s) => s.theme);
   const setTheme = useMapStore((s) => s.setTheme);
+
+  // Click an active nav button to close its sidebar (navigate back to /)
+  // — matches the "click again to close" pattern people expect from
+  // tabbed apps. Sub-paths count as active too so /place/$id stays
+  // bound to the Places nav, etc.
+  const navTo = (to: "/places" | "/collections" | "/routes" | "/captures" | "/my-posts") => {
+    const matchPrefix = navMatch(to);
+    if (pathname.startsWith(matchPrefix)) navigate({ to: "/" });
+    else navigate({ to });
+  };
+  const isActive = (to: "/places" | "/collections" | "/routes" | "/captures" | "/my-posts") =>
+    pathname.startsWith(navMatch(to));
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -179,37 +215,42 @@ export function IconRail() {
       </RailButton>
 
       <RailButton
-        onClick={() => navigate({ to: "/places" })}
+        onClick={() => navTo("/places")}
         title="Places"
+        active={isActive("/places")}
       >
         <MapPin className="h-5 w-5" />
       </RailButton>
 
       <RailButton
-        onClick={() => navigate({ to: "/collections" })}
+        onClick={() => navTo("/collections")}
         title="Collections"
+        active={isActive("/collections")}
       >
         <FolderHeart className="h-5 w-5" />
       </RailButton>
 
       <RailButton
-        onClick={() => navigate({ to: "/routes" })}
+        onClick={() => navTo("/routes")}
         title="Routes"
+        active={isActive("/routes")}
       >
         <RouteIcon className="h-5 w-5" />
       </RailButton>
 
       <RailButton
-        onClick={() => navigate({ to: "/captures" })}
+        onClick={() => navTo("/captures")}
         title="Captures"
+        active={isActive("/captures")}
       >
         <Camera className="h-5 w-5" />
       </RailButton>
 
       {isAuthenticated && (
         <RailButton
-          onClick={() => navigate({ to: "/my-posts" })}
+          onClick={() => navTo("/my-posts")}
           title="My Posts"
+          active={isActive("/my-posts")}
         >
           <MessageSquare className="h-5 w-5" />
         </RailButton>

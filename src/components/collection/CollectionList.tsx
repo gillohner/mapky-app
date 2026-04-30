@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, FolderHeart, MapPin, Eye, EyeOff, Layers, Loader2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -6,11 +6,16 @@ import {
   useUserCollections,
   useViewportCollections,
 } from "@/lib/api/hooks";
-import { useUiStore } from "@/stores/ui-store";
+import { useUiStore, type CollectionOverlayEntry } from "@/stores/ui-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
+import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
 import { CreateCollectionForm } from "./CreateCollectionForm";
 import type { CollectionDetails } from "@/types/mapky";
+
+/** Cap auto-pinned overlays to the OVERLAY_COLORS palette length so
+ * each collection gets a distinct hue. */
+const AUTO_PIN_LIMIT = 7;
 
 type Tab = "mine" | "viewport";
 
@@ -30,6 +35,10 @@ export function CollectionList() {
   const [creating, setCreating] = useState(false);
   const [tab, setTab] = useState<Tab>(publicKey ? "mine" : "viewport");
 
+  // Browsing collections → fade Mapky places + captures so the
+  // collection overlays pop. Cleared on unmount by useAutoFocusLayer.
+  useAutoFocusLayer("places");
+
   // Public viewport: backed by the indexer's
   // /v0/mapky/collections/viewport endpoint, which returns every
   // collection (any author) with at least one place inside the bbox.
@@ -37,6 +46,38 @@ export function CollectionList() {
   const viewportQuery = useViewportCollections(
     tab === "viewport" ? bbox : null,
   );
+
+  // Auto-pin every visible collection so its member places show up as
+  // colored POIs without the user having to flip eye icons one-by-one.
+  // Saves the user's pre-existing overlays on mount and restores them
+  // on unmount so closing the sidebar leaves the map exactly as it was.
+  const savedOverlaysRef = useRef<Map<string, CollectionOverlayEntry> | null>(null);
+  useEffect(() => {
+    savedOverlaysRef.current = new Map(useUiStore.getState().activeCollectionOverlays);
+    return () => {
+      const s = useUiStore.getState();
+      s.clearAllCollectionOverlays();
+      if (savedOverlaysRef.current) {
+        for (const e of savedOverlaysRef.current.values()) {
+          s.addCollectionOverlay(e.authorId, e.collectionId, e.color);
+        }
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const targetCollections =
+    tab === "mine" ? collections : viewportQuery.data;
+  useEffect(() => {
+    if (!targetCollections) return;
+    const top = targetCollections.slice(0, AUTO_PIN_LIMIT);
+    const s = useUiStore.getState();
+    s.clearAllCollectionOverlays();
+    for (const c of top) {
+      const [authorId, collectionId] = c.id.split(":");
+      s.addCollectionOverlay(authorId, collectionId, c.color ?? undefined);
+    }
+  }, [targetCollections]);
 
   const tabs: DiscoverTab[] = useMemo(() => {
     const list: DiscoverTab[] = [];

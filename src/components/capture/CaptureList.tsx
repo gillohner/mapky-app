@@ -17,6 +17,7 @@ import {
 } from "@/lib/api/hooks";
 import { useCaptureCreationStore } from "@/stores/capture-creation-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
+import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { resolveFileUrl } from "@/lib/api/user";
 import { useMapStore } from "@/stores/map-store";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
@@ -34,6 +35,9 @@ export function CaptureList() {
   const navigate = useNavigate();
   const { publicKey } = useAuth();
   const openCreate = useCaptureCreationStore((s) => s.open);
+
+  // Browsing captures → fade places so the focused layer pops.
+  useAutoFocusLayer("captures");
 
   const [tab, setTab] = useState<Tab>(publicKey ? "mine" : "viewport");
   const bbox = useViewportBounds(tab === "viewport");
