@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Download, Loader2, Pencil, Trash2 } from "lucide-react";
+import { Download, Loader2, MapPin, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useMapStore } from "@/stores/map-store";
 import { useRouteBody, useRouteDetails } from "@/lib/api/hooks";
@@ -256,6 +256,31 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
             </div>
           )}
 
+          {body.data && body.data.waypoints.length > 0 && (
+            <div className="border-t border-border/60 pt-3">
+              <h3 className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted">
+                Stops
+              </h3>
+              <ol className="space-y-1">
+                {body.data.waypoints.map((w, i) => (
+                  <WaypointRow
+                    key={i}
+                    waypoint={w}
+                    index={i}
+                    total={body.data!.waypoints.length}
+                    onClick={() => {
+                      map?.flyTo({
+                        center: [w.lon, w.lat],
+                        zoom: 16,
+                        duration: 700,
+                      });
+                    }}
+                  />
+                ))}
+              </ol>
+            </div>
+          )}
+
           <div className="border-t border-border/60 pt-2">
             <RouteTags authorId={authorId} routeId={routeId} />
           </div>
@@ -285,5 +310,48 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
         </div>
       </DiscoverSidebar>
     </>
+  );
+}
+
+function WaypointRow({
+  waypoint,
+  index,
+  total,
+  onClick,
+}: {
+  waypoint: { lat: number; lon: number; name?: string | null };
+  index: number;
+  total: number;
+  onClick: () => void;
+}) {
+  // Role label: Start / End / Stop N for the middle waypoints. Matches
+  // the A/B pin scheme the directions sidebar uses.
+  const role =
+    index === 0
+      ? "Start"
+      : index === total - 1
+        ? "End"
+        : `Stop ${index}`;
+  const label =
+    waypoint.name?.trim() ||
+    `${waypoint.lat.toFixed(5)}, ${waypoint.lon.toFixed(5)}`;
+  return (
+    <li>
+      <button
+        onClick={onClick}
+        className="flex w-full items-center gap-2 rounded-md border border-border bg-surface px-2 py-1.5 text-left text-xs transition-colors hover:border-accent"
+      >
+        <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/10 text-[10px] font-semibold text-accent">
+          {index === 0 ? "A" : index === total - 1 ? "B" : index}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-foreground">{label}</p>
+          <p className="text-[10px] uppercase tracking-wide text-muted">
+            {role}
+          </p>
+        </div>
+        <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-muted" />
+      </button>
+    </li>
   );
 }
