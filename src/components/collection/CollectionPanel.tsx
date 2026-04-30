@@ -6,6 +6,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useCollection } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
+import { useBackOr } from "@/hooks/use-back-or";
 import { CollectionHeader } from "./CollectionHeader";
 import { CollectionActions } from "./CollectionActions";
 import { CollectionTags } from "./CollectionTags";
@@ -68,7 +69,11 @@ export function CollectionPanel({ authorId, collectionId, fromSearchQuery, fromS
     }
   }, [collection?.color, authorId, collectionId, addOverlay]);
 
-  const close = () => navigate({ to: "/" });
+  // Closing a collection detail goes BACK in history so the user
+  // lands on whatever list they came from with its tab preserved
+  // (e.g. /collections?tab=viewport). Falls back to /collections when
+  // the tab was opened directly via a deep link.
+  const close = useBackOr(() => navigate({ to: "/collections" }));
   const back = () => {
     if (fromPlaceType && fromPlaceId) {
       navigate({

@@ -5,6 +5,7 @@ import { usePlaceDetail, useCollection } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
+import { useBackOr } from "@/hooks/use-back-or";
 import {
   encodeFeatureId,
   sourceLayersForType,
@@ -107,7 +108,10 @@ export function PlacePanel({
     return () => setSelectedFeature(null);
   }, [osmType, osmId, place?.lat, place?.lon, tileName, fallbackLat, fallbackLon, setSelectedFeature]);
 
-  const close = () => navigate({ to: "/" });
+  // Close → history.back so the user lands on whatever surface they
+  // came from (places list, search, collection, my-posts) with its
+  // URL state intact. Falls back to "/" for deep links.
+  const close = useBackOr(() => navigate({ to: "/" }));
 
   return (
     <>

@@ -29,6 +29,7 @@ import {
 } from "@/lib/api/mapky";
 import { resolveFileUrl } from "@/lib/api/user";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useBackOr } from "@/hooks/use-back-or";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { CaptureTags } from "./CaptureTags";
 import { SphereViewer, type VirtualTourNodeData, type SphereViewerHandle } from "./SphereViewer";
@@ -153,7 +154,9 @@ export function CaptureDetailPanel({
     [navigate],
   );
 
-  const handleClose = () => navigate({ to: "/" });
+  // Close → history.back so the user lands on /captures (with its
+  // tab) or wherever they came from. Falls back to "/" for deep links.
+  const handleClose = useBackOr(() => navigate({ to: "/" }));
 
   const handleDelete = async () => {
     if (!session || !isOwner) return;

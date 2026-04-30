@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { Route as CapturesRoute } from "@/routes/captures";
 import {
   Camera,
   Plus,
@@ -33,13 +34,17 @@ type Tab = "mine" | "viewport";
  */
 export function CaptureList() {
   const navigate = useNavigate();
+  const search = CapturesRoute.useSearch();
   const { publicKey } = useAuth();
   const openCreate = useCaptureCreationStore((s) => s.open);
 
   // Browsing captures → fade places so the focused layer pops.
   useAutoFocusLayer("captures");
 
-  const [tab, setTab] = useState<Tab>(publicKey ? "mine" : "viewport");
+  const tab: Tab = search.tab ?? (publicKey ? "mine" : "viewport");
+  const setTab = (next: Tab) => {
+    navigate({ to: "/captures", search: { tab: next }, replace: true });
+  };
   const bbox = useViewportBounds(tab === "viewport");
 
   const userCaptures = useUserGeoCaptures(tab === "mine" ? publicKey : null);

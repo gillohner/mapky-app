@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, FolderHeart, MapPin, Eye, EyeOff, Layers, Loader2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { Route as CollectionsRoute } from "@/routes/collections";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
   useUserCollections,
@@ -27,13 +28,22 @@ type Tab = "mine" | "viewport";
  */
 export function CollectionList() {
   const navigate = useNavigate();
+  const search = CollectionsRoute.useSearch();
   const { isAuthenticated, publicKey } = useAuth();
   const { data: collections, isLoading } = useUserCollections(publicKey);
   const overlays = useUiStore((s) => s.activeCollectionOverlays);
   const addOverlay = useUiStore((s) => s.addCollectionOverlay);
   const clearAllOverlays = useUiStore((s) => s.clearAllCollectionOverlays);
   const [creating, setCreating] = useState(false);
-  const [tab, setTab] = useState<Tab>(publicKey ? "mine" : "viewport");
+
+  // Tab lives in the URL so reload + history-back from a collection
+  // detail land the user back on the same tab they were browsing.
+  // Default depends on auth state — signed-in users start on "Mine",
+  // signed-out users start on the public "In this area" tab.
+  const tab: Tab = search.tab ?? (publicKey ? "mine" : "viewport");
+  const setTab = (next: Tab) => {
+    navigate({ to: "/collections", search: { tab: next }, replace: true });
+  };
 
   // Browsing collections → fade Mapky places + captures so the
   // collection overlays pop. Cleared on unmount by useAutoFocusLayer.

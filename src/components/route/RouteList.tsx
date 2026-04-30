@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { Route as RoutesIndexRoute } from "@/routes/routes/index";
 import { Plus, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useUserRoutes, useViewportRoutes } from "@/lib/api/hooks";
@@ -22,6 +23,7 @@ type Tab = "mine" | "viewport";
  */
 export function RouteList() {
   const navigate = useNavigate();
+  const search = RoutesIndexRoute.useSearch();
   const { publicKey } = useAuth();
   const reset = useRouteCreationStore((s) => s.reset);
   const slots = useRouteCreationStore((s) => s.slots);
@@ -30,7 +32,10 @@ export function RouteList() {
   // Browsing routes → fade Mapky places + captures so route markers pop.
   useAutoFocusLayer("routes");
 
-  const [tab, setTab] = useState<Tab>(publicKey ? "mine" : "viewport");
+  const tab: Tab = search.tab ?? (publicKey ? "mine" : "viewport");
+  const setTab = (next: Tab) => {
+    navigate({ to: "/routes", search: { tab: next }, replace: true });
+  };
 
   const bbox = useViewportBounds();
 

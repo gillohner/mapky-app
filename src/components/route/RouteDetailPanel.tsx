@@ -8,6 +8,7 @@ import { useMapStore } from "@/stores/map-store";
 import { useRouteBody, useRouteDetails } from "@/lib/api/hooks";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
+import { useBackOr } from "@/hooks/use-back-or";
 import { decodePolyline } from "@/lib/routing/polyline";
 import { emitGpx, gpxFilename } from "@/lib/gpx/emit";
 import type { LngLat } from "@/lib/routing/types";
@@ -97,7 +98,10 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
     );
   }, [map, data]);
 
-  const close = () => navigate({ to: "/routes" });
+  // Close → history.back so the user lands on /routes with the tab
+  // they came from preserved (e.g. ?tab=viewport). Falls back to a
+  // direct /routes navigate when there's no history (deep link).
+  const close = useBackOr(() => navigate({ to: "/routes" }));
 
   if (isLoading) {
     return (
