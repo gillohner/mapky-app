@@ -52,6 +52,20 @@ export interface SelectedFeature {
 export type DimmableLayer = "places" | "captures";
 
 interface UiStore {
+  /**
+   * User toggles for the always-on Mapky data layers. These act when
+   * no sidebar is focused (no `useAutoFocusLayer` setting hidden /
+   * dimmed flags). Focus-hide always wins, so flipping these off
+   * inside a list view is a no-op until the user closes it.
+   */
+  placesLayerVisible: boolean;
+  setPlacesLayerVisible: (visible: boolean) => void;
+  togglePlacesLayer: () => void;
+
+  capturesLayerVisible: boolean;
+  setCapturesLayerVisible: (visible: boolean) => void;
+  toggleCapturesLayer: () => void;
+
   /** OpenRailwayMap raster overlay — rail lines, metro, signals. */
   metroOverlayVisible: boolean;
   setMetroOverlayVisible: (visible: boolean) => void;
@@ -123,6 +137,17 @@ interface UiStore {
 export const useUiStore = create<UiStore>()(
   persist(
     (set) => ({
+      placesLayerVisible: true,
+      setPlacesLayerVisible: (visible) => set({ placesLayerVisible: visible }),
+      togglePlacesLayer: () =>
+        set((s) => ({ placesLayerVisible: !s.placesLayerVisible })),
+
+      capturesLayerVisible: true,
+      setCapturesLayerVisible: (visible) =>
+        set({ capturesLayerVisible: visible }),
+      toggleCapturesLayer: () =>
+        set((s) => ({ capturesLayerVisible: !s.capturesLayerVisible })),
+
       metroOverlayVisible: false,
       setMetroOverlayVisible: (visible) => set({ metroOverlayVisible: visible }),
       toggleMetroOverlay: () =>
@@ -219,15 +244,19 @@ export const useUiStore = create<UiStore>()(
     }),
     {
       name: "mapky-layers",
-      // Bumped from v1 → v2 because the schema dropped
-      // placesLayerVisible/capturesLayerVisible (Mapky data layers are
-      // always-on now). v2 storage simply ignores the old keys.
-      version: 2,
-      // Persist only the optional raster overlay toggles — the always-on
-      // data layers don't need state, and theme/basemap lives in
-      // map-store. dimmedLayers / sheet-open / sidebar / streetview /
-      // POI-click context are all ephemeral runtime state.
+      // v3: re-introduce placesLayerVisible / capturesLayerVisible
+      // alongside the raster overlay toggles. Detail panels and
+      // sidebar lists still drive visibility via useAutoFocusLayer
+      // when one is open; these flags only kick in on the bare home
+      // map where there's no focused surface.
+      version: 3,
+      // Persist user-controlled toggles only. Theme/basemap lives in
+      // map-store; dimmedLayers / hiddenLayers / sheet open-state /
+      // sidebar / streetview / POI-click context are all ephemeral
+      // runtime state.
       partialize: (state) => ({
+        placesLayerVisible: state.placesLayerVisible,
+        capturesLayerVisible: state.capturesLayerVisible,
         metroOverlayVisible: state.metroOverlayVisible,
         cyclingOverlayVisible: state.cyclingOverlayVisible,
         terrainOverlayVisible: state.terrainOverlayVisible,

@@ -10,12 +10,17 @@ export function LayerSheetTrigger() {
   const open = useUiStore((s) => s.layerSheetOpen);
   const toggle = useUiStore((s) => s.toggleLayerSheet);
 
-  // Light "active dot" hint when any of the optional overlays are on.
+  // Light "active dot" hint when the user has flipped any toggle off
+  // its default — a non-default overlay is on, OR a Mapky data layer
+  // has been turned off.
   const metro = useUiStore((s) => s.metroOverlayVisible);
   const cycling = useUiStore((s) => s.cyclingOverlayVisible);
   const terrain = useUiStore((s) => s.terrainOverlayVisible);
   const buildings = useUiStore((s) => s.buildings3DVisible);
-  const nonDefault = metro || cycling || terrain || buildings;
+  const places = useUiStore((s) => s.placesLayerVisible);
+  const captures = useUiStore((s) => s.capturesLayerVisible);
+  const nonDefault =
+    metro || cycling || terrain || buildings || !places || !captures;
 
   return (
     <button

@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
+  Camera,
+  MapPin,
   Sun,
   Moon,
   Satellite,
@@ -14,15 +16,20 @@ import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 
 /**
- * Layers sheet — basemap + raster/extrusion overlays only. Mapky data
- * layers (Places, Captures) used to live here as toggles; they're now
- * always-on, with auto-dimming on detail pages handling relevance.
- * Pinned collection overlays are still surfaced here for quick "hide
- * all" access.
+ * Layers sheet — Mapky data toggles + basemap + raster/extrusion
+ * overlays. The Places/Captures toggles act on the bare home map;
+ * once the user opens any sidebar (places / collections / routes /
+ * captures / search / detail), `useAutoFocusLayer` overrides them
+ * via the `hiddenLayers` set so the focused resource owns the map.
  */
 export function LayerSheet() {
   const open = useUiStore((s) => s.layerSheetOpen);
   const setOpen = useUiStore((s) => s.setLayerSheetOpen);
+
+  const placesLayerVisible = useUiStore((s) => s.placesLayerVisible);
+  const togglePlacesLayer = useUiStore((s) => s.togglePlacesLayer);
+  const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
+  const toggleCapturesLayer = useUiStore((s) => s.toggleCapturesLayer);
 
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
   const toggleMetroOverlay = useUiStore((s) => s.toggleMetroOverlay);
@@ -92,6 +99,25 @@ export function LayerSheet() {
             <X className="h-4 w-4" />
           </button>
         </div>
+
+        {/* Mapky data — always-on toggles for the home map. Sidebars
+            override these via useAutoFocusLayer's hiddenLayers set. */}
+        <Section title="Mapky data">
+          <Toggle
+            icon={<MapPin className="h-4 w-4" />}
+            label="Places"
+            description="Reviewed and tagged spots from Mapky users"
+            on={placesLayerVisible}
+            onChange={togglePlacesLayer}
+          />
+          <Toggle
+            icon={<Camera className="h-4 w-4" />}
+            label="Captures"
+            description="Photos, panoramas, and tracks at lat/lon"
+            on={capturesLayerVisible}
+            onChange={toggleCapturesLayer}
+          />
+        </Section>
 
         {/* Pinned collections — only renders when something is active. */}
         {activeCollections.size > 0 && (
