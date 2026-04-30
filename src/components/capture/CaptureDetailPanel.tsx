@@ -12,7 +12,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Camera,
   ZoomIn,
   ZoomOut,
   Maximize,
@@ -30,6 +29,7 @@ import {
 import { resolveFileUrl } from "@/lib/api/user";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useBackOr } from "@/hooks/use-back-or";
+import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { CaptureTags } from "./CaptureTags";
 import { SphereViewer, type VirtualTourNodeData, type SphereViewerHandle } from "./SphereViewer";
@@ -401,131 +401,193 @@ export function CaptureDetailPanel({
     );
   }
 
-  // ─── Standard (photo / video) ─── sidebar panel (unchanged layout)
+  // ─── Standard (photo / video) ─── left sidebar via DiscoverSidebar
+  // so place / collection / route / capture details all share one
+  // shell. The sphere variant above still uses its bespoke fullscreen
+  // layout because the 360 viewer needs the whole screen.
+  const headerActions = (
+    <>
+      <button
+        type="button"
+        onClick={handleShare}
+        className="rounded-lg p-1 text-muted hover:bg-surface hover:text-foreground"
+        aria-label="Share"
+      >
+        <Share2 className="h-4 w-4" />
+      </button>
+      {isOwner && (
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={deleting}
+          className="rounded-lg p-1 text-muted hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
+          aria-label="Delete"
+        >
+          {deleting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="h-4 w-4" />
+          )}
+        </button>
+      )}
+    </>
+  );
+
   return (
     <>
-      <div
-        className="pointer-events-auto fixed inset-x-0 bottom-0 z-40 flex max-h-[90dvh] flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl md:inset-y-0 md:right-0 md:left-auto md:max-h-none md:w-[28rem] md:rounded-none md:rounded-l-2xl md:border-l md:border-t-0"
-        role="dialog"
-        aria-modal="true"
+      <DiscoverSidebar
+        title={capture ? KIND_LABELS[capture.kind] : "Capture"}
+        onClose={handleClose}
+        onBack={handleBack}
+        backLabel="Captures"
+        rightHeaderSlot={headerActions}
+        mobileCollapsible
       >
-        {/* Drag handle (mobile) */}
-        <div className="flex justify-center pt-2 md:hidden">
-          <div className="h-1 w-10 rounded-full bg-border" />
-        </div>
-
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <Camera className="h-4 w-4 shrink-0 text-sky-500" />
-            <h2 className="truncate text-base font-semibold text-foreground">
-              {capture ? KIND_LABELS[capture.kind] : "Capture"}
-            </h2>
+        {isLoading && (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-5 w-5 animate-spin text-muted" />
           </div>
-          <div className="flex items-center gap-1">
-            <button type="button" onClick={handleShare} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-foreground" aria-label="Share">
-              <Share2 className="h-4 w-4" />
-            </button>
-            {isOwner && (
-              <button type="button" onClick={handleDelete} disabled={deleting} className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50" aria-label="Delete">
-                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              </button>
-            )}
-            <button type="button" onClick={handleBack} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-foreground" aria-label="Back">
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={handleClose} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-foreground" aria-label="Close">
-              <X className="h-4 w-4" />
-            </button>
+        )}
+        {error && (
+          <div className="p-4 text-sm text-red-500">
+            Could not load this capture.
           </div>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto">
-          {isLoading && (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-5 w-5 animate-spin text-muted" />
-            </div>
-          )}
-          {error && (
-            <div className="p-4 text-sm text-red-500">Could not load this capture.</div>
-          )}
-          {capture && (
-            <div className="flex flex-col gap-4 p-4">
-              {/* Media */}
-              {(() => {
-                const mediaUrl = resolveFileUrl(capture.file_uri);
-                if (!mediaUrl) {
-                  return (
-                    <div className="flex aspect-video w-full items-center justify-center rounded-xl border border-border bg-surface text-xs text-muted">
-                      Unsupported file URI
-                    </div>
-                  );
-                }
-                if (capture.kind === "video") {
-                  return (
-                    <div className="overflow-hidden rounded-xl border border-border bg-surface">
-                      <video src={mediaUrl} className="aspect-video w-full object-cover" controls muted />
-                    </div>
-                  );
-                }
+        )}
+        {capture && (
+          <div className="flex flex-col gap-4">
+            {/* Media */}
+            {(() => {
+              const mediaUrl = resolveFileUrl(capture.file_uri);
+              if (!mediaUrl) {
                 return (
-                  <button type="button" onClick={() => setLightbox(true)} className="group relative overflow-hidden rounded-xl border border-border bg-surface">
-                    <img src={mediaUrl} alt={capture.caption ?? "Capture"} className="aspect-video w-full object-cover transition-transform group-hover:scale-[1.02]" onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = "0.3"; }} />
-                  </button>
+                  <div className="flex aspect-video w-full items-center justify-center rounded-xl border border-border bg-surface text-xs text-muted">
+                    Unsupported file URI
+                  </div>
                 );
-              })()}
+              }
+              if (capture.kind === "video") {
+                return (
+                  <div className="overflow-hidden rounded-xl border border-border bg-surface">
+                    <video
+                      src={mediaUrl}
+                      className="aspect-video w-full object-cover"
+                      controls
+                      muted
+                    />
+                  </div>
+                );
+              }
+              return (
+                <button
+                  type="button"
+                  onClick={() => setLightbox(true)}
+                  className="group relative overflow-hidden rounded-xl border border-border bg-surface"
+                >
+                  <img
+                    src={mediaUrl}
+                    alt={capture.caption ?? "Capture"}
+                    className="aspect-video w-full object-cover transition-transform group-hover:scale-[1.02]"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.opacity = "0.3";
+                    }}
+                  />
+                </button>
+              );
+            })()}
 
-              {/* Sequence navigation */}
-              {orderedSiblings.length > 1 && currentIdx >= 0 && (
-                <div className="flex items-center justify-between rounded-xl border border-border bg-surface/40 px-3 py-2">
-                  <button type="button" disabled={!prevSibling} onClick={() => prevSibling && navigateToSibling(prevSibling)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-surface hover:text-foreground disabled:opacity-30">
-                    <ChevronLeft className="h-4 w-4" /> Prev
-                  </button>
-                  <span className="text-xs font-medium text-muted">{currentIdx + 1} / {orderedSiblings.length}</span>
-                  <button type="button" disabled={!nextSibling} onClick={() => nextSibling && navigateToSibling(nextSibling)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-surface hover:text-foreground disabled:opacity-30">
-                    Next <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-
-              {/* Author */}
-              <div className="flex items-center gap-3">
-                <UserAvatar userId={authorId} size={10} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-foreground">{authorProfile?.name ?? authorId.slice(0, 8) + "…"}</div>
-                  {capture.captured_at && (
-                    <div className="flex items-center gap-1 text-xs text-muted">
-                      <Clock className="h-3 w-3" />
-                      {new Date(capture.captured_at / 1000).toLocaleString()}
-                    </div>
-                  )}
-                </div>
+            {/* Sequence navigation */}
+            {orderedSiblings.length > 1 && currentIdx >= 0 && (
+              <div className="flex items-center justify-between rounded-xl border border-border bg-surface/40 px-3 py-2">
+                <button
+                  type="button"
+                  disabled={!prevSibling}
+                  onClick={() =>
+                    prevSibling && navigateToSibling(prevSibling)
+                  }
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-surface hover:text-foreground disabled:opacity-30"
+                >
+                  <ChevronLeft className="h-4 w-4" /> Prev
+                </button>
+                <span className="text-xs font-medium text-muted">
+                  {currentIdx + 1} / {orderedSiblings.length}
+                </span>
+                <button
+                  type="button"
+                  disabled={!nextSibling}
+                  onClick={() =>
+                    nextSibling && navigateToSibling(nextSibling)
+                  }
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted hover:bg-surface hover:text-foreground disabled:opacity-30"
+                >
+                  Next <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
+            )}
 
-              {capture.caption && <p className="whitespace-pre-wrap text-sm text-foreground">{capture.caption}</p>}
-
-              {/* Location */}
-              <div className="rounded-xl border border-border bg-surface/40 p-4">
-                <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted"><MapPin className="h-3 w-3" /> Location</div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-xs"><span className="text-muted">Lat</span><span className="font-mono text-foreground">{capture.lat.toFixed(5)}</span></div>
-                  <div className="flex items-center justify-between text-xs"><span className="text-muted">Lon</span><span className="font-mono text-foreground">{capture.lon.toFixed(5)}</span></div>
-                  {capture.heading != null && (
-                    <div className="flex items-center justify-between text-xs"><span className="text-muted"><Compass className="mr-1 inline h-3 w-3" />Heading</span><span className="font-mono text-foreground">{Math.round(capture.heading)}°</span></div>
-                  )}
+            {/* Author */}
+            <div className="flex items-center gap-3">
+              <UserAvatar userId={authorId} size={10} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-foreground">
+                  {authorProfile?.name ?? authorId.slice(0, 8) + "…"}
                 </div>
-              </div>
-
-              {/* Tags */}
-              <div>
-                <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Tags</div>
-                <CaptureTags authorId={authorId} captureId={captureId} />
+                {capture.captured_at && (
+                  <div className="flex items-center gap-1 text-xs text-muted">
+                    <Clock className="h-3 w-3" />
+                    {new Date(capture.captured_at / 1000).toLocaleString()}
+                  </div>
+                )}
               </div>
             </div>
-          )}
-        </div>
-      </div>
+
+            {capture.caption && (
+              <p className="whitespace-pre-wrap text-sm text-foreground">
+                {capture.caption}
+              </p>
+            )}
+
+            {/* Location */}
+            <div className="rounded-xl border border-border bg-surface/40 p-4">
+              <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted">
+                <MapPin className="h-3 w-3" /> Location
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted">Lat</span>
+                  <span className="font-mono text-foreground">
+                    {capture.lat.toFixed(5)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted">Lon</span>
+                  <span className="font-mono text-foreground">
+                    {capture.lon.toFixed(5)}
+                  </span>
+                </div>
+                {capture.heading != null && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted">
+                      <Compass className="mr-1 inline h-3 w-3" />
+                      Heading
+                    </span>
+                    <span className="font-mono text-foreground">
+                      {Math.round(capture.heading)}°
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tags */}
+            <div>
+              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
+                Tags
+              </div>
+              <CaptureTags authorId={authorId} captureId={captureId} />
+            </div>
+          </div>
+        )}
+      </DiscoverSidebar>
 
       {/* Lightbox with nav */}
       {lightbox && capture && capture.kind === "photo" && (

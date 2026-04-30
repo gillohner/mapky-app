@@ -182,6 +182,17 @@ function DirectionsRoute() {
     }
   }, [isOpen, currentPath, navigate]);
 
+  // Navigating away from /directions (clicking another rail tab,
+  // back/forward, etc.) leaves the directions store with isOpen=true,
+  // and DirectionsLayer is mounted at the root — so it would keep
+  // painting in the same left slot under whatever sidebar the user
+  // just opened. Clear isOpen on unmount so the layer drops cleanly.
+  useEffect(() => {
+    return () => {
+      useRouteCreationStore.setState({ isOpen: false });
+    };
+  }, []);
+
   return null;
 }
 
