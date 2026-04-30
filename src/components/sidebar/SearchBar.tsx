@@ -17,6 +17,7 @@ import {
 } from "@/lib/api/hooks";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
+import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
 import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
@@ -228,12 +229,16 @@ export function SearchBar() {
             (tagResults.collections?.length ?? 0) > 0 ||
             (tagResults.posts?.length ?? 0) > 0);
 
-  // Hide while the user is on /directions — DirectionsBar owns the
-  // search/picker UX there. Earlier this was driven by the store's
-  // `isOpen` flag, which leaked across pages whenever a route panel
-  // hydrated the store. Path-based gating keeps the SearchBar visible on
-  // /route/$id and other pages that touch the directions store.
-  if (currentPath === "/directions") return null;
+  // Hide whenever the directions sidebar is actually visible — it
+  // takes the same left slot and owns the search/picker UX. The store's
+  // `isOpen` is only flipped by an explicit user action now (the route
+  // detail's "Open in directions" button or landing on /directions), so
+  // it's a reliable proxy for "DirectionsLayer is on screen". Pathname
+  // alone wasn't enough: navigating /directions → /places → / leaves
+  // directions visible at "/", and a pathname check would re-show this
+  // SearchBar on top of the DirectionsBar input.
+  const directionsOpen = useRouteCreationStore((s) => s.isOpen);
+  if (directionsOpen) return null;
 
   return (
     <div
