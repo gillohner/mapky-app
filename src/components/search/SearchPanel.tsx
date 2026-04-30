@@ -176,11 +176,12 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
   }, [setSidebarOpen]);
 
   // Search is the loudest "focus mode" the app has — the user typed a
-  // query expecting an answer, so kill every other Mapky data layer
-  // until they leave /search. Orange-dot search markers and any pinned
+  // query expecting an answer, so kill EVERY Mapky data layer until
+  // they leave /search. Orange-dot search markers and any pinned
   // collection overlays still render (they're not in the dimmable
   // set), so the user keeps the context they actually asked for.
-  useAutoFocusLayer("places", { hide: true });
+  // (null focus = no exception, hide everything.)
+  useAutoFocusLayer(null, { hide: true });
 
   const close = () => navigate({ to: "/" });
 

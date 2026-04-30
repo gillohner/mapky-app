@@ -13,6 +13,9 @@ const ALL_LAYERS: DimmableLayer[] = ["places", "captures"];
  *   own polylines).
  * - "collections" — fade places + captures (collection overlays own
  *   the visual focus).
+ * - null — fade EVERY Mapky data layer. Use this when the surface
+ *   has no Mapky-data focus of its own (search results, for example,
+ *   live in a separate orange-dot overlay).
  *
  * Modes:
  * - default ("dim") — others render at 40% opacity (visible context).
@@ -24,14 +27,15 @@ const ALL_LAYERS: DimmableLayer[] = ["places", "captures"];
  * to push or restore.
  */
 export function useAutoFocusLayer(
-  focus: DimmableLayer | "routes" | "collections",
+  focus: DimmableLayer | "routes" | "collections" | null,
   opts: { hide?: boolean } = {},
 ): void {
   const hide = !!opts.hide;
   useEffect(() => {
     const store = useUiStore.getState();
     for (const l of ALL_LAYERS) {
-      if (l === focus) continue;
+      // null focus → no exception, every layer gets faded/hidden.
+      if (focus !== null && l === focus) continue;
       if (hide) {
         store.setHidden(l, true);
         // Also keep the dim flag off so we don't end up with stale
