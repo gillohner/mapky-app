@@ -13,20 +13,30 @@ const CLUSTER_LAYER = "mapky-clusters";
 const CLUSTER_COUNT = "mapky-cluster-count";
 const POINT_RING = "mapky-point-ring";
 const POINT_DOT = "mapky-point-dot";
+const RATED_HALO = "mapky-rated-halo";
+const RATED_LABEL = "mapky-rated-label";
 
 function placesToGeoJSON(places: PlaceDetails[]): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
-    features: places.map((p) => ({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [p.lon, p.lat] },
-      properties: {
-        osm_type: p.osm_type,
-        osm_id: p.osm_id,
-        review_count: p.review_count,
-        tag_count: p.tag_count,
-      },
-    })),
+    features: places.map((p) => {
+      // Only attach a rating when there's at least one review — the
+      // RATED_LABEL symbol layer is filtered on `["has", "rating"]`,
+      // so unreviewed places stay rendered as the plain green dot.
+      const rating =
+        p.review_count > 0 ? (p.avg_rating / 2).toFixed(1) : null;
+      return {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+        properties: {
+          osm_type: p.osm_type,
+          osm_id: p.osm_id,
+          review_count: p.review_count,
+          tag_count: p.tag_count,
+          ...(rating != null ? { rating } : {}),
+        },
+      };
+    }),
   };
 }
 
@@ -97,13 +107,18 @@ function ensureLayers(map: maplibregl.Map, theme: "light" | "dark") {
   // Rendered BEFORE (below) the pois layer so the POI icon sits on top
   const beforePois = map.getLayer("pois") ? "pois" : undefined;
 
+  // Unrated places: ring + small dot (existing behavior).
   if (!map.getLayer(POINT_RING)) {
     map.addLayer(
       {
         id: POINT_RING,
         type: "circle",
         source: SOURCE,
-        filter: ["!", ["has", "point_count"]],
+        filter: [
+          "all",
+          ["!", ["has", "point_count"]],
+          ["!", ["has", "rating"]],
+        ],
         paint: {
           "circle-radius": [
             "interpolate",
@@ -137,7 +152,11 @@ function ensureLayers(map: maplibregl.Map, theme: "light" | "dark") {
         id: POINT_DOT,
         type: "circle",
         source: SOURCE,
-        filter: ["!", ["has", "point_count"]],
+        filter: [
+          "all",
+          ["!", ["has", "point_count"]],
+          ["!", ["has", "rating"]],
+        ],
         paint: {
           "circle-radius": [
             "interpolate",
@@ -153,6 +172,58 @@ function ensureLayers(map: maplibregl.Map, theme: "light" | "dark") {
       },
       beforePois,
     );
+  }
+
+  // Reviewed places: filled green halo with the rating drawn on top.
+  // Same visual language the search overlay uses for its rated dots,
+  // so the user can read mapky reputation at a glance regardless of
+  // which surface surfaced the place.
+  if (!map.getLayer(RATED_HALO)) {
+    map.addLayer(
+      {
+        id: RATED_HALO,
+        type: "circle",
+        source: SOURCE,
+        filter: [
+          "all",
+          ["!", ["has", "point_count"]],
+          ["has", "rating"],
+        ],
+        paint: {
+          "circle-radius": 12,
+          "circle-color": accent,
+          "circle-opacity": 0.95,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      },
+      beforePois,
+    );
+  }
+
+  if (!map.getLayer(RATED_LABEL)) {
+    map.addLayer({
+      id: RATED_LABEL,
+      type: "symbol",
+      source: SOURCE,
+      filter: [
+        "all",
+        ["!", ["has", "point_count"]],
+        ["has", "rating"],
+      ],
+      layout: {
+        "text-field": ["get", "rating"],
+        "text-size": 10,
+        "text-font": ["Noto Sans Medium"],
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+      },
+      paint: {
+        "text-color": "#ffffff",
+        "text-halo-color": accent,
+        "text-halo-width": 1,
+      },
+    });
   }
 }
 
@@ -274,6 +345,13 @@ export function MapkyPlacesLayer() {
       if (map.getLayer(POINT_DOT)) {
         map.setPaintProperty(POINT_DOT, "circle-opacity", 0.7 * dim);
       }
+      if (map.getLayer(RATED_HALO)) {
+        map.setPaintProperty(RATED_HALO, "circle-opacity", 0.95 * dim);
+        map.setPaintProperty(RATED_HALO, "circle-stroke-opacity", dim);
+      }
+      if (map.getLayer(RATED_LABEL)) {
+        map.setPaintProperty(RATED_LABEL, "text-opacity", dim);
+      }
     };
     apply();
     map.on("styledata", apply);
@@ -314,7 +392,9 @@ export function MapkyPlacesLayer() {
       if (useRouteCreationStore.getState().isOpen) return;
 
       const features = map.queryRenderedFeatures(e.point, {
-        layers: [POINT_RING, POINT_DOT],
+        layers: [POINT_RING, POINT_DOT, RATED_HALO, RATED_LABEL].filter(
+          (id) => map.getLayer(id),
+        ),
       });
       if (!features.length) return;
 
@@ -343,13 +423,12 @@ export function MapkyPlacesLayer() {
       });
     };
 
+    const pointLayers = [POINT_RING, POINT_DOT, RATED_HALO, RATED_LABEL];
     map.on("click", CLUSTER_LAYER, onClusterClick);
-    map.on("click", POINT_RING, onPointClick);
-    map.on("click", POINT_DOT, onPointClick);
+    for (const id of pointLayers) map.on("click", id, onPointClick);
     return () => {
       map.off("click", CLUSTER_LAYER, onClusterClick);
-      map.off("click", POINT_RING, onPointClick);
-      map.off("click", POINT_DOT, onPointClick);
+      for (const id of pointLayers) map.off("click", id, onPointClick);
     };
   }, [map]);
 
