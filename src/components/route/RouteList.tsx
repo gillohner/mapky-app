@@ -10,6 +10,7 @@ import {
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
+import { RoutesIndexLayer } from "@/components/map/RoutesIndexLayer";
 import { RouteCard } from "./RouteCard";
 
 type Tab = "mine" | "viewport";
@@ -64,7 +65,14 @@ export function RouteList() {
   );
 
   return (
-    <DiscoverSidebar
+    <>
+      {/* Render every visible route as a polyline + start marker on
+          the map. Bodies are fetched in parallel (TanStack useQueries),
+          same cache as the detail view's useRouteBody, so opening any
+          route's detail page is instant. */}
+      <RoutesIndexLayer routes={list.data} />
+
+      <DiscoverSidebar
       title="Routes"
       tabs={tabs}
       activeTab={tab}
@@ -101,5 +109,6 @@ export function RouteList() {
         {list.data?.map((r) => <RouteCard key={r.id} route={r} />)}
       </div>
     </DiscoverSidebar>
+    </>
   );
 }
