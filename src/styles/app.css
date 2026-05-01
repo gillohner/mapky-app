@@ -131,24 +131,38 @@ html, body, #root {
   height: 40px;
 }
 
-.mapky-place-pin__label {
+
+/* Category icon slot — centered on the teardrop's round head (cx=14
+   cy=14 in the SVG's 28x40 viewBox = roughly 50% horizontal, 7px
+   from the top of the rendered 28x40 element). React portals the
+   Lucide icon in here. */
+.mapky-place-pin__cat {
   position: absolute;
-  left: calc(100% + 6px);
-  top: 8px;
-  padding: 3px 8px;
-  background: var(--raw-bg);
-  color: var(--raw-fg);
-  border: 1px solid var(--raw-border);
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  left: 50%;
+  top: 7px;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
   pointer-events: none;
 }
 
-.mapky-place-pin__label:empty {
-  display: none;
+.mapky-place-pin__cat svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Fallback dot when Nominatim hasn't resolved a category yet. Same
+   look as the hover balloon's fallback. */
+.mapky-place-pin__cat:empty::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: white;
 }
 
 /* Rating chip floating above the selected pin head — mirrors the

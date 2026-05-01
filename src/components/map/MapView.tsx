@@ -142,8 +142,23 @@ export function MapView() {
       setView([c.lng, c.lat], map.getZoom());
     });
 
+    // Click suppression window — after a click we drop the hover
+    // popup AND keep `mousemove` from re-adding it for ~2 s. Just
+    // calling `remove()` once isn't enough: navigation re-renders,
+    // PlacePanel runs a 1.5 s `flyTo`, and `mousemove` re-fires
+    // mid-animation — the popup pops back in if the cursor's still
+    // on the label. 2 s comfortably covers `flyTo`'s settle. We also
+    // tear the popup down on `dragstart` / `zoomstart` / `movestart`
+    // so a user pan/zoom while it lingers also closes it.
+    let popupSuppressUntil = 0;
+    map.on("dragstart", () => hoverPopup.remove());
+    map.on("zoomstart", () => hoverPopup.remove());
+
     // Click: layered queries — POI (exact) → place → POI (nearby) → building
     map.on("click", (e) => {
+      hoverPopup.remove();
+      popupSuppressUntil = performance.now() + 2000;
+
       // Route-creation owns map clicks while open; skip POI navigation.
       if (useRouteCreationStore.getState().isOpen) return;
 
@@ -175,6 +190,14 @@ export function MapView() {
 
     // Hover: POI first, then places — exact point only (no tolerance on hover)
     map.on("mousemove", (e) => {
+      // Inside the post-click suppression window: hold the popup down
+      // even if the cursor's still over the label that was just
+      // clicked. Avoids a flash of the tooltip mid-navigation.
+      if (performance.now() < popupSuppressUntil) {
+        hoverPopup.remove();
+        return;
+      }
+
       // When the cursor is over an HTML marker (Mapky balloon, capture
       // marker, selected pin, etc.), that overlay owns the tooltip.
       // MapLibre still fires `mousemove` on the map container for

@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
-import { usePlaceDetail } from "@/lib/api/hooks";
+import { usePlaceDetail, useOsmLookup } from "@/lib/api/hooks";
+import { categoryIcon } from "@/lib/places/category-icon";
 
 const SEL_SOURCE = "mapky-selected-place";
 const SEL_LAYER_FILL = "mapky-selected-fill";
@@ -120,6 +122,10 @@ function hasArea(features: GeoJSON.Feature[]): boolean {
 function createPinElement(): HTMLDivElement {
   const el = document.createElement("div");
   el.className = "mapky-place-pin";
+  // The teardrop SVG no longer carries a white inner dot — the
+  // category icon (rendered via React portal into `__cat` below) sits
+  // there instead, mirroring the hover balloon. A small dot stays as
+  // the fallback when Nominatim hasn't resolved the category yet.
   el.innerHTML = `
     <span class="mapky-place-pin__rating" aria-hidden="true">
       <span class="mapky-place-pin__rating-star">★</span>
@@ -128,9 +134,8 @@ function createPinElement(): HTMLDivElement {
     <svg class="mapky-place-pin__icon" width="40" height="56" viewBox="0 0 28 40" aria-hidden="true">
       <path d="M14 2 C7 2 2 7 2 14 C2 22 14 38 14 38 C14 38 26 22 26 14 C26 7 21 2 14 2 Z"
             fill="${HIGHLIGHT_COLOR}" stroke="white" stroke-width="2"/>
-      <circle cx="14" cy="14" r="4" fill="white"/>
     </svg>
-    <span class="mapky-place-pin__label"></span>
+    <span class="mapky-place-pin__cat" aria-hidden="true"></span>
   `;
   return el;
 }
@@ -148,6 +153,10 @@ export function SelectedPlaceMarker() {
   const layerReady = useRef(false);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const pinElRef = useRef<HTMLDivElement | null>(null);
+  // Slot the category icon portals into. Held in state (not a ref) so
+  // React re-renders once the host element exists, otherwise the icon
+  // never gets mounted on the very first selection.
+  const [iconSlot, setIconSlot] = useState<HTMLSpanElement | null>(null);
 
   // Pull the indexer's rating so the selected pin can mirror the
   // hover-balloon chip ("★ 4.6"). usePlaceDetail's queryKey matches
@@ -162,6 +171,20 @@ export function SelectedPlaceMarker() {
     place && place.review_count > 0
       ? (place.avg_rating / 2).toFixed(1)
       : null;
+
+  // Resolve the category icon the same way PlaceBalloon does. Cached
+  // by `["nominatim", "lookup", type, id]`, so a balloon-resolved
+  // place opens with the icon already in hand.
+  const { data: nominatim } = useOsmLookup(
+    selected?.osmType ?? "",
+    selected?.osmId ?? 0,
+    !!selected,
+  );
+  const Icon = (() => {
+    const t = nominatim?.type;
+    if (!t || t === "yes" || t === "unclassified") return null;
+    return categoryIcon(t);
+  })();
 
   // Recreate layers after style changes (theme/basemap toggles wipe style).
   useEffect(() => {
@@ -181,6 +204,9 @@ export function SelectedPlaceMarker() {
     if (!map) return;
     const el = createPinElement();
     pinElRef.current = el;
+    setIconSlot(
+      el.querySelector(".mapky-place-pin__cat") as HTMLSpanElement | null,
+    );
     markerRef.current = new maplibregl.Marker({
       element: el,
       anchor: "bottom",
@@ -189,6 +215,7 @@ export function SelectedPlaceMarker() {
       markerRef.current?.remove();
       markerRef.current = null;
       pinElRef.current = null;
+      setIconSlot(null);
     };
   }, [map]);
 
@@ -223,15 +250,13 @@ export function SelectedPlaceMarker() {
         src.setData({ type: "FeatureCollection", features });
         marker?.remove();
       } else {
-        // No area to highlight — drop a balloon pin at the place coords
-        // with the name as a label.
+        // No area to highlight — drop a balloon pin at the place coords.
+        // The basemap label already names the place; the sidebar header
+        // names it too. A persistent floating label next to the pin
+        // duplicates that information and follows the user even when
+        // they're not hovering, so it's deliberately omitted.
         src.setData({ type: "FeatureCollection", features: [] });
         if (marker && pinEl) {
-          const labelEl = pinEl.querySelector(
-            ".mapky-place-pin__label",
-          ) as HTMLSpanElement | null;
-          if (labelEl) labelEl.textContent = selected.name ?? "";
-
           // Mirror the hover-balloon's star chip on the selected pin
           // so a place's rating stays visible after the user clicks
           // through. Hidden when the place isn't Mapky-rated.
@@ -274,5 +299,13 @@ export function SelectedPlaceMarker() {
     };
   }, [map, selected, ratingLabel]);
 
-  return null;
+  // Portal the category icon into the pin's `.__cat` slot. When the
+  // marker isn't on the map (selected has an area highlight, or no
+  // selection at all) the slot stays empty — icon disappears with it.
+  return Icon && iconSlot
+    ? createPortal(
+        <Icon size={14} strokeWidth={2.5} aria-hidden />,
+        iconSlot,
+      )
+    : null;
 }
