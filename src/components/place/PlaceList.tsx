@@ -25,7 +25,7 @@ import {
   type CategoryOption,
   type TagMode,
 } from "@/components/discover/Filter";
-import { fallbackPlaceLabel } from "@/lib/map/osm-url";
+import { resolvePlaceName } from "@/lib/places/place-name";
 import type { PlaceDetails, PostTagDetails } from "@/types/mapky";
 
 /**
@@ -279,10 +279,10 @@ function PlaceRow({
   const map = useMapStore((s) => s.map);
   const { data: nominatim } = useOsmLookup(place.osm_type, place.osm_id, true);
 
-  const name =
-    nominatim?.name ||
-    nominatim?.display_name?.split(",")[0] ||
-    fallbackPlaceLabel(place.osm_type, place.osm_id);
+  // Shared resolver — same priority chain the place panel uses, so an
+  // unnamed building shows "48 Hirschengraben, Luzern" in both surfaces
+  // instead of the OSM identifier here and the address there.
+  const name = resolvePlaceName(place.osm_type, place.osm_id, nominatim);
   const typeLabel = nominatim?.type?.replace(/_/g, " ") ?? "";
 
   // Show the top 3 tags inline; a "+N" badge surfaces overflow without

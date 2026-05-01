@@ -1,6 +1,7 @@
 import { ExternalLink, Star, MessageSquare, Tag, Camera } from "lucide-react";
 import type { PlaceDetails } from "@/types/mapky";
 import { useOsmLookup } from "@/lib/api/hooks";
+import { buildAddressName, resolvePlaceName } from "@/lib/places/place-name";
 
 function formatType(type: string | null, category: string | null): string | null {
   if (!type && !category) return null;
@@ -9,18 +10,6 @@ function formatType(type: string | null, category: string | null): string | null
   if (t === "yes" || t === "unclassified") return c || null;
   if (c && c !== t) return `${t} · ${c}`;
   return t || null;
-}
-
-/** Build a display name from Nominatim address fields. */
-function buildAddressName(address: Record<string, string>): string | null {
-  const num = address.house_number;
-  const road = address.road;
-  if (num && road) return `${num} ${road}`;
-  if (road) return road;
-  for (const key of ["hamlet", "village", "suburb", "town", "city"]) {
-    if (address[key]) return address[key];
-  }
-  return null;
 }
 
 function RatingStars({ rating }: { rating: number }) {
@@ -65,18 +54,19 @@ export function PlaceHeader({ osmType, osmId, place, tileName, tileKind }: Place
     isError: nameError,
   } = useOsmLookup(osmType, osmId, needsLookup);
 
-  // Resolution priority: Nominatim name → tile name → Nominatim address →
-  // Nominatim display_name fragment → raw OSM identifier. The identifier is
-  // always available so we never show an indefinite skeleton — once
-  // Nominatim errors or settles without a usable name we fall through to it.
-  const resolvedName =
-    nominatim?.name ||
-    tileName ||
-    (nominatim?.address && buildAddressName(nominatim.address)) ||
-    nominatim?.display_name?.split(",")[0];
-  const placeName = resolvedName || `${osmType} ${osmId}`;
-  const showSkeleton =
-    nameLoading && !tileName && !nameError && !resolvedName;
+  // Shared resolver — nominatim.name → tile name → built address →
+  // display_name fragment → "way 12345" identifier. Centralised so a
+  // place's name is identical in the header, the list rows, and the
+  // sidebar peek.
+  const placeName = resolvePlaceName(osmType, osmId, nominatim, tileName);
+  // Show skeleton only while the lookup is genuinely in flight — once
+  // we have ANY signal (nominatim, tileName, or fallback) we render.
+  const haveResolved =
+    !!nominatim?.name ||
+    !!tileName ||
+    !!buildAddressName(nominatim?.address) ||
+    !!nominatim?.display_name;
+  const showSkeleton = nameLoading && !tileName && !nameError && !haveResolved;
 
   const locationType =
     formatType(nominatim?.type ?? null, nominatim?.category ?? null) ||

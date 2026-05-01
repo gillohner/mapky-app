@@ -42,6 +42,16 @@ function ensureLayers(map: maplibregl.Map) {
   // Filled polygon (buildings, areas). Higher opacity than before so
   // the highlight reads even on busy basemaps; amber pops against the
   // gray/green palette Protomaps uses.
+  //
+  // `fill-antialias: false` is load-bearing: `querySourceFeatures`
+  // returns one tile-clipped slice per tile, so a forest spanning N
+  // tiles becomes N separate polygons whose artificial edges along
+  // tile boundaries get antialiased. Adjacent slices share those
+  // edges — the overlapping antialiased strokes double up and show
+  // as darker bars crossing the polygon at every tile seam. With
+  // antialiasing off the fill is solid edge-to-edge and the seams
+  // disappear; the real polygon outline is still drawn smoothly by
+  // the basemap's own landcover/landuse layers below.
   if (!map.getLayer(SEL_LAYER_FILL)) {
     map.addLayer({
       id: SEL_LAYER_FILL,
@@ -50,6 +60,7 @@ function ensureLayers(map: maplibregl.Map) {
       paint: {
         "fill-color": AREA_HIGHLIGHT_COLOR,
         "fill-opacity": 0.3,
+        "fill-antialias": false,
       },
     });
   }

@@ -18,7 +18,8 @@ import {
 import { useMapStore } from "@/stores/map-store";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { useSidebarPresence } from "@/hooks/use-sidebar-presence";
-import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
+import { parseOsmCanonical } from "@/lib/map/osm-url";
+import { resolvePlaceName } from "@/lib/places/place-name";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
 import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
 import { SearchResultsOverlay } from "@/components/map/SearchResultsOverlay";
@@ -215,10 +216,7 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
     if (mode !== "tags" || !tagResults?.places) return [];
     return tagResults.places.map((p) => {
       const nom = tagBatchByKey.get(`${p.osm_type}:${p.osm_id}`) ?? null;
-      const name =
-        nom?.name ||
-        nom?.display_name?.split(",")[0] ||
-        fallbackPlaceLabel(p.osm_type, p.osm_id);
+      const name = resolvePlaceName(p.osm_type, p.osm_id, nom);
       return {
         result: {
           osm_type: p.osm_type,
@@ -678,16 +676,10 @@ function OsmPlaceName({ osmCanonical }: { osmCanonical: string }) {
     parsed?.osmId ?? 0,
     !!parsed,
   );
-  const fallback = parsed
-    ? fallbackPlaceLabel(parsed.osmType, parsed.osmId)
+  const name = parsed
+    ? resolvePlaceName(parsed.osmType, parsed.osmId, nominatim)
     : osmCanonical;
-  return (
-    <>
-      {nominatim?.name ||
-        nominatim?.display_name?.split(",")[0] ||
-        fallback}
-    </>
-  );
+  return <>{name}</>;
 }
 
 function TagPlaceResult({
@@ -698,12 +690,7 @@ function TagPlaceResult({
   onSelect: () => void;
 }) {
   const { data: nominatim } = useOsmLookup(place.osm_type, place.osm_id, true);
-
-  const name =
-    nominatim?.name ||
-    nominatim?.display_name?.split(",")[0] ||
-    fallbackPlaceLabel(place.osm_type, place.osm_id);
-
+  const name = resolvePlaceName(place.osm_type, place.osm_id, nominatim);
   const typeLabel = nominatim?.type?.replace(/_/g, " ") ?? "";
   const stars = placeStarsLabel(place);
 

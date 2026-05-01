@@ -10,8 +10,28 @@ import { config } from "@/lib/config";
  * Base URL for Nominatim. Dev default proxies through Vite (`/nominatim`)
  * for CORS; prod default is the public OSM instance. Override either
  * via `VITE_NOMINATIM_URL` (e.g. a self-hosted Nominatim mirror).
+ *
+ * Note: the high-volume `/lookup` calls now route through the plugin's
+ * cached endpoint (see `OSM_LOOKUP_URL`). `NOMINATIM_BASE` still serves
+ * `/search` and `/reverse` — both click-driven and far less chatty.
  */
 const NOMINATIM_BASE = config.nominatim.url;
+
+/**
+ * Cached, batched Nominatim `/lookup` proxied through pubky-nexus.
+ * The plugin holds a Redis cache (30 d TTL) and rate-limits the
+ * upstream Nominatim call to 1 req/s, so multiple users sharing a
+ * place only cost one upstream request total.
+ *
+ * Dev mode uses a relative path so Vite's `/v0/mapky` proxy serves
+ * the response same-origin — Nexus on :8080 doesn't set CORS headers
+ * for the dev frontend on :5173 and the browser would drop the
+ * response otherwise. Prod hits the configured nexus URL directly
+ * (Caddy or another reverse proxy is expected to share the origin).
+ */
+const OSM_LOOKUP_URL = import.meta.env.DEV
+  ? "/v0/mapky/osm/lookup"
+  : `${config.nexus.url}/v0/mapky/osm/lookup`;
 
 export interface NominatimResult {
   osm_type: string | null;
@@ -243,18 +263,16 @@ export async function lookupOsmElement(
   const prefix = TYPE_PREFIX[osmType];
   if (!prefix) throw new Error(`Unknown osm_type: ${osmType}`);
 
-  const url = new URL(`${NOMINATIM_BASE}/lookup`, window.location.origin);
+  // Routes through the plugin's cached endpoint instead of public
+  // Nominatim — addressdetails + extratags are always returned by
+  // the plugin, no query params needed beyond `osm_ids`.
+  const url = new URL(OSM_LOOKUP_URL, window.location.origin);
   url.searchParams.set("osm_ids", `${prefix}${osmId}`);
-  url.searchParams.set("format", "json");
-  url.searchParams.set("addressdetails", "1");
-  // Extra tags include the BTCMap payment:* / currency:XBT signals
-  // that the place card reads to render the Bitcoin acceptance row.
-  url.searchParams.set("extratags", "1");
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
 
-  const data = await res.json();
+  const data: Array<Record<string, unknown>> = await res.json();
   if (!data.length) {
     const empty: NominatimResult = {
       osm_type: osmType,
@@ -273,16 +291,17 @@ export async function lookupOsmElement(
 
   const r = data[0];
   const result: NominatimResult = {
-    osm_type: r.osm_type || osmType,
+    osm_type: (r.osm_type as string) || osmType,
     osm_id: r.osm_id ? Number(r.osm_id) : osmId,
-    name: r.name || null,
-    display_name: r.display_name || "",
-    type: r.type || null,
-    category: r.category || r.class || null,
-    address: r.address ?? {},
-    lat: r.lat ? Number(r.lat) : null,
-    lon: r.lon ? Number(r.lon) : null,
-    extratags: r.extratags ?? undefined,
+    name: (r.name as string) || null,
+    display_name: (r.display_name as string) || "",
+    type: (r.type as string) || null,
+    category:
+      (r.category as string) || (r.class as string) || null,
+    address: (r.address as Record<string, string>) ?? {},
+    lat: r.lat != null ? Number(r.lat) : null,
+    lon: r.lon != null ? Number(r.lon) : null,
+    extratags: (r.extratags as Record<string, string>) ?? undefined,
   };
 
   setCache(cacheKey, result);
@@ -322,8 +341,10 @@ export async function lookupOsmElements(
   }
   if (todoIdxs.length === 0) return out as NominatimResult[];
 
-  // Nominatim caps `/lookup` at 50 ids per request; chunk and fan out.
-  // Each chunk is a single throttle hit instead of 50.
+  // Plugin endpoint accepts up to 50 osm_ids per call (matches
+  // Nominatim's upstream cap). Each chunk is one Redis-cached call
+  // → at most 1 upstream Nominatim hit shared across all our users
+  // for the full 30 d TTL window.
   for (let start = 0; start < todoIdxs.length; start += 50) {
     const chunk = todoIdxs.slice(start, start + 50);
     const idsParam = chunk
@@ -334,11 +355,8 @@ export async function lookupOsmElements(
       })
       .join(",");
 
-    const url = new URL(`${NOMINATIM_BASE}/lookup`, window.location.origin);
+    const url = new URL(OSM_LOOKUP_URL, window.location.origin);
     url.searchParams.set("osm_ids", idsParam);
-    url.searchParams.set("format", "json");
-    url.searchParams.set("addressdetails", "1");
-    url.searchParams.set("extratags", "1");
 
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);

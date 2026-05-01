@@ -9,7 +9,8 @@ import {
 } from "@/lib/api/hooks";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
-import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
+import { parseOsmCanonical } from "@/lib/map/osm-url";
+import { resolvePlaceName } from "@/lib/places/place-name";
 import type { PostDetails } from "@/types/mapky";
 
 function timeAgo(timestamp: number): string {
@@ -33,13 +34,9 @@ function PlaceName({ osmCanonical }: { osmCanonical: string }) {
     parsed?.osmId ?? 0,
     !!parsed,
   );
-  const fallback = parsed
-    ? fallbackPlaceLabel(parsed.osmType, parsed.osmId)
+  const name = parsed
+    ? resolvePlaceName(parsed.osmType, parsed.osmId, nominatim)
     : osmCanonical;
-  const name =
-    nominatim?.name ||
-    nominatim?.display_name?.split(",")[0] ||
-    fallback;
   return <>{name}</>;
 }
 

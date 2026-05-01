@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { MapPin } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
+import { parseOsmCanonical } from "@/lib/map/osm-url";
+import { resolvePlaceName } from "@/lib/places/place-name";
 import {
   useOsmLookup,
   useOsmLookupBatch,
@@ -91,10 +92,10 @@ function PlaceItem({
   const { data: place } = usePlaceDetail(osmType, osmId);
   const { data: tags } = usePlaceTags(osmType, osmId);
 
-  const name =
-    nominatim?.name ||
-    nominatim?.display_name?.split(",")[0] ||
-    fallbackPlaceLabel(osmType, osmId);
+  // Shared resolver — keeps an unnamed building's title consistent
+  // with the place panel + place list ("48 Hirschengraben, Luzern"
+  // instead of "way 184411684").
+  const name = resolvePlaceName(osmType, osmId, nominatim);
 
   const typeLabel = nominatim?.type?.replace(/_/g, " ") ?? "";
   const stars = placeStarsLabel(place ?? null);
