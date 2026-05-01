@@ -29,11 +29,19 @@ const OVERLAY_COLORS = [
   "#06b6d4", "#eab308", "#ef4444",
 ];
 
-let colorIndex = 0;
-function nextColor(): string {
-  const c = OVERLAY_COLORS[colorIndex % OVERLAY_COLORS.length];
-  colorIndex++;
-  return c;
+/**
+ * Stable color per (authorId, collectionId) — same hash trick the
+ * routes layer uses for `routeColor`. Previously the overlay store
+ * incremented a module-level counter, so a collection's overlay
+ * color depended on the order it was opened during the session and
+ * shifted on reload. Hashing keeps the color tied to the collection
+ * identity instead.
+ */
+function colorForCollection(authorId: string, collectionId: string): string {
+  const key = `${authorId}:${collectionId}`;
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+  return OVERLAY_COLORS[Math.abs(h) % OVERLAY_COLORS.length];
 }
 
 export interface SelectedFeature {
@@ -145,8 +153,21 @@ interface UiStore {
   selectedFeature: SelectedFeature | null;
   setSelectedFeature: (feature: SelectedFeature | null) => void;
 
+  /**
+   * Derived from `sidebarRefs.size > 0`. True whenever any sidebar
+   * component is mounted; SearchBar / LayerSheetTrigger read it to
+   * slide past the sidebar's gutter.
+   *
+   * Counter-style instead of last-writer-wins because route
+   * transitions (e.g. /directions → /route/...) briefly mount BOTH
+   * sidebars, and a plain boolean toggle would race during cleanup
+   * and leave the SearchBar painted over the new sidebar's header.
+   */
   sidebarOpen: boolean;
-  setSidebarOpen: (open: boolean) => void;
+  /** Internal set tracking each mounted sidebar component by id. */
+  sidebarRefs: Set<string>;
+  registerSidebar: (id: string) => void;
+  unregisterSidebar: (id: string) => void;
 
   activeCollectionOverlays: Map<string, CollectionOverlayEntry>;
   addCollectionOverlay: (authorId: string, collectionId: string, color?: string) => void;
@@ -238,14 +259,34 @@ export const useUiStore = create<UiStore>()(
       setSelectedFeature: (feature) => set({ selectedFeature: feature }),
 
       sidebarOpen: false,
-      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      sidebarRefs: new Set<string>(),
+      registerSidebar: (id) =>
+        set((s) => {
+          if (s.sidebarRefs.has(id)) return s;
+          const next = new Set(s.sidebarRefs);
+          next.add(id);
+          return { sidebarRefs: next, sidebarOpen: next.size > 0 };
+        }),
+      unregisterSidebar: (id) =>
+        set((s) => {
+          if (!s.sidebarRefs.has(id)) return s;
+          const next = new Set(s.sidebarRefs);
+          next.delete(id);
+          return { sidebarRefs: next, sidebarOpen: next.size > 0 };
+        }),
 
       activeCollectionOverlays: new Map(),
       addCollectionOverlay: (authorId, collectionId, color) =>
         set((s) => {
           const existing = s.activeCollectionOverlays.get(collectionId);
-          // Reuse existing color if no new color provided
-          const resolvedColor = color || existing?.color || nextColor();
+          // Caller-provided color (set by the user on the collection)
+          // wins; otherwise fall back to a stable hash of the
+          // collection identity so the same collection gets the same
+          // color across reloads / open order.
+          const resolvedColor =
+            color ||
+            existing?.color ||
+            colorForCollection(authorId, collectionId);
           if (existing && existing.color === resolvedColor) return s;
           const next = new Map(s.activeCollectionOverlays);
           next.set(collectionId, { authorId, collectionId, color: resolvedColor });
@@ -264,7 +305,11 @@ export const useUiStore = create<UiStore>()(
           if (next.has(collectionId)) {
             next.delete(collectionId);
           } else {
-            next.set(collectionId, { authorId, collectionId, color: color || nextColor() });
+            next.set(collectionId, {
+              authorId,
+              collectionId,
+              color: color || colorForCollection(authorId, collectionId),
+            });
           }
           return { activeCollectionOverlays: next };
         }),

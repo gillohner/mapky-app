@@ -201,8 +201,6 @@ export function IconRail() {
         )}
       </button>
 
-      <div className="my-1 w-6 border-t border-border" />
-
       <RailButton
         onClick={handleThemeToggle}
         title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
@@ -213,6 +211,8 @@ export function IconRail() {
           <Moon className="h-5 w-5" />
         )}
       </RailButton>
+
+      <div className="my-1 w-6 border-t border-border" />
 
       <RailButton
         onClick={() => navTo("/places")}

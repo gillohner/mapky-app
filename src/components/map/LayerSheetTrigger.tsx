@@ -29,11 +29,18 @@ export function LayerSheetTrigger() {
   return (
     <button
       onClick={toggle}
+      data-mapky-layer-trigger
       aria-label={open ? "Close layers" : "Open layers"}
-      className={`pointer-events-auto fixed bottom-3 z-30 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur transition-[left] duration-300 hover:border-accent sm:bottom-6 ${
+      className={`mapky-layer-trigger pointer-events-auto fixed z-30 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur transition-[left,bottom] duration-300 hover:border-accent ${
         sidebarOpen ? "left-14 md:left-[440px]" : "left-14 sm:left-16"
       }`}
-      style={{ marginBottom: "env(safe-area-inset-bottom)" }}
+      style={{
+        // Mobile: ride above the bottom sheet (var set by
+        // MobileBottomSheet, defaults to 0 when no sheet is open).
+        // Desktop: a fixed corner offset, set in app.css via media query.
+        bottom:
+          "calc(var(--mobile-sheet-vh, 0) * 1vh + 0.75rem + env(safe-area-inset-bottom))",
+      }}
     >
       <Layers className="h-5 w-5" />
       {nonDefault && (

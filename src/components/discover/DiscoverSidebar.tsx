@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronUp, X } from "lucide-react";
-import { useUiStore } from "@/stores/ui-store";
+import { ChevronLeft, X } from "lucide-react";
+import { useSidebarPresence } from "@/hooks/use-sidebar-presence";
+import { MobileBottomSheet, type SheetSnap } from "@/components/shared/MobileBottomSheet";
 
 export interface DiscoverTab {
   id: string;
@@ -31,7 +31,13 @@ interface Props {
   rightHeaderSlot?: React.ReactNode;
   /** Free slot below tabs, above body — typically a search input. */
   toolbar?: React.ReactNode;
-  /** Mobile sheet collapsed by default; user expands with the chevron. */
+  /**
+   * Mobile: detail panels (Place / Route / Capture / Collection) pass
+   * `true` to start the sheet collapsed so the map stays visible by
+   * default — the user can drag up when they want the full body.
+   * Lists default to the middle snap so half-map / half-list is the
+   * landing experience.
+   */
   mobileCollapsible?: boolean;
   children: React.ReactNode;
 }
@@ -39,7 +45,9 @@ interface Props {
 /**
  * Shared shell for the discover surfaces: Routes / Collections / Places.
  * Desktop: 380px left-anchored full-height sidebar.
- * Mobile: rounded-top bottom sheet (max 85vh, optionally collapsible).
+ * Mobile: draggable bottom sheet via `MobileBottomSheet` (3 snap
+ * positions — collapsed / middle / expanded), unified with Search
+ * and Directions so every panel feels the same.
  *
  * Each list provides its own tabs + toolbar + body. Header layout, close
  * button, and sheet chrome are unified here so the three resources look
@@ -58,12 +66,7 @@ export function DiscoverSidebar({
   mobileCollapsible = false,
   children,
 }: Props) {
-  const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
-
-  useEffect(() => {
-    setSidebarOpen(true);
-    return () => setSidebarOpen(false);
-  }, [setSidebarOpen]);
+  useSidebarPresence();
 
   const tabStrip = tabs && tabs.length > 0 && (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -82,6 +85,47 @@ export function DiscoverSidebar({
       ))}
     </div>
   );
+
+  // Mobile header (handle is rendered by MobileBottomSheet). We keep
+  // the exact same controls as the desktop header — title, back, close,
+  // tabs, toolbar — collapsed into the always-visible peek so the user
+  // can navigate even when the sheet is at its smallest snap.
+  const mobileHeader = (
+    <div className="flex-shrink-0 px-4 pb-3">
+      <div className="flex items-center justify-between gap-2">
+        {onBack ? (
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
+            aria-label="Back"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            {backLabel ?? "Back"}
+          </button>
+        ) : (
+          <span className="text-sm font-medium text-foreground">{title}</span>
+        )}
+        <div className="flex items-center gap-1">
+          {rightHeaderSlot}
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted hover:text-foreground"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+      {(tabStrip || toolbar) && (
+        <div className="mt-2 space-y-2">
+          {tabStrip}
+          {toolbar}
+        </div>
+      )}
+    </div>
+  );
+
+  const mobileDefault: SheetSnap = mobileCollapsible ? "collapsed" : "middle";
 
   return (
     <>
@@ -122,107 +166,10 @@ export function DiscoverSidebar({
         <div className="flex-1 overflow-y-auto px-4 py-4">{children}</div>
       </div>
 
-      {/* Mobile: bottom sheet */}
-      <MobileSheet
-        title={title}
-        onClose={onClose}
-        onBack={onBack}
-        backLabel={backLabel}
-        rightHeaderSlot={rightHeaderSlot}
-        tabStrip={tabStrip}
-        toolbar={toolbar}
-        collapsible={mobileCollapsible}
-      >
-        {children}
-      </MobileSheet>
+      {/* Mobile: shared draggable bottom sheet */}
+      <MobileBottomSheet defaultSnap={mobileDefault} header={mobileHeader}>
+        <div className="border-t border-border px-4 py-3">{children}</div>
+      </MobileBottomSheet>
     </>
   );
 }
-
-function MobileSheet({
-  title,
-  onClose,
-  onBack,
-  backLabel,
-  rightHeaderSlot,
-  tabStrip,
-  toolbar,
-  collapsible,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  onBack?: () => void;
-  backLabel?: string;
-  rightHeaderSlot?: React.ReactNode;
-  tabStrip?: React.ReactNode;
-  toolbar?: React.ReactNode;
-  collapsible: boolean;
-  children: React.ReactNode;
-}) {
-  // Collapsible sheets default expanded for discovery (the body is the
-  // point); detail panels can pass collapsible=true and start collapsed.
-  // Routes/Collections/Places lists pass collapsible=false → fixed max-h.
-  const [expanded, setExpanded] = useState(!collapsible);
-
-  return (
-    <div
-      className={`pointer-events-auto absolute bottom-0 left-12 right-0 z-10 flex flex-col rounded-t-2xl border-t border-l border-border bg-background shadow-2xl transition-[max-height] duration-300 ease-out md:hidden ${
-        expanded ? "max-h-[85vh]" : "max-h-[120px]"
-      }`}
-    >
-      <div className="flex-shrink-0 px-4 pt-2 pb-3">
-        <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
-        <div className="flex items-center justify-between gap-2">
-          {onBack ? (
-            <button
-              onClick={onBack}
-              className="flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
-              aria-label="Back"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              {backLabel ?? "Back"}
-            </button>
-          ) : (
-            <span className="text-sm font-medium text-foreground">{title}</span>
-          )}
-          <div className="flex items-center gap-1">
-            {rightHeaderSlot}
-            {collapsible && (
-              <button
-                onClick={() => setExpanded((v) => !v)}
-                className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface hover:text-foreground"
-                aria-label={expanded ? "Collapse" : "Expand"}
-              >
-                {expanded ? (
-                  <ChevronDown className="h-5 w-5" />
-                ) : (
-                  <ChevronUp className="h-5 w-5" />
-                )}
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="rounded-lg p-1.5 text-muted hover:text-foreground"
-              aria-label="Close"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-        {(tabStrip || toolbar) && (
-          <div className="mt-2 space-y-2">
-            {tabStrip}
-            {toolbar}
-          </div>
-        )}
-      </div>
-      {expanded && (
-        <div className="flex-1 overflow-y-auto border-t border-border px-4 py-3">
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-

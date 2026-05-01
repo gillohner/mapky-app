@@ -7,6 +7,8 @@ import { WaypointMarkers } from "@/components/map/WaypointMarkers";
 import { RouteMapClickHandler } from "@/components/map/RouteMapClickHandler";
 import { DirectionsBar } from "./DirectionsBar";
 import { RouteSummaryCard } from "./RouteSummaryCard";
+import { MobileBottomSheet } from "@/components/shared/MobileBottomSheet";
+import { useSidebarPresence } from "@/hooks/use-sidebar-presence";
 
 /**
  * Mounts the directions UI as a left-anchored sidebar (Google Maps style).
@@ -30,16 +32,13 @@ export function DirectionsLayer() {
   const slots = useRouteCreationStore((s) => s.slots);
   const map = useMapStore((s) => s.map);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
-  const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
 
-  // Tell the rest of the app a sidebar is occupied while directions is on.
-  // PlacePanel does the same when it's mounted; the two never coexist
-  // because PlaceDirectionsButton navigates away before opening directions.
-  useEffect(() => {
-    if (!isOpen) return;
-    setSidebarOpen(true);
-    return () => setSidebarOpen(false);
-  }, [isOpen, setSidebarOpen]);
+  // Register presence only while directions is active. The hook uses
+  // a counter in ui-store, so a transient overlap with the next
+  // sidebar (e.g. /directions → /route/...) keeps `sidebarOpen` true
+  // through the handover instead of flickering false in the gap
+  // between this layer's cleanup and the new sidebar's mount.
+  useSidebarPresence(isOpen);
 
   const fallbackLine = useMemo(
     () =>
@@ -107,13 +106,15 @@ export function DirectionsLayer() {
         </div>
       </div>
 
-      {/* Mobile: bottom sheet (collapsible). Lets the user see the map
-          while still picking start / end. */}
-      <div className="pointer-events-auto absolute bottom-0 left-12 right-0 z-10 flex max-h-[70vh] flex-col overflow-y-auto rounded-t-2xl border-t border-border bg-background shadow-2xl md:hidden">
-        <div className="mx-auto my-2 h-1 w-10 rounded-full bg-border" />
-        <DirectionsBar />
+      {/* Mobile: shared draggable bottom sheet — DirectionsBar lives in
+          the always-visible header so the user can edit start/end at
+          any snap; the route summary lives in the body. */}
+      <MobileBottomSheet
+        defaultSnap="middle"
+        header={<DirectionsBar />}
+      >
         <RouteSummaryCard />
-      </div>
+      </MobileBottomSheet>
     </>
   );
 }

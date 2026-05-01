@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueries } from "@tanstack/react-query";
-import { Loader2, MapPin } from "lucide-react";
+import { Bitcoin, Loader2, MapPin } from "lucide-react";
 import { placeStarsLabel } from "@/lib/places/enrich-search";
-import { useViewportPlaces, useOsmLookup } from "@/lib/api/hooks";
+import { useViewportBitcoinPois } from "@/lib/btcmap/use-viewport-bitcoin-pois";
+import {
+  useViewportPlaces,
+  useOsmLookup,
+  useOsmLookupBatch,
+} from "@/lib/api/hooks";
 import { fetchPlaceTags } from "@/lib/api/mapky";
-import { lookupOsmElement } from "@/lib/api/nominatim";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import {
@@ -47,6 +51,12 @@ export function PlaceList() {
   const liveBbox = useViewportBounds();
   const bbox = useFrozenWhile(liveBbox, filterActive);
   const viewport = useViewportPlaces(bbox);
+  // Shared Bitcoin keys — same Overpass query the map layer uses, so
+  // the per-row chip is a free piggy-back on the cache. Renders the
+  // chip regardless of the Layers-sheet toggle (the toggle only gates
+  // the orange BORDER on the map).
+  const zoomEnough = useMapStore((s) => s.zoom >= 9);
+  const { keys: bitcoinKeys } = useViewportBitcoinPois(bbox, zoomEnough);
   const close = () => navigate({ to: "/" });
 
   // Batch-fetch tags for every place in the viewport. TanStack caches
@@ -73,28 +83,30 @@ export function PlaceList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [places, tagQueries.map((q) => q.dataUpdatedAt).join(",")]);
 
-  // Batch Nominatim lookups so the parent has each place's type for
-  // the location-type filter chips. Cache key matches the per-row
-  // useOsmLookup so PlaceRow doesn't re-fetch.
-  const nominatimQueries = useQueries({
-    queries: places.map((p) => ({
-      queryKey: ["nominatim", "lookup", p.osm_type, p.osm_id] as const,
-      queryFn: () => lookupOsmElement(p.osm_type, p.osm_id),
-      staleTime: Infinity,
-      gcTime: Infinity,
-      retry: false,
-    })),
-  });
+  // ONE batched Nominatim lookup for every place in the viewport.
+  // Public Nominatim throttles per-IP, so the previous N parallel
+  // /lookup calls would frequently trip 429s and stall the sidebar
+  // for tens of seconds. The batched endpoint takes up to 50 osm_ids
+  // per request and resolves the whole list in a single round-trip.
+  // The hook also seeds the per-id cache so PlaceRow's useOsmLookup
+  // resolves synchronously without firing its own request.
+  const lookupRefs = useMemo(
+    () => places.map((p) => ({ osmType: p.osm_type, osmId: p.osm_id })),
+    [places],
+  );
+  const { byKey: lookupByKey } = useOsmLookupBatch(lookupRefs);
   const typeByPlace = useMemo(() => {
     const map = new Map<string, string>();
-    places.forEach((p, i) => {
-      const nom = nominatimQueries[i].data;
+    for (const p of places) {
+      // Index by key — the batch hook's `byKey` is keyed on each
+      // result's own osm_type:osm_id, so reordered places can't
+      // pull a different place's type from the cached array.
+      const nom = lookupByKey.get(`${p.osm_type}:${p.osm_id}`);
       const t = nom?.type?.replace(/_/g, " ");
       if (t && t !== "yes" && t !== "unclassified") map.set(placeKey(p), t);
-    });
+    }
     return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [places, nominatimQueries.map((q) => q.dataUpdatedAt).join(",")]);
+  }, [places, lookupByKey]);
 
   // Filter state lives at the top of the component (declared above
   // so it can drive the bbox freeze) — re-stated as a comment here
@@ -136,7 +148,7 @@ export function PlaceList() {
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return places.filter((p) => {
+    const matched = places.filter((p) => {
       const key = placeKey(p);
       const tags = tagsByPlace.get(key) ?? [];
       const tagLabels = tags.map((t) => t.label);
@@ -160,6 +172,19 @@ export function PlaceList() {
         .join(" ")
         .toLowerCase();
       return haystack.includes(needle);
+    });
+
+    // Rank by rating: rated places first (highest first), unrated
+    // places retain their relative order at the bottom. Tiebreak on
+    // review_count so a 4.6 with 50 reviews beats a 4.6 with 1.
+    return [...matched].sort((a, b) => {
+      const aRated = a.review_count > 0;
+      const bRated = b.review_count > 0;
+      if (aRated !== bRated) return aRated ? -1 : 1;
+      if (!aRated) return 0;
+      const ratingDelta = b.avg_rating - a.avg_rating;
+      if (ratingDelta !== 0) return ratingDelta;
+      return b.review_count - a.review_count;
     });
   }, [places, tagsByPlace, typeByPlace, query, activeTags, tagMode, activeType]);
 
@@ -229,6 +254,7 @@ export function PlaceList() {
             key={placeKey(p)}
             place={p}
             tags={tagsByPlace.get(placeKey(p)) ?? []}
+            acceptsBitcoin={bitcoinKeys.has(`${p.osm_type}:${p.osm_id}`)}
           />
         ))}
       </div>
@@ -243,9 +269,11 @@ function placeKey(p: PlaceDetails): string {
 function PlaceRow({
   place,
   tags,
+  acceptsBitcoin,
 }: {
   place: PlaceDetails;
   tags: PostTagDetails[];
+  acceptsBitcoin: boolean;
 }) {
   const navigate = useNavigate();
   const map = useMapStore((s) => s.map);
@@ -291,6 +319,14 @@ function PlaceRow({
           {placeStarsLabel(place) && (
             <span className="flex-shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
               {placeStarsLabel(place)}
+            </span>
+          )}
+          {acceptsBitcoin && (
+            <span
+              className="flex flex-shrink-0 items-center gap-0.5 rounded-full bg-[#f7931a]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#b45309] dark:text-[#fbbf24]"
+              title="Accepts Bitcoin"
+            >
+              <Bitcoin className="h-3 w-3" />
             </span>
           )}
         </div>

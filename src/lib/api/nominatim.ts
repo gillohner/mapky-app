@@ -4,11 +4,14 @@ import {
   makeReverseKey,
   makeSearchKey,
 } from "./nominatim-cache";
+import { config } from "@/lib/config";
 
-/** In dev, Nominatim is proxied through Vite to avoid CORS issues. */
-const NOMINATIM_BASE = import.meta.env.DEV
-  ? "/nominatim"
-  : "https://nominatim.openstreetmap.org";
+/**
+ * Base URL for Nominatim. Dev default proxies through Vite (`/nominatim`)
+ * for CORS; prod default is the public OSM instance. Override either
+ * via `VITE_NOMINATIM_URL` (e.g. a self-hosted Nominatim mirror).
+ */
+const NOMINATIM_BASE = config.nominatim.url;
 
 export interface NominatimResult {
   osm_type: string | null;
@@ -284,4 +287,104 @@ export async function lookupOsmElement(
 
   setCache(cacheKey, result);
   return result;
+}
+
+/**
+ * Batched OSM lookup. Nominatim's `/lookup` accepts up to 50 osm_ids
+ * comma-separated in a single request — one round-trip per 50 places
+ * instead of one per place. Public Nominatim throttles per-IP, so a
+ * 30-row place list that used to fire 30 individual lookups (most
+ * getting 429s) now resolves in a single ~1s call.
+ *
+ * Results are pulled from the in-memory cache when available and only
+ * the missing IDs go on the wire. The successful response also seeds
+ * the per-id cache, so any later `lookupOsmElement(...)` call hits the
+ * same cache instead of re-fetching.
+ *
+ * Returns a result for every input ref in the same order. Missing
+ * elements (Nominatim returned no data) get an empty NominatimResult
+ * so consumers don't have to worry about index drift.
+ */
+export async function lookupOsmElements(
+  refs: Array<{ osmType: string; osmId: number }>,
+): Promise<NominatimResult[]> {
+  if (refs.length === 0) return [];
+
+  const out: (NominatimResult | undefined)[] = new Array(refs.length);
+  const todoIdxs: number[] = [];
+
+  // Cache pass first — anything we already know skips the wire.
+  for (let i = 0; i < refs.length; i++) {
+    const { osmType, osmId } = refs[i];
+    const cached = getCached<NominatimResult>(`lookup:${osmType}:${osmId}`);
+    if (cached) out[i] = cached;
+    else todoIdxs.push(i);
+  }
+  if (todoIdxs.length === 0) return out as NominatimResult[];
+
+  // Nominatim caps `/lookup` at 50 ids per request; chunk and fan out.
+  // Each chunk is a single throttle hit instead of 50.
+  for (let start = 0; start < todoIdxs.length; start += 50) {
+    const chunk = todoIdxs.slice(start, start + 50);
+    const idsParam = chunk
+      .map((i) => {
+        const prefix = TYPE_PREFIX[refs[i].osmType];
+        if (!prefix) throw new Error(`Unknown osm_type: ${refs[i].osmType}`);
+        return `${prefix}${refs[i].osmId}`;
+      })
+      .join(",");
+
+    const url = new URL(`${NOMINATIM_BASE}/lookup`, window.location.origin);
+    url.searchParams.set("osm_ids", idsParam);
+    url.searchParams.set("format", "json");
+    url.searchParams.set("addressdetails", "1");
+    url.searchParams.set("extratags", "1");
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
+    const data: Array<Record<string, unknown>> = await res.json();
+
+    // Index the response by osm_type:osm_id so we can map each input
+    // ref back to its result regardless of Nominatim's response order.
+    const byKey = new Map<string, Record<string, unknown>>();
+    for (const r of data) {
+      const k = `${String(r.osm_type)}:${Number(r.osm_id)}`;
+      byKey.set(k, r);
+    }
+
+    for (const idx of chunk) {
+      const { osmType, osmId } = refs[idx];
+      const r = byKey.get(`${osmType}:${osmId}`);
+      const result: NominatimResult = r
+        ? {
+            osm_type: (r.osm_type as string) || osmType,
+            osm_id: r.osm_id ? Number(r.osm_id) : osmId,
+            name: (r.name as string) || null,
+            display_name: (r.display_name as string) || "",
+            type: (r.type as string) || null,
+            category:
+              (r.category as string) || (r.class as string) || null,
+            address: (r.address as Record<string, string>) ?? {},
+            lat: r.lat ? Number(r.lat) : null,
+            lon: r.lon ? Number(r.lon) : null,
+            extratags:
+              (r.extratags as Record<string, string>) ?? undefined,
+          }
+        : {
+            osm_type: osmType,
+            osm_id: osmId,
+            name: null,
+            display_name: "",
+            type: null,
+            category: null,
+            address: {},
+            lat: null,
+            lon: null,
+          };
+      setCache(`lookup:${osmType}:${osmId}`, result);
+      out[idx] = result;
+    }
+  }
+
+  return out as NominatimResult[];
 }

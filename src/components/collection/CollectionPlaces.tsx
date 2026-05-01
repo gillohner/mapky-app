@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { MapPin } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
 import {
   useOsmLookup,
+  useOsmLookupBatch,
   usePlaceDetail,
   usePlaceTags,
 } from "@/lib/api/hooks";
@@ -21,6 +22,20 @@ const PAGE_SIZE = 20;
 export function CollectionPlaces({ items, authorId, collectionId }: CollectionPlacesProps) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? items : items.slice(0, PAGE_SIZE);
+
+  // ONE batched Nominatim lookup for every visible item — pre-seeds
+  // the per-id cache so each PlaceItem's useOsmLookup is a synchronous
+  // hit instead of a separate /lookup request that would trip the
+  // public Nominatim rate limiter on bigger collections.
+  const lookupRefs = useMemo(() => {
+    const refs: Array<{ osmType: string; osmId: number }> = [];
+    for (const url of visible) {
+      const parsed = parseOsmCanonical(url);
+      if (parsed) refs.push({ osmType: parsed.osmType, osmId: parsed.osmId });
+    }
+    return refs;
+  }, [visible]);
+  useOsmLookupBatch(lookupRefs);
 
   if (items.length === 0) {
     return (

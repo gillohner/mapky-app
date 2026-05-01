@@ -1,3 +1,4 @@
+import { config } from "@/lib/config";
 import type { ViewportBounds } from "@/types/mapky";
 
 /**
@@ -15,7 +16,11 @@ import type { ViewportBounds } from "@/types/mapky";
  *   payment:bitcoin=yes                 — legacy: implies XBT + onchain
  */
 
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+/**
+ * Public Overpass interpreter by default (rate-limited per IP). Set
+ * `VITE_OVERPASS_URL` to point at your own mirror for production.
+ */
+const OVERPASS_URL = config.overpass.url;
 
 export interface BitcoinPoi {
   osmType: "node" | "way" | "relation";

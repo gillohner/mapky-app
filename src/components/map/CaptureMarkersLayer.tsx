@@ -4,7 +4,10 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
-import { useViewportCaptures } from "@/lib/api/hooks";
+import {
+  useViewportCaptures,
+  useSequenceMembersFanOut,
+} from "@/lib/api/hooks";
 import { useLayerOpacityMultiplier } from "@/lib/map/dim";
 
 import type { GeoCaptureDetails, ViewportBounds } from "@/types/mapky";
@@ -148,6 +151,11 @@ export function CaptureMarkersLayer() {
   const { data: captures } = useViewportCaptures(bounds);
   const visibleIds = useUiStore((s) => s.visibleCaptureIds);
   const pinned = useUiStore((s) => s.pinnedCaptures);
+  // Pull in every sequence's full member list so dots that anchor the
+  // SequenceCoverageLayer's polyline outside the viewport still render
+  // — otherwise the line would visibly end on a missing endpoint when
+  // the next sibling is just past the bbox.
+  const { extras: seqExtras } = useSequenceMembersFanOut(captures);
 
   // Same source-races-style-load pattern as MapkyPlacesLayer: hold
   // current GeoJSON in a ref so the deferred "idle" / styledata
@@ -191,23 +199,29 @@ export function CaptureMarkersLayer() {
         ? captures.filter((c) => visibleIds.has(c.id))
         : captures
       : [];
-    // Union with pinned captures (active sequence siblings from the
-    // capture detail panel) so zooming past the bbox doesn't drop the
-    // sibling dots that the coverage line connects to.
-    const merged = pinned?.length
-      ? (() => {
-          const seen = new Set(base.map((c) => c.id));
-          const extras = pinned.filter((c) => !seen.has(c.id));
-          return extras.length ? [...base, ...extras] : base;
-        })()
-      : base;
+    // Stack three sources: viewport (filtered), pinned siblings from
+    // the active capture detail panel, and the sequence members
+    // fan-out for any sequence touching the viewport. Dedupe by id so
+    // the line never looks orphaned at a viewport edge.
+    const seen = new Set(base.map((c) => c.id));
+    const merged = [...base];
+    for (const c of pinned ?? []) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      merged.push(c);
+    }
+    for (const c of seqExtras) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      merged.push(c);
+    }
     dataRef.current = merged.length
       ? capturesToGeoJSON(merged)
       : { type: "FeatureCollection", features: [] };
     if (!map) return;
     const src = map.getSource(SOURCE) as maplibregl.GeoJSONSource | undefined;
     src?.setData(dataRef.current);
-  }, [map, captures, visibleIds, pinned]);
+  }, [map, captures, visibleIds, pinned, seqExtras]);
 
   const dim = useLayerOpacityMultiplier("captures");
   useEffect(() => {

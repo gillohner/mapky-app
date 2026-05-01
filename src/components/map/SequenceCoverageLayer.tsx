@@ -4,7 +4,10 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
-import { useViewportCaptures } from "@/lib/api/hooks";
+import {
+  useViewportCaptures,
+  useSequenceMembersFanOut,
+} from "@/lib/api/hooks";
 import { useLayerOpacityMultiplier } from "@/lib/map/dim";
 import type { GeoCaptureDetails, ViewportBounds } from "@/types/mapky";
 
@@ -74,7 +77,11 @@ function ensureLayers(map: maplibregl.Map, theme: "light" | "dark") {
             16,
             5,
           ],
-          "line-opacity": 0.6,
+          // Kept light so the line reads as connective tissue between
+          // dots rather than a primary feature — at 0.6 it competed
+          // with the basemap's road network and made the dots harder
+          // to pick out.
+          "line-opacity": 0.35,
         },
         layout: {
           "line-cap": "round",
@@ -129,6 +136,13 @@ export function SequenceCoverageLayer() {
   const { data: captures } = useViewportCaptures(bounds);
   const visibleIds = useUiStore((s) => s.visibleCaptureIds);
   const pinned = useUiStore((s) => s.pinnedCaptures);
+  // Fan out a sequence-members fetch for every sequence the viewport
+  // touches. Without this the polyline stops at the viewport edge —
+  // any siblings outside the bbox aren't in `captures` so the line
+  // segment between them never gets drawn. We still gate filtering on
+  // `visibleIds` (sidebar filter) but only on the viewport set, so a
+  // sequence that bleeds out of the bbox stays whole.
+  const { extras: seqExtras } = useSequenceMembersFanOut(captures);
 
   const geojson = useMemo(() => {
     const base = captures?.length
@@ -136,18 +150,23 @@ export function SequenceCoverageLayer() {
         ? captures.filter((c) => visibleIds.has(c.id))
         : captures
       : [];
-    // Same union as CaptureMarkersLayer — pinned siblings keep the
-    // coverage line from breaking up when the user zooms in past the
-    // sequence's bbox.
-    const merged = pinned?.length
-      ? (() => {
-          const seen = new Set(base.map((c) => c.id));
-          const extras = pinned.filter((c) => !seen.has(c.id));
-          return extras.length ? [...base, ...extras] : base;
-        })()
-      : base;
+    // Stack three sources: viewport (filtered), pinned siblings from
+    // the active capture detail panel, and the sequence members
+    // fan-out for any sequence touching the viewport. Dedupe by id.
+    const seen = new Set(base.map((c) => c.id));
+    const merged = [...base];
+    for (const c of pinned ?? []) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      merged.push(c);
+    }
+    for (const c of seqExtras) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      merged.push(c);
+    }
     return merged.length ? buildCoverageGeoJSON(merged) : null;
-  }, [captures, visibleIds, pinned]);
+  }, [captures, visibleIds, pinned, seqExtras]);
 
   // Hold latest GeoJSON in a ref so the deferred "idle" / styledata
   // re-attach can populate without waiting for another React render.
@@ -196,7 +215,7 @@ export function SequenceCoverageLayer() {
     if (!map) return;
     const apply = () => {
       if (map.getLayer(LINE_LAYER)) {
-        map.setPaintProperty(LINE_LAYER, "line-opacity", 0.6 * dim);
+        map.setPaintProperty(LINE_LAYER, "line-opacity", 0.35 * dim);
       }
     };
     apply();

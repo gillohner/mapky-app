@@ -1,23 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   X,
-  ChevronUp,
-  ChevronDown,
   MapPin,
   FolderHeart,
   MessageSquare,
   Route as RouteIcon,
 } from "lucide-react";
+import { MobileBottomSheet } from "@/components/shared/MobileBottomSheet";
 import { useNavigate } from "@tanstack/react-router";
 import {
   useBoundedSearch,
   useNominatimSearch,
   useTagSearch,
   useOsmLookup,
+  useOsmLookupBatch,
 } from "@/lib/api/hooks";
-import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
+import { useSidebarPresence } from "@/hooks/use-sidebar-presence";
 import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
 import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
@@ -47,10 +47,14 @@ function getViewbox(map: maplibregl.Map | null): Viewbox | null {
   };
 }
 
+function inViewbox(lat: number, lon: number, vb: Viewbox): boolean {
+  return (
+    lat >= vb.south && lat <= vb.north && lon >= vb.west && lon <= vb.east
+  );
+}
+
 export function SearchPanel({ query, mode }: SearchPanelProps) {
   const navigate = useNavigate();
-  const [expanded, setExpanded] = useState(false);
-  const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
   const map = useMapStore((s) => s.map);
 
   // Reactive viewport — updates on map move (debounced)
@@ -170,10 +174,7 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
     [globalResults, enrichedByKey],
   );
 
-  useEffect(() => {
-    setSidebarOpen(true);
-    return () => setSidebarOpen(false);
-  }, [setSidebarOpen]);
+  useSidebarPresence();
 
   // Search is the loudest "focus mode" the app has — the user typed a
   // query expecting an answer, so kill EVERY Mapky data layer until
@@ -182,6 +183,85 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
   // set), so the user keeps the context they actually asked for.
   // (null focus = no exception, hide everything.)
   useAutoFocusLayer(null, { hide: true });
+
+  // ONE batched Nominatim lookup for every OSM ref the visible
+  // result rows will look up (tag-mode places + every post's anchor
+  // place). Pre-seeds the per-id cache so each row's useOsmLookup
+  // resolves synchronously instead of firing its own /lookup.
+  const tagLookupRefs = useMemo(() => {
+    if (mode !== "tags" || !tagResults) return [];
+    const seen = new Set<string>();
+    const refs: Array<{ osmType: string; osmId: number }> = [];
+    const add = (osmType: string, osmId: number) => {
+      const k = `${osmType}:${osmId}`;
+      if (seen.has(k)) return;
+      seen.add(k);
+      refs.push({ osmType, osmId });
+    };
+    for (const p of tagResults.places ?? []) add(p.osm_type, p.osm_id);
+    for (const post of tagResults.posts ?? []) {
+      const parsed = parseOsmCanonical(post.osm_canonical);
+      if (parsed) add(parsed.osmType, parsed.osmId);
+    }
+    return refs;
+  }, [mode, tagResults]);
+  const { byKey: tagBatchByKey } = useOsmLookupBatch(tagLookupRefs);
+
+  // Build EnrichedResult-shaped rows for tag-mode places so they can
+  // share the same map overlay + sectioned list UI as places-mode.
+  // Names come from the batched Nominatim cache; the indexer's
+  // PlaceDetails (rating, counts) drops in directly as `place`.
+  const tagEnrichedAll = useMemo<EnrichedResult[]>(() => {
+    if (mode !== "tags" || !tagResults?.places) return [];
+    return tagResults.places.map((p) => {
+      const nom = tagBatchByKey.get(`${p.osm_type}:${p.osm_id}`) ?? null;
+      const name =
+        nom?.name ||
+        nom?.display_name?.split(",")[0] ||
+        fallbackPlaceLabel(p.osm_type, p.osm_id);
+      return {
+        result: {
+          osm_type: p.osm_type,
+          osm_id: p.osm_id,
+          name,
+          display_name: nom?.display_name ?? "",
+          type: nom?.type ?? "",
+          category: nom?.category ?? "",
+          lat: p.lat,
+          lon: p.lon,
+        },
+        place: p,
+        tags: [],
+      };
+    });
+  }, [mode, tagResults?.places, tagBatchByKey]);
+
+  // Split tag-mode places by current viewport — same nearby/global
+  // sectioning the places-mode results use, so the user can scan
+  // "what near me matches this tag" before drifting outward.
+  const tagEnrichedNearby = useMemo(
+    () =>
+      sortByRating(
+        currentViewbox
+          ? tagEnrichedAll.filter(({ result: r }) =>
+              inViewbox(r.lat, r.lon, currentViewbox),
+            )
+          : [],
+      ),
+    [tagEnrichedAll, currentViewbox],
+  );
+  const tagEnrichedGlobal = useMemo(() => {
+    const seen = new Set(
+      tagEnrichedNearby.map(
+        (e) => `${e.result.osm_type}:${e.result.osm_id}`,
+      ),
+    );
+    return sortByRating(
+      tagEnrichedAll.filter(
+        (e) => !seen.has(`${e.result.osm_type}:${e.result.osm_id}`),
+      ),
+    );
+  }, [tagEnrichedAll, tagEnrichedNearby]);
 
   const close = () => navigate({ to: "/" });
 
@@ -295,21 +375,51 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
         </div>
       )}
 
-      {/* Tags mode */}
+      {/* Tags mode — places sectioned by viewport (matches places-mode
+          structure), then collections / posts / routes underneath. */}
       {mode === "tags" && tagResults && (
         <div className="space-y-3">
-          {tagResults.places?.length > 0 && (
+          {tagEnrichedNearby.length > 0 && (
             <div>
-              <div className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
-                Places
+              <div className="mb-1 flex items-center gap-2 px-2">
+                <div className="h-2 w-2 rounded-full bg-amber-500" />
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted">
+                  In this area ({tagEnrichedNearby.length})
+                </span>
               </div>
-              {tagResults.places.map((p) => (
-                <TagPlaceResult
-                  key={`${p.osm_type}-${p.osm_id}`}
-                  place={p}
-                  onSelect={() => handleSelectTagPlace(p)}
-                />
-              ))}
+              {tagEnrichedNearby.map(({ place }) =>
+                place ? (
+                  <TagPlaceResult
+                    key={`${place.osm_type}-${place.osm_id}`}
+                    place={place}
+                    onSelect={() => handleSelectTagPlace(place)}
+                  />
+                ) : null,
+              )}
+            </div>
+          )}
+          {tagEnrichedGlobal.length > 0 && (
+            <div
+              className={
+                tagEnrichedNearby.length > 0
+                  ? "border-t border-border pt-2"
+                  : ""
+              }
+            >
+              <div className="mb-1 px-2">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted">
+                  Other places ({tagEnrichedGlobal.length})
+                </span>
+              </div>
+              {tagEnrichedGlobal.map(({ place }) =>
+                place ? (
+                  <TagPlaceResult
+                    key={`${place.osm_type}-${place.osm_id}`}
+                    place={place}
+                    onSelect={() => handleSelectTagPlace(place)}
+                  />
+                ) : null,
+              )}
             </div>
           )}
 
@@ -407,10 +517,11 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
     <>
       {/* Map overlay — show ALL accumulated results so markers persist
           across pans. Pass enriched rows so the overlay can render
-          rating badges where Mapky has reviews. */}
-      {mode === "places" && enrichedAll.length > 0 && (
+          rating + Bitcoin signals. Tag mode now also surfaces every
+          place that matched the tag, sorted nearby-first. */}
+      {(mode === "places" ? enrichedAll : tagEnrichedAll).length > 0 && (
         <SearchResultsOverlay
-          results={enrichedAll}
+          results={mode === "places" ? enrichedAll : tagEnrichedAll}
           searchQuery={query}
           searchMode={mode}
         />
@@ -447,55 +558,44 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
         </div>
       </div>
 
-      {/* Mobile bottom sheet */}
-      <div
-        className={`pointer-events-auto absolute bottom-0 left-12 right-0 z-10 flex flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl transition-[max-height] duration-300 ease-out md:hidden ${
-          expanded ? "max-h-[85vh]" : "max-h-[200px]"
-        }`}
+      {/* Mobile: shared draggable bottom sheet (3 snap positions) */}
+      <MobileBottomSheet
+        defaultSnap="middle"
+        header={
+          <div className="px-4 pb-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                    Search
+                  </span>
+                  {!isLoading && resultCount > 0 && (
+                    <span className="text-xs text-muted">
+                      {resultCount} result{resultCount !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+                {query && (
+                  <p className="mt-1 truncate text-sm text-muted">
+                    Results for &ldquo;
+                    <span className="text-foreground">{query}</span>&rdquo;
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={close}
+                className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface hover:text-foreground"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        }
       >
-        <div className="flex-shrink-0 px-4 pt-2 pb-3">
-          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted">
-              Search
-            </span>
-            {!isLoading && resultCount > 0 && (
-              <span className="text-xs text-muted">
-                {resultCount} result{resultCount !== 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-          {query && (
-            <p className="mt-1 text-sm text-muted">
-              Results for &ldquo;<span className="text-foreground">{query}</span>&rdquo;
-            </p>
-          )}
-          <div className="absolute right-2 top-2 flex items-center gap-1">
-            <button
-              onClick={() => setExpanded((v) => !v)}
-              className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface hover:text-foreground"
-            >
-              {expanded ? (
-                <ChevronDown className="h-5 w-5" />
-              ) : (
-                <ChevronUp className="h-5 w-5" />
-              )}
-            </button>
-            <button
-              onClick={close}
-              className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface hover:text-foreground"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+        <div className="border-t border-border px-4 py-3">
+          {resultsContent}
         </div>
-
-        {expanded && (
-          <div className="flex-1 overflow-y-auto border-t border-border px-4 py-3">
-            {resultsContent}
-          </div>
-        )}
-      </div>
+      </MobileBottomSheet>
     </>
   );
 }

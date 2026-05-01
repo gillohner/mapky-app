@@ -14,9 +14,12 @@
   --raw-fg: #0f172a;
   --raw-muted: #64748b;
   --raw-border: #e2e8f0;
-  --raw-accent: #16a34a;
-  --raw-accent-hover: #15803d;
-  --raw-accent-subtle: #dcfce7;
+  /* Teal — chosen for stronger hue contrast against Bitcoin orange
+   * than the previous green (180° apart vs 110°) so Mapky-data and
+   * Bitcoin-acceptance signals stay visually distinct on the map. */
+  --raw-accent: #0d9488;
+  --raw-accent-hover: #0f766e;
+  --raw-accent-subtle: #ccfbf1;
 }
 
 .dark {
@@ -25,9 +28,9 @@
   --raw-fg: #e2e8f0;
   --raw-muted: #94a3b8;
   --raw-border: #1e293b;
-  --raw-accent: #22c55e;
-  --raw-accent-hover: #16a34a;
-  --raw-accent-subtle: #052e16;
+  --raw-accent: #14b8a6;
+  --raw-accent-hover: #0d9488;
+  --raw-accent-subtle: #042f2e;
 }
 
 @theme inline {
@@ -101,6 +104,16 @@ html, body, #root {
   display: none;
 }
 
+/* LayerSheetTrigger — mobile rides above the bottom sheet via the
+   --mobile-sheet-vh variable; desktop pins to a fixed corner offset
+   regardless of whatever any sheet writes to the variable, since on
+   md+ panels are full-height sidebars and don't share the bottom. */
+@media (min-width: 768px) {
+  .mapky-layer-trigger {
+    bottom: calc(1.5rem + env(safe-area-inset-bottom)) !important;
+  }
+}
+
 /* Selected-place balloon pin (used when no polygon/line area is
    available). Pin tip sits on the lat/lng; label hangs to the right
    beside the pin head. */
@@ -136,6 +149,42 @@ html, body, #root {
 
 .mapky-place-pin__label:empty {
   display: none;
+}
+
+/* Rating chip floating above the selected pin head — mirrors the
+   hover-balloon chip so a place's star rating stays readable after
+   clicking through. White pill with amber star + dark text gives
+   high contrast against every basemap (light, dark, satellite). */
+.mapky-place-pin__rating {
+  position: absolute;
+  left: 50%;
+  /* Sit just above the SVG icon (28x40) so the teardrop tip stays
+     anchored to the lat/lng. The pin's bottom edge is the marker
+     anchor — adding height upward doesn't shift it. */
+  top: -16px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  background: #ffffff;
+  color: #111827;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 9999px;
+  font: 700 10px/1 ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
+.mapky-place-pin__rating-star {
+  color: #f59e0b;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.mapky-place-pin__rating-value {
+  font-weight: 700;
 }
 
 /* Photo Sphere Viewer — floor navigation dots */

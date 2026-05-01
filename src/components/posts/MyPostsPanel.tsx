@@ -1,7 +1,12 @@
+import { useMemo } from "react";
 import { Star, MessageSquare, MapPin } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { useUserPosts, useOsmLookup } from "@/lib/api/hooks";
+import {
+  useUserPosts,
+  useOsmLookup,
+  useOsmLookupBatch,
+} from "@/lib/api/hooks";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
@@ -117,6 +122,26 @@ export function MyPostsPanel() {
   // Posts are anchored to places — hide captures entirely so the
   // place markers your posts attach to stand alone.
   useAutoFocusLayer("places", { hide: true });
+
+  // ONE batched Nominatim lookup for every post's anchor place.
+  // Without this, each <PlaceName /> below fans out a single-id
+  // request and trips the public Nominatim rate limiter on lists
+  // with more than a handful of posts.
+  const lookupRefs = useMemo(() => {
+    if (!posts) return [];
+    const seen = new Set<string>();
+    const refs: Array<{ osmType: string; osmId: number }> = [];
+    for (const p of posts) {
+      const parsed = parseOsmCanonical(p.osm_canonical);
+      if (!parsed) continue;
+      const k = `${parsed.osmType}:${parsed.osmId}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      refs.push({ osmType: parsed.osmType, osmId: parsed.osmId });
+    }
+    return refs;
+  }, [posts]);
+  useOsmLookupBatch(lookupRefs);
 
   return (
     <DiscoverSidebar title="My Posts" onClose={() => navigate({ to: "/" })}>

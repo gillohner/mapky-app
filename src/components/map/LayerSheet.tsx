@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -60,6 +60,38 @@ export function LayerSheet() {
     return () => document.removeEventListener("keydown", onKey);
   }, [open, setOpen]);
 
+  // Close on outside click. Listen at the document level on the
+  // `mousedown` event:
+  //
+  //   - `click` doesn't work for our case because POI markers
+  //     (HTML balloons) call `e.stopPropagation()` in their click
+  //     handlers — clicks on a marker would never reach this listener
+  //     and the sheet would refuse to close. `mousedown` fires earlier
+  //     and isn't affected by their click-level stopPropagation.
+  //   - We still skip clicks inside the sheet itself (sheetRef) and on
+  //     the trigger button (data-attr) so the trigger's own toggle
+  //     handles the close cleanly.
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (!target) return;
+      if (sheetRef.current && sheetRef.current.contains(target)) return;
+      if (target.closest?.("[data-mapky-layer-trigger]")) return;
+      setOpen(false);
+    };
+    // Defer so the mousedown that opened the sheet doesn't immediately
+    // close it again. Same pattern most outside-click hooks use.
+    const t = setTimeout(() => {
+      document.addEventListener("mousedown", onDown);
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [open, setOpen]);
+
   if (!open) return null;
 
   return createPortal(
@@ -74,6 +106,7 @@ export function LayerSheet() {
           LayerSheetTrigger button. Mobile: full-width above the
           trigger row; desktop: 320px panel offset past the rail. */}
       <div
+        ref={sheetRef}
         className={`pointer-events-auto relative mx-2 w-[calc(100%-1rem)] max-w-md rounded-2xl border border-border bg-background/95 p-4 shadow-xl backdrop-blur transition-[margin] duration-300 sm:w-80 ${
           sidebarOpen ? "sm:ml-16 md:ml-[440px]" : "sm:ml-16"
         }`}

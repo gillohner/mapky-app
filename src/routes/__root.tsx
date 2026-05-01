@@ -2,14 +2,12 @@ import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { MapView } from "@/components/map/MapView";
-import { MapkyPlacesLayer } from "@/components/map/MapkyPlacesLayer";
+import { PlaceAnnotationsLayer } from "@/components/map/PlaceAnnotationsLayer";
 import { CaptureMarkersLayer } from "@/components/map/CaptureMarkersLayer";
 import { SequenceCoverageLayer } from "@/components/map/SequenceCoverageLayer";
 import { PoiClickHandler } from "@/components/map/PoiClickHandler";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
-import { CollectionOverlays } from "@/components/map/CollectionOverlays";
 import { RailOverlayLayer } from "@/components/map/RailOverlayLayer";
-import { BitcoinOverlayLayer } from "@/components/map/BitcoinOverlayLayer";
 import { MapLegends } from "@/components/map/MapLegends";
 import { Buildings3DLayer } from "@/components/map/Buildings3DLayer";
 import { LayerSheet } from "@/components/map/LayerSheet";
@@ -33,13 +31,11 @@ function RootLayout() {
       <AuthProvider>
         <div className="relative h-dvh w-screen overflow-hidden">
           <MapView />
-          <MapkyPlacesLayer />
+          <PlaceAnnotationsLayer />
           <CaptureMarkersLayer />
           <SequenceCoverageLayer />
           <MainMapCaptureOverlay />
-          <CollectionOverlays />
           <RailOverlayLayer />
-          <BitcoinOverlayLayer />
           <Buildings3DLayer />
           <PoiClickHandler />
           <SelectedPlaceMarker />

@@ -2,12 +2,18 @@ import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
+import { usePlaceDetail } from "@/lib/api/hooks";
 
 const SEL_SOURCE = "mapky-selected-place";
 const SEL_LAYER_FILL = "mapky-selected-fill";
 const SEL_LAYER_LINE = "mapky-selected-line";
 
-const HIGHLIGHT_COLOR = "#22c55e";
+const HIGHLIGHT_COLOR = "#dc2626"; // red-600 — used for the balloon pin only
+// Area fill (polygons, building footprints, line geometries) uses a
+// brighter amber instead of red. Red at 22% opacity disappeared into
+// dark roads / red-roofed buildings / busy backgrounds; amber pops
+// against gray streets, green parks, dark satellite imagery alike.
+const AREA_HIGHLIGHT_COLOR = "#f59e0b"; // amber-500
 
 const PROTOMAPS_SOURCE = "protomaps";
 
@@ -31,15 +37,17 @@ function ensureLayers(map: maplibregl.Map) {
     });
   }
 
-  // Filled polygon (buildings, areas).
+  // Filled polygon (buildings, areas). Higher opacity than before so
+  // the highlight reads even on busy basemaps; amber pops against the
+  // gray/green palette Protomaps uses.
   if (!map.getLayer(SEL_LAYER_FILL)) {
     map.addLayer({
       id: SEL_LAYER_FILL,
       type: "fill",
       source: SEL_SOURCE,
       paint: {
-        "fill-color": HIGHLIGHT_COLOR,
-        "fill-opacity": 0.22,
+        "fill-color": AREA_HIGHLIGHT_COLOR,
+        "fill-opacity": 0.3,
       },
     });
   }
@@ -61,7 +69,7 @@ function ensureLayers(map: maplibregl.Map) {
         "line-join": "round",
       },
       paint: {
-        "line-color": HIGHLIGHT_COLOR,
+        "line-color": AREA_HIGHLIGHT_COLOR,
         "line-width": 3,
         "line-opacity": 0.9,
       },
@@ -113,7 +121,11 @@ function createPinElement(): HTMLDivElement {
   const el = document.createElement("div");
   el.className = "mapky-place-pin";
   el.innerHTML = `
-    <svg class="mapky-place-pin__icon" width="28" height="40" viewBox="0 0 28 40" aria-hidden="true">
+    <span class="mapky-place-pin__rating" aria-hidden="true">
+      <span class="mapky-place-pin__rating-star">★</span>
+      <span class="mapky-place-pin__rating-value"></span>
+    </span>
+    <svg class="mapky-place-pin__icon" width="40" height="56" viewBox="0 0 28 40" aria-hidden="true">
       <path d="M14 2 C7 2 2 7 2 14 C2 22 14 38 14 38 C14 38 26 22 26 14 C26 7 21 2 14 2 Z"
             fill="${HIGHLIGHT_COLOR}" stroke="white" stroke-width="2"/>
       <circle cx="14" cy="14" r="4" fill="white"/>
@@ -136,6 +148,20 @@ export function SelectedPlaceMarker() {
   const layerReady = useRef(false);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const pinElRef = useRef<HTMLDivElement | null>(null);
+
+  // Pull the indexer's rating so the selected pin can mirror the
+  // hover-balloon chip ("★ 4.6"). usePlaceDetail's queryKey matches
+  // PlaceList / PlacePanel, so this is a free cache hit when the user
+  // selected from a list — only the first selection from a search
+  // result actually fetches.
+  const { data: place } = usePlaceDetail(
+    selected?.osmType ?? "",
+    selected?.osmId ?? 0,
+  );
+  const ratingLabel =
+    place && place.review_count > 0
+      ? (place.avg_rating / 2).toFixed(1)
+      : null;
 
   // Recreate layers after style changes (theme/basemap toggles wipe style).
   useEffect(() => {
@@ -205,6 +231,26 @@ export function SelectedPlaceMarker() {
             ".mapky-place-pin__label",
           ) as HTMLSpanElement | null;
           if (labelEl) labelEl.textContent = selected.name ?? "";
+
+          // Mirror the hover-balloon's star chip on the selected pin
+          // so a place's rating stays visible after the user clicks
+          // through. Hidden when the place isn't Mapky-rated.
+          const ratingEl = pinEl.querySelector(
+            ".mapky-place-pin__rating",
+          ) as HTMLSpanElement | null;
+          const ratingValueEl = pinEl.querySelector(
+            ".mapky-place-pin__rating-value",
+          ) as HTMLSpanElement | null;
+          if (ratingEl && ratingValueEl) {
+            if (ratingLabel) {
+              ratingValueEl.textContent = ratingLabel;
+              ratingEl.style.display = "";
+            } else {
+              ratingValueEl.textContent = "";
+              ratingEl.style.display = "none";
+            }
+          }
+
           marker.setLngLat([selected.lng, selected.lat]);
           if (!marker.getElement().isConnected) marker.addTo(map);
           else marker.addTo(map); // idempotent
@@ -226,7 +272,7 @@ export function SelectedPlaceMarker() {
     return () => {
       map.off("idle", apply);
     };
-  }, [map, selected]);
+  }, [map, selected, ratingLabel]);
 
   return null;
 }

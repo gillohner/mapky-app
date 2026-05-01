@@ -12,17 +12,15 @@ import type {
   RouteSnapResult,
   Waypoint,
 } from "./types";
+import { config } from "@/lib/config";
 
 // In dev we proxy through Vite (`/valhalla` → valhalla1.openstreetmap.de)
 // because the FOSSGIS instance omits CORS headers on rate-limit
 // responses, which surfaces as opaque "NetworkError" instead of the
 // useful 429 body. In prod, set VITE_VALHALLA_URL to a server-side proxy
-// you control (or self-hosted Valhalla).
-const VALHALLA_URL =
-  import.meta.env.VITE_VALHALLA_URL ??
-  (import.meta.env.DEV
-    ? "/valhalla/route"
-    : "https://valhalla1.openstreetmap.de/route");
+// you control (or self-hosted Valhalla). Both defaults are encoded
+// inside `config.valhalla.url` so the rest of the app stays uniform.
+const VALHALLA_URL = config.valhalla.url;
 
 interface ValhallaLocation {
   lat: number;

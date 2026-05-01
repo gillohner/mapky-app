@@ -1,4 +1,10 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import {
+  useQueries,
+  useQuery,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
 import {
   fetchViewportPlaces,
   fetchPlaceDetail,
@@ -24,10 +30,25 @@ import {
   searchByTag,
 } from "./mapky";
 import { fetchUserProfile } from "./user";
-import { reverseGeocode, searchPlaces, searchPlacesBounded, lookupOsmElement } from "./nominatim";
+import {
+  reverseGeocode,
+  searchPlaces,
+  searchPlacesBounded,
+  lookupOsmElement,
+  lookupOsmElements,
+} from "./nominatim";
 import { readRouteBody } from "@/lib/pubky/storage";
-import type { NominatimSearchResult } from "./nominatim";
-import type { RouteFull, RouteFullJson, ViewportBounds } from "@/types/mapky";
+import type {
+  NominatimResult,
+  NominatimSearchResult,
+} from "./nominatim";
+import type {
+  GeoCaptureDetails,
+  RouteFull,
+  RouteFullJson,
+  ViewportBounds,
+} from "@/types/mapky";
+import { parseSequenceUri } from "@/lib/map/sequence-uri";
 
 export function useViewportPlaces(bounds: ViewportBounds | null) {
   return useQuery({
@@ -35,6 +56,11 @@ export function useViewportPlaces(bounds: ViewportBounds | null) {
     queryFn: () => fetchViewportPlaces(bounds!),
     enabled: !!bounds,
     staleTime: 30_000,
+    // Hold the previous bbox's results on screen while a new fetch is
+    // in flight. Without this, every map pan flashes the markers off
+    // for the round-trip duration — every cross-bbox query gets a
+    // fresh undefined `data` value because the queryKey changed.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -58,6 +84,7 @@ export function usePlaceDetail(osmType: string, osmId: number) {
   return useQuery({
     queryKey: ["mapky", "place", osmType, osmId],
     queryFn: () => fetchPlaceDetail(osmType, osmId),
+    enabled: !!osmType && !!osmId,
     retry: noRetryOn404,
   });
 }
@@ -142,6 +169,77 @@ export function useOsmLookup(
     // miss, so a single attempt is enough.
     retry: false,
   });
+}
+
+/**
+ * Batched Nominatim lookup for a viewport-sized list of OSM refs.
+ * Runs ONE network request per 50 IDs (Nominatim's per-call cap)
+ * instead of fanning out 30+ parallel `/lookup` calls that would
+ * trip the public instance's rate limiter and stall the sidebar.
+ *
+ * Side-effect: every successful row is also written into the
+ * per-id TanStack cache under `["nominatim", "lookup", type, id]`,
+ * so any `useOsmLookup(type, id, true)` call inside a row component
+ * resolves synchronously from the cache instead of firing its own
+ * request. Net effect: PlaceList opens with one Nominatim round-trip
+ * regardless of how many places are visible.
+ *
+ * Memoizes the refs array against type/id stringification so passing
+ * a fresh array each render doesn't churn the query key.
+ */
+export function useOsmLookupBatch(
+  refs: Array<{ osmType: string; osmId: number }>,
+  enabled = true,
+) {
+  const qc = useQueryClient();
+  const stableKey = useMemo(
+    () =>
+      refs
+        .map((r) => `${r.osmType}:${r.osmId}`)
+        .sort()
+        .join(","),
+    [refs],
+  );
+
+  const query = useQuery({
+    queryKey: ["nominatim", "lookup-batch", stableKey],
+    queryFn: () => lookupOsmElements(refs),
+    enabled: enabled && refs.length > 0,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
+  });
+
+  // Index results by `osm_type:osm_id` (the result's own values, not
+  // the request order) so consumers can look them up by key. The
+  // sorted `stableKey` lets two reorderings of the same refs share a
+  // cache entry, which means `query.data` is in the order the QUERY
+  // was first fetched in — not necessarily the current `refs` order.
+  // Indexing by key sidesteps that mismatch entirely.
+  const byKey = useMemo(() => {
+    const m = new Map<string, NominatimResult>();
+    if (!query.data) return m;
+    for (const r of query.data) {
+      if (r.osm_type && r.osm_id != null) {
+        m.set(`${r.osm_type}:${r.osm_id}`, r);
+      }
+    }
+    return m;
+  }, [query.data]);
+
+  // Seed the per-id cache so per-row useOsmLookup hits are instant.
+  // Uses the result's own osm_type/osm_id (not refs[i]) so a reorder
+  // between fetch and seed doesn't cross-write a stale entry.
+  useEffect(() => {
+    if (!query.data) return;
+    for (const r of query.data) {
+      if (r.osm_type && r.osm_id != null) {
+        qc.setQueryData(["nominatim", "lookup", r.osm_type, r.osm_id], r);
+      }
+    }
+  }, [qc, query.data]);
+
+  return { ...query, byKey };
 }
 
 export function useCollection(authorId: string, collectionId: string) {
@@ -232,6 +330,76 @@ export function useSequenceCaptures(
     queryFn: () => fetchSequenceCaptures(authorId!, sequenceId!),
     enabled: !!authorId && !!sequenceId,
   });
+}
+
+/**
+ * For every sequence URI surfaced in the viewport, fetch ALL of that
+ * sequence's captures and return the merged set. Lets the capture
+ * layers draw the full polyline + every dot a sequence touches even
+ * when most of its members sit outside the current bbox.
+ *
+ * Each per-sequence fetch is a TanStack query keyed on the same
+ * `["mapky", "sequence", author, id, "captures"]` tuple
+ * `useSequenceCaptures` uses, so opening a capture detail panel after
+ * passing through the viewport is a free cache hit (and vice-versa).
+ *
+ * Returns: `{ extras }` — the captures from the fetched sequences
+ * MINUS whatever is already in `viewport`, ready to be unioned.
+ */
+export function useSequenceMembersFanOut(
+  viewport: GeoCaptureDetails[] | undefined,
+): { extras: GeoCaptureDetails[] } {
+  const seqRefs = useMemo(() => {
+    if (!viewport) return [];
+    const seen = new Set<string>();
+    const out: Array<{ authorId: string; sequenceId: string }> = [];
+    for (const c of viewport) {
+      const ref = parseSequenceUri(c.sequence_uri ?? null);
+      if (!ref) continue;
+      const k = `${ref.authorId}:${ref.sequenceId}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(ref);
+    }
+    return out;
+  }, [viewport]);
+
+  const queries = useQueries({
+    queries: seqRefs.map((ref) => ({
+      queryKey: [
+        "mapky",
+        "sequence",
+        ref.authorId,
+        ref.sequenceId,
+        "captures",
+      ] as const,
+      queryFn: () => fetchSequenceCaptures(ref.authorId, ref.sequenceId),
+      // Sequence membership is stable enough that a 5-min stale window
+      // covers a typical browse session without going stale on long
+      // walks through the same author's captures.
+      staleTime: 5 * 60_000,
+      retry: false,
+    })),
+  });
+
+  const extras = useMemo(() => {
+    const seen = new Set<string>();
+    for (const c of viewport ?? []) seen.add(c.id);
+    const out: GeoCaptureDetails[] = [];
+    for (const q of queries) {
+      const data = q.data;
+      if (!data) continue;
+      for (const c of data) {
+        if (seen.has(c.id)) continue;
+        seen.add(c.id);
+        out.push(c);
+      }
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewport, queries.map((q) => q.dataUpdatedAt).join(",")]);
+
+  return { extras };
 }
 
 export function useUserGeoCaptures(userId: string | null) {

@@ -34,6 +34,25 @@ interface MapkyConfig {
     url: string;
     key: string;
   };
+
+  /**
+   * Public OSM auxiliary services. All three default to the open
+   * public instances — fine for development and demo traffic, but
+   * each one rate-limits per IP and should be swapped for self-
+   * hosted or paid endpoints before any real launch.
+   */
+  nominatim: {
+    /** Base URL — joins `/lookup`, `/search`, `/reverse` underneath. */
+    url: string;
+  };
+  overpass: {
+    /** Full URL of the Overpass `/interpreter` endpoint. */
+    url: string;
+  };
+  valhalla: {
+    /** Full URL of the Valhalla `/route` endpoint. */
+    url: string;
+  };
 }
 
 const DEFAULT_HOMESERVERS: Record<PubkyEnvironment, string> = {
@@ -130,6 +149,29 @@ function buildConfig(): MapkyConfig {
         import.meta.env.VITE_PROTOMAPS_URL ||
         "https://api.protomaps.com/tiles/v4.pmtiles",
       key: import.meta.env.VITE_PROTOMAPS_KEY || "",
+    },
+
+    // OSM aux endpoints — dev defaults route through Vite's proxy so
+    // CORS works locally; prod defaults hit the public free tiers.
+    // Override either via env when running behind your own proxies.
+    nominatim: {
+      url:
+        import.meta.env.VITE_NOMINATIM_URL ||
+        (import.meta.env.DEV
+          ? "/nominatim"
+          : "https://nominatim.openstreetmap.org"),
+    },
+    overpass: {
+      url:
+        import.meta.env.VITE_OVERPASS_URL ||
+        "https://overpass-api.de/api/interpreter",
+    },
+    valhalla: {
+      url:
+        import.meta.env.VITE_VALHALLA_URL ||
+        (import.meta.env.DEV
+          ? "/valhalla/route"
+          : "https://valhalla1.openstreetmap.de/route"),
     },
   };
 }

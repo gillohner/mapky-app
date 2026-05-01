@@ -175,6 +175,19 @@ export function MapView() {
 
     // Hover: POI first, then places — exact point only (no tolerance on hover)
     map.on("mousemove", (e) => {
+      // When the cursor is over an HTML marker (Mapky balloon, capture
+      // marker, selected pin, etc.), that overlay owns the tooltip.
+      // MapLibre still fires `mousemove` on the map container for
+      // events that originate on overlay DOM elements, so without this
+      // bail we'd stack the basemap-label tooltip on top of whichever
+      // POI tooltip the marker just opened.
+      const tgt = e.originalEvent.target as Element | null;
+      if (tgt?.closest?.(".maplibregl-marker")) {
+        map.getCanvas().style.cursor = "";
+        hoverPopup.remove();
+        return;
+      }
+
       const poiLayers = existingLayers(map, POI_LAYERS);
       const placeLayers = existingLayers(map, PLACE_LAYERS);
 
