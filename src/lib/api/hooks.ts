@@ -30,6 +30,7 @@ import {
   searchByTag,
 } from "./mapky";
 import { fetchUserProfile } from "./user";
+import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import {
   reverseGeocode,
   searchPlaces,
@@ -119,20 +120,41 @@ export function usePostTags(authorId: string, postId: string) {
   });
 }
 
+// Track which users we've already asked nexus to ingest in this session
+// — `ingestUserIntoNexus` is fire-and-forget but spamming `/v0/ingest`
+// for the same id on every retry round is wasteful (and slows the
+// homeserver fetch the indexer is trying to do).
+const ingestRequested = new Set<string>();
+
 export function useUserProfile(userId: string | null) {
   return useQuery({
     queryKey: ["user", "profile", userId],
     queryFn: () => fetchUserProfile(userId!),
     enabled: !!userId,
     staleTime: 5 * 60_000,
-    // Retry transient 404s — right after signup, ingestion can lag the
-    // first useUserProfile fire by a few hundred ms. Cap at 3 attempts
-    // with quick backoff to bound the noise without hiding real bugs.
+    // 404 means nexus has never seen this user. Two cases:
+    //   1. Just-logged-in current user: their `ingestUserIntoNexus`
+    //      call from `login.tsx` is in flight and the indexer hasn't
+    //      written the User node yet — wait a few hundred ms.
+    //   2. Author of a post we're viewing who never logged into this
+    //      frontend: nexus has nothing to index unless we ask it to.
+    //      Trigger `/v0/ingest/{id}` once per session, then retry.
+    // Cap at 3 attempts to bound noise on truly missing users.
     retry: (failureCount, err) => {
       const status = (err as { response?: { status?: number } })?.response
         ?.status;
-      if (status === 404 && failureCount < 3) return true;
-      return false;
+      if (status !== 404 || failureCount >= 3) return false;
+      if (userId && !ingestRequested.has(userId)) {
+        ingestRequested.add(userId);
+        // Fire-and-forget — `ingestUserIntoNexus` already polls until
+        // queryable. Our retry will pick up whatever's there next.
+        void ingestUserIntoNexus(userId).catch(() => {
+          // Drop from the set so a transient ingest failure doesn't
+          // permanently lock this user out of being re-tried later.
+          ingestRequested.delete(userId);
+        });
+      }
+      return true;
     },
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
   });
