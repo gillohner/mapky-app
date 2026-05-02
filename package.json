@@ -27,7 +27,7 @@
     "clsx": "^2.1.1",
     "exifr": "^7.1.3",
     "lucide-react": "^1.7.0",
-    "mapky-app-specs": "file:../mapky-app-specs/pkg",
+    "mapky-app-specs": "0.1.0-alpha.1",
     "maplibre-gl": "^5.21.1",
     "pmtiles": "^4.4.0",
     "qrcode": "^1.5.4",
