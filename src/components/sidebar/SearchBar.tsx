@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import {
   Search,
+  User,
   X,
   MapPin,
   Tag,
@@ -13,10 +14,13 @@ import {
   useNominatimSearch,
   useTagSearch,
   useOsmLookup,
+  useUserProfile,
 } from "@/lib/api/hooks";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { getInitials, getPubkyAvatarUrl } from "@/lib/api/user";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
 import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
 import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
@@ -41,9 +45,24 @@ export function SearchBar() {
   const navigate = useNavigate();
   const map = useMapStore((s) => s.map);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
+  const toggleMobileNav = useUiStore((s) => s.toggleMobileNav);
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
   const searchParams = useRouterState({ select: (s) => s.location.search });
   const isOnSearchRoute = currentPath === "/search";
+
+  // Mobile-only: the leading avatar button inside the search bar
+  // doubles as the menu trigger (replacing the standalone hamburger).
+  // On desktop the IconRail hosts the avatar separately, so this
+  // button is hidden via `md:hidden` on the rendered element.
+  const { isAuthenticated, publicKey } = useAuth();
+  const profile = useUserProfile(publicKey);
+  const [avatarErrored, setAvatarErrored] = useState(false);
+  const hasAvatar = Boolean(profile.data?.image);
+  const avatarUrl =
+    isAuthenticated && publicKey && hasAvatar && !avatarErrored
+      ? getPubkyAvatarUrl(publicKey)
+      : null;
+  const avatarInitials = getInitials(profile.data?.name);
 
   const { data: placeResults, isLoading: placesLoading } =
     useNominatimSearch(mode === "places" ? query : "");
@@ -341,12 +360,39 @@ export function SearchBar() {
   return (
     <div
       ref={containerRef}
-      className={`pointer-events-auto absolute top-3 z-20 left-14 right-3 md:right-auto md:w-[380px] transition-[left] duration-300 ${
+      // Mobile: flush left at `left-3` since the menu trigger now
+      //   lives inside this same search bar (no standalone hamburger
+      //   to dodge).
+      // Desktop: past the IconRail at `md:left-14` (or past an open
+      //   discover sidebar at `md:left-[440px]`).
+      className={`pointer-events-auto absolute top-3 z-20 left-3 right-3 md:right-auto md:w-[380px] transition-[left] duration-300 ${
         sidebarOpen ? "md:left-[440px]" : "md:left-14"
       }`}
     >
       {/* Search input */}
       <div className="flex items-center gap-1.5 rounded-xl border border-border bg-background/90 px-2 py-2 shadow-lg backdrop-blur">
+        {/* Mobile-only: avatar doubles as menu trigger. Hidden on
+            desktop — IconRail hosts the avatar there. */}
+        <button
+          type="button"
+          onClick={toggleMobileNav}
+          aria-label={isAuthenticated ? "Open menu" : "Sign in"}
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent-subtle text-accent transition-opacity hover:opacity-80 md:hidden"
+        >
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt=""
+              className="h-full w-full object-cover"
+              onError={() => setAvatarErrored(true)}
+            />
+          ) : isAuthenticated && avatarInitials ? (
+            <span className="text-xs font-semibold">{avatarInitials}</span>
+          ) : (
+            <User className="h-4 w-4" />
+          )}
+        </button>
+
         {/* Mode toggle */}
         <div className="flex flex-shrink-0 rounded-lg bg-surface p-0.5">
           <button

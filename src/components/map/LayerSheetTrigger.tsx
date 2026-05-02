@@ -3,10 +3,16 @@ import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 
 /**
- * Floating button (bottom-left) that opens the Layers sheet. Offset
- * past the IconRail (w-12 = 48px) so it doesn't sit underneath it,
- * and slides right with the same animation as SearchBar when a
- * discover sidebar opens, so it never gets covered by the sidebar.
+ * Floating button (bottom-left) that opens the Layers sheet.
+ *
+ * - **Mobile (< md)**: flush left at `left-3` so it lines up vertically
+ *   with the `MobileMenuTrigger` (hamburger) at the top of the same
+ *   edge. The rail isn't rendered below `md:`, so there's nothing to
+ *   dodge.
+ * - **Desktop (md+)**: past the IconRail (w-12 = 48 px) at `md:left-14`,
+ *   sliding to `md:left-[440px]` when a discover sidebar opens so the
+ *   sidebar never covers it.
+ *
  * MapLegends stack above it when their overlays are on.
  */
 export function LayerSheetTrigger() {
@@ -32,7 +38,7 @@ export function LayerSheetTrigger() {
       data-mapky-layer-trigger
       aria-label={open ? "Close layers" : "Open layers"}
       className={`mapky-layer-trigger pointer-events-auto fixed z-30 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur transition-[left,bottom] duration-300 hover:border-accent ${
-        sidebarOpen ? "left-14 md:left-[440px]" : "left-14 sm:left-16"
+        sidebarOpen ? "left-3 md:left-[440px]" : "left-3 md:left-14"
       }`}
       style={{
         // Mobile: ride above the bottom sheet (var set by

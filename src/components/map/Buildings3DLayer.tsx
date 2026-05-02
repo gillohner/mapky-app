@@ -34,7 +34,9 @@ export function Buildings3DLayer() {
       // Drop the layer just before the first symbol so labels render
       // on top of the buildings.
       const layers = map.getStyle().layers;
-      const firstSymbol = layers.find((l) => l.type === "symbol");
+      const firstSymbol = layers.find(
+        (l: { type: string }) => l.type === "symbol",
+      );
       const beforeId = firstSymbol?.id;
 
       const fillColor = theme === "dark" ? "#2a2a2a" : "#cfcfcf";

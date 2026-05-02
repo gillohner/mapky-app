@@ -13,6 +13,7 @@ import { Buildings3DLayer } from "@/components/map/Buildings3DLayer";
 import { LayerSheet } from "@/components/map/LayerSheet";
 import { LayerSheetTrigger } from "@/components/map/LayerSheetTrigger";
 import { IconRail } from "@/components/sidebar/IconRail";
+import { MobileNavDrawer } from "@/components/sidebar/MobileNavDrawer";
 import { SearchBar } from "@/components/sidebar/SearchBar";
 import { CaptureCreationPanel } from "@/components/capture/CaptureCreationPanel";
 import { MainMapCaptureOverlay } from "@/components/capture/MainMapCaptureOverlay";
@@ -40,6 +41,7 @@ function RootLayout() {
           <PoiClickHandler />
           <SelectedPlaceMarker />
           <IconRail />
+          <MobileNavDrawer />
           <SearchBar />
           <DirectionsLayer />
           <CaptureCreationPanel />

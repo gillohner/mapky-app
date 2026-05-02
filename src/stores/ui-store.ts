@@ -169,6 +169,15 @@ interface UiStore {
   registerSidebar: (id: string) => void;
   unregisterSidebar: (id: string) => void;
 
+  /**
+   * Mobile-only nav drawer (the slide-in panel triggered by the
+   * hamburger button). Always defaults closed; not persisted across
+   * reloads — surfacing the menu on first paint would be jarring.
+   */
+  mobileNavOpen: boolean;
+  setMobileNavOpen: (open: boolean) => void;
+  toggleMobileNav: () => void;
+
   activeCollectionOverlays: Map<string, CollectionOverlayEntry>;
   addCollectionOverlay: (authorId: string, collectionId: string, color?: string) => void;
   removeCollectionOverlay: (collectionId: string) => void;
@@ -274,6 +283,10 @@ export const useUiStore = create<UiStore>()(
           next.delete(id);
           return { sidebarRefs: next, sidebarOpen: next.size > 0 };
         }),
+
+      mobileNavOpen: false,
+      setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
+      toggleMobileNav: () => set((s) => ({ mobileNavOpen: !s.mobileNavOpen })),
 
       activeCollectionOverlays: new Map(),
       addCollectionOverlay: (authorId, collectionId, color) =>
