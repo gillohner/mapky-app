@@ -40,11 +40,19 @@ export function CreateCollectionForm({ onClose }: CreateCollectionFormProps) {
         result.json,
       );
 
-      // Cancel in-flight fetches so they don't overwrite optimistic data
-      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
-
-      // Extract collection ID and optimistically add to cache
       const collectionId = result.path.split("/").pop()!;
+
+      // Cancel in-flight fetches so they don't overwrite optimistic data.
+      // Seed the detail + tags caches too — without these, navigating to
+      // /collection/{author}/{newId} below fires queries against the
+      // indexer before it has ingested the new blob, so they 404 and the
+      // page renders blank until the 5s reconciliation kicks in.
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] }),
+        queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, collectionId] }),
+        queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, collectionId, "tags"] }),
+      ]);
+
       const optimistic: CollectionDetails = {
         id: `${publicKey}:${collectionId}`,
         author_id: publicKey,
@@ -59,6 +67,14 @@ export function CreateCollectionForm({ onClose }: CreateCollectionFormProps) {
         ["mapky", "collections", "user", publicKey],
         (old) => [...(old ?? []), optimistic],
       );
+      queryClient.setQueryData<CollectionDetails>(
+        ["mapky", "collection", publicKey, collectionId],
+        optimistic,
+      );
+      queryClient.setQueryData(
+        ["mapky", "collection", publicKey, collectionId, "tags"],
+        [],
+      );
 
       toast.success("Collection created");
       navigate({
@@ -69,6 +85,8 @@ export function CreateCollectionForm({ onClose }: CreateCollectionFormProps) {
       // Background reconciliation — delay to let server finish indexing
       ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
+        queryClient.invalidateQueries({ queryKey: ["mapky", "collection", publicKey, collectionId] });
+        queryClient.invalidateQueries({ queryKey: ["mapky", "collection", publicKey, collectionId, "tags"] });
       }, 5000));
     } catch (err) {
       toast.error(

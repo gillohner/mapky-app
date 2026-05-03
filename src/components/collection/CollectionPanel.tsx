@@ -14,6 +14,7 @@ import { CollectionTags } from "./CollectionTags";
 import { CollectionPlaces } from "./CollectionPlaces";
 import { updateCollectionJson } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
+import { parseOsmCanonical } from "@/lib/map/osm-url";
 import { toast } from "sonner";
 import type { CollectionDetails } from "@/types/mapky";
 
@@ -49,6 +50,7 @@ export function CollectionPanel({
   const handleRemovePlace = useCallback(async (url: string) => {
     if (!session || !publicKey || !collection) return;
     const newItems = collection.items.filter((item) => item !== url);
+    const removed = parseOsmCanonical(url);
     try {
       const json = updateCollectionJson(
         collection.name,
@@ -60,8 +62,11 @@ export function CollectionPanel({
       const path = `/pub/mapky.app/collections/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
 
-      await queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, collectionId] });
-      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, collectionId] }),
+        queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] }),
+        removed && queryClient.cancelQueries({ queryKey: ["mapky", "collections", "place", removed.osmType, removed.osmId] }),
+      ].filter(Boolean) as Promise<void>[]);
 
       queryClient.setQueryData<CollectionDetails>(
         ["mapky", "collection", publicKey, collectionId],
@@ -74,10 +79,27 @@ export function CollectionPanel({
           return id === collectionId ? { ...c, items: newItems } : c;
         }),
       );
+      // Drop this collection from the per-place "in collection" list so
+      // the bookmark indicator on the place panel updates immediately.
+      if (removed) {
+        queryClient.setQueryData<CollectionDetails[]>(
+          ["mapky", "collections", "place", removed.osmType, removed.osmId],
+          (old) => old?.filter((c) => {
+            const [, id] = c.id.split(":");
+            return id !== collectionId;
+          }),
+        );
+      }
 
       toast.success("Place removed");
-      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => invalidate(), 5000));
-    } catch {
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
+        invalidate();
+        if (removed) {
+          queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "place", removed.osmType, removed.osmId] });
+        }
+      }, 5000));
+    } catch (err) {
+      console.error("Failed to remove place from collection:", err);
       toast.error("Failed to remove place");
     }
   }, [session, publicKey, collection, collectionId, queryClient, invalidate]);
