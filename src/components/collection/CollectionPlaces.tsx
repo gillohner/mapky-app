@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { MapPin } from "lucide-react";
+import { MapPin, X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { parseOsmCanonical } from "@/lib/map/osm-url";
 import { resolvePlaceName } from "@/lib/places/place-name";
@@ -16,11 +16,13 @@ interface CollectionPlacesProps {
   /** Pass collection context for back-navigation from place panel */
   authorId?: string;
   collectionId?: string;
+  isOwner?: boolean;
+  onRemove?: (url: string) => void;
 }
 
 const PAGE_SIZE = 20;
 
-export function CollectionPlaces({ items, authorId, collectionId }: CollectionPlacesProps) {
+export function CollectionPlaces({ items, authorId, collectionId, isOwner, onRemove }: CollectionPlacesProps) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? items : items.slice(0, PAGE_SIZE);
 
@@ -54,10 +56,13 @@ export function CollectionPlaces({ items, authorId, collectionId }: CollectionPl
         return (
           <PlaceItem
             key={url}
+            url={url}
             osmType={parsed.osmType}
             osmId={parsed.osmId}
             fromAuthor={authorId}
             fromCollection={collectionId}
+            isOwner={isOwner}
+            onRemove={onRemove}
           />
         );
       })}
@@ -74,15 +79,21 @@ export function CollectionPlaces({ items, authorId, collectionId }: CollectionPl
 }
 
 function PlaceItem({
+  url,
   osmType,
   osmId,
   fromAuthor,
   fromCollection,
+  isOwner,
+  onRemove,
 }: {
+  url: string;
   osmType: string;
   osmId: number;
   fromAuthor?: string;
   fromCollection?: string;
+  isOwner?: boolean;
+  onRemove?: (url: string) => void;
 }) {
   const navigate = useNavigate();
   const { data: nominatim, isLoading } = useOsmLookup(osmType, osmId, true);
@@ -116,48 +127,64 @@ function PlaceItem({
     });
   };
 
+  const handleRemove = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onRemove?.(url);
+  };
+
   return (
-    <button
-      onClick={handleClick}
-      className="flex w-full items-start gap-2 rounded-md border border-border bg-surface p-2 text-left transition-colors hover:border-accent"
-    >
-      <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
-      <div className="min-w-0 flex-1">
-        {isLoading ? (
-          <div className="h-4 w-32 animate-pulse rounded bg-border" />
-        ) : (
-          <>
-            <div className="flex items-center gap-2">
-              <span className="truncate text-sm text-foreground">{name}</span>
-              {typeLabel && typeLabel !== "yes" && (
-                <span className="flex-shrink-0 rounded bg-background px-1.5 py-0.5 text-[10px] capitalize text-muted">
-                  {typeLabel}
-                </span>
-              )}
-              {stars && (
-                <span className="flex-shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                  {stars}
-                </span>
-              )}
-            </div>
-            {topTags.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {topTags.map((t) => (
-                  <span
-                    key={t.label}
-                    className="rounded-full bg-background px-2 py-0.5 text-[11px] text-muted"
-                  >
-                    {t.label}
+    <div className="group relative flex items-start gap-2 rounded-md border border-border bg-surface p-2 transition-colors hover:border-accent">
+      <button
+        onClick={handleClick}
+        className="flex min-w-0 flex-1 items-start gap-2 text-left"
+      >
+        <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
+        <div className="min-w-0 flex-1">
+          {isLoading ? (
+            <div className="h-4 w-32 animate-pulse rounded bg-border" />
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm text-foreground">{name}</span>
+                {typeLabel && typeLabel !== "yes" && (
+                  <span className="flex-shrink-0 rounded bg-background px-1.5 py-0.5 text-[10px] capitalize text-muted">
+                    {typeLabel}
                   </span>
-                ))}
-                {overflow > 0 && (
-                  <span className="text-[10px] text-muted">+{overflow}</span>
+                )}
+                {stars && (
+                  <span className="flex-shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                    {stars}
+                  </span>
                 )}
               </div>
-            )}
-          </>
-        )}
-      </div>
-    </button>
+              {topTags.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {topTags.map((t) => (
+                    <span
+                      key={t.label}
+                      className="rounded-full bg-background px-2 py-0.5 text-[11px] text-muted"
+                    >
+                      {t.label}
+                    </span>
+                  ))}
+                  {overflow > 0 && (
+                    <span className="text-[10px] text-muted">+{overflow}</span>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </button>
+      {isOwner && onRemove && (
+        <button
+          onClick={handleRemove}
+          title="Remove from collection"
+          className="flex-shrink-0 rounded p-0.5 text-muted opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
   );
 }

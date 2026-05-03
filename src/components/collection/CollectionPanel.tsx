@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { CollectionOverlayEntry } from "@/stores/ui-store";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCollection } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { useBackOr } from "@/hooks/use-back-or";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
@@ -10,6 +12,10 @@ import { CollectionHeader } from "./CollectionHeader";
 import { CollectionActions } from "./CollectionActions";
 import { CollectionTags } from "./CollectionTags";
 import { CollectionPlaces } from "./CollectionPlaces";
+import { updateCollectionJson } from "@/lib/mapky-specs";
+import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
+import { toast } from "sonner";
+import type { CollectionDetails } from "@/types/mapky";
 
 interface CollectionPanelProps {
   authorId: string;
@@ -29,8 +35,52 @@ export function CollectionPanel({
   fromPlaceId,
 }: CollectionPanelProps) {
   const navigate = useNavigate();
+  const { session, publicKey } = useAuth();
+  const queryClient = useQueryClient();
   const { data: collection, isLoading } = useCollection(authorId, collectionId);
   const addOverlay = useUiStore((s) => s.addCollectionOverlay);
+  const isOwner = publicKey === authorId;
+
+  const invalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["mapky", "collection", authorId, collectionId] });
+    queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "user", authorId] });
+  }, [queryClient, authorId, collectionId]);
+
+  const handleRemovePlace = useCallback(async (url: string) => {
+    if (!session || !publicKey || !collection) return;
+    const newItems = collection.items.filter((item) => item !== url);
+    try {
+      const json = updateCollectionJson(
+        collection.name,
+        collection.description ?? undefined,
+        newItems,
+        collection.image_uri ?? undefined,
+        collection.color ?? undefined,
+      );
+      const path = `/pub/mapky.app/collections/${collectionId}`;
+      await session.storage.putText(path as `/pub/${string}`, json);
+
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, collectionId] });
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
+
+      queryClient.setQueryData<CollectionDetails>(
+        ["mapky", "collection", publicKey, collectionId],
+        (old) => old ? { ...old, items: newItems } : old,
+      );
+      queryClient.setQueryData<CollectionDetails[]>(
+        ["mapky", "collections", "user", publicKey],
+        (old) => old?.map((c) => {
+          const [, id] = c.id.split(":");
+          return id === collectionId ? { ...c, items: newItems } : c;
+        }),
+      );
+
+      toast.success("Place removed");
+      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => invalidate(), 5000));
+    } catch {
+      toast.error("Failed to remove place");
+    }
+  }, [session, publicKey, collection, collectionId, queryClient, invalidate]);
 
   // Dim the always-on Mapky data layers so this collection's overlay
   // owns the visual focus.
@@ -127,6 +177,8 @@ export function CollectionPanel({
               items={collection?.items ?? []}
               authorId={authorId}
               collectionId={collectionId}
+              isOwner={isOwner}
+              onRemove={handleRemovePlace}
             />
           </div>
         </div>
