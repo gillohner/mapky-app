@@ -159,7 +159,7 @@ export async function searchPlaces(
   const url = new URL(`${NOMINATIM_BASE}/search`, window.location.origin);
   url.searchParams.set("q", query);
   url.searchParams.set("format", "json");
-  url.searchParams.set("limit", "8");
+  url.searchParams.set("limit", "20");
   url.searchParams.set("dedupe", "1");
   url.searchParams.set("addressdetails", "0");
 

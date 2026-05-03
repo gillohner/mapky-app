@@ -138,15 +138,18 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
   // section (we don't reorder across sections — "in this area" stays
   // a separate group).
   const allAccumulated = useMemo(
-    () => Array.from(accumulatedRef.current.values()),
-    // accumulatedRef is mutated imperatively above; re-read whenever
-    // the upstream queries deliver fresh results.
+    () => {
+      // Merge nearby (bounded) + global so the enrichment pipeline
+      // covers both — without this, enrichedGlobal was always empty.
+      const combined = new Map(accumulatedRef.current);
+      for (const r of globalResultsRaw) {
+        const key = `${r.osm_type}:${r.osm_id}`;
+        if (!combined.has(key)) combined.set(key, r);
+      }
+      return Array.from(combined.values());
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      latestNearby,
-      globalResultsRaw,
-      accumulatedRef.current.size,
-    ],
+    [latestNearby, globalResultsRaw, accumulatedRef.current.size],
   );
   const enrichedAll = useEnrichedSearchResults(allAccumulated);
   const enrichedByKey = useMemo(() => {
