@@ -17,11 +17,15 @@ const SHEET_VH = 90;
  * The user drags up for middle / expanded; middle is roughly half the
  * map visible — the "look at the map while picking from the list"
  * mode the unification is supposed to deliver across every panel.
+ *
+ * Expanded is capped at 70vh so the SearchBar and LayerSheetTrigger
+ * (which rides above the sheet via --mobile-sheet-vh) always have
+ * clear space in the top ~30% of the screen.
  */
 const VISIBLE_VH: Record<SheetSnap, number> = {
   collapsed: 22,
   middle: 50,
-  expanded: 88,
+  expanded: 70,
 };
 
 interface Props {
