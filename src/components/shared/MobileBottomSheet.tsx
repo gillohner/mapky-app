@@ -143,7 +143,7 @@ export function MobileBottomSheet({
 
   return (
     <div
-      className="pointer-events-auto absolute bottom-0 left-0 right-0 z-10 flex flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl md:hidden"
+      className="pointer-events-auto absolute bottom-0 left-0 right-0 z-30 flex flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl md:hidden"
       style={{
         height: `${SHEET_VH}vh`,
         transform: `translateY(${translateY}px)`,
