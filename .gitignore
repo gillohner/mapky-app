@@ -36,5 +36,7 @@ npm-debug.log*
 # Testing
 coverage/
 
-# TanStack Router (auto-generated)
-src/routeTree.gen.ts
+# TanStack Router (auto-generated). Tracked in git so CI's `tsc -b` step
+# can run before vite has had a chance to regenerate it. Local dev still
+# regenerates on every save via the router-plugin — just remember to
+# commit the diff when you add or rename a route.
