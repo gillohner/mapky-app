@@ -1,0 +1,121 @@
+name: Deploy mapky-app
+
+# Triggers: a published release (e.g. v0.1.0) — *or* a manual run with a
+# tag/branch ref via the workflow_dispatch input. Push-to-main is intentionally
+# *not* a trigger: deploys go through tagged releases only so the artifact on
+# the VPS always matches a git ref the user signed off on.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag or branch to deploy (defaults to current branch)"
+        required: false
+        type: string
+
+concurrency:
+  # Serialize deploys — two simultaneous symlink swaps would race and could
+  # leave /srv/mapky-app/current pointing at a half-rsynced directory.
+  group: deploy-mapky-app
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Resolve release tag
+        id: tag
+        # Prefer the release tag when this fires from a release event, fall back
+        # to ref_name (`v0.1.0`, `master`, etc.) for manual dispatches.
+        run: |
+          tag="${{ github.event.release.tag_name }}"
+          if [ -z "$tag" ]; then tag="${{ github.ref_name }}"; fi
+          # Sanitize: keep only safe filename chars so nothing exotic ends up in
+          # a path on the VPS.
+          tag="${tag//[^A-Za-z0-9._-]/_}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Deploy tag: $tag"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          # Production env vars — override via repo Variables/Secrets if you
+          # want a different nexus URL etc.
+          VITE_NEXUS_URL: ${{ vars.VITE_NEXUS_URL || 'https://nexus.mapky.app' }}
+
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Upload release
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          REMOTE_REL="/srv/mapky-app/releases/${TAG}"
+          # Stage to a temp path under the same parent so the eventual `mv`
+          # is atomic on the same filesystem.
+          REMOTE_TMP="/srv/mapky-app/releases/.${TAG}.in-progress"
+
+          ssh -i ~/.ssh/deploy -p "$SSH_PORT" "${SSH_USER}@${SSH_HOST}" \
+            "rm -rf '${REMOTE_TMP}' && mkdir -p '${REMOTE_TMP}'"
+
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy -p ${SSH_PORT}" \
+            dist/ "${SSH_USER}@${SSH_HOST}:${REMOTE_TMP}/"
+
+          ssh -i ~/.ssh/deploy -p "$SSH_PORT" "${SSH_USER}@${SSH_HOST}" bash -se <<EOF
+          set -euo pipefail
+          # Replace any prior partial release with this tag.
+          rm -rf '${REMOTE_REL}'
+          mv '${REMOTE_TMP}' '${REMOTE_REL}'
+          ln -sfn '${REMOTE_REL}' /srv/mapky-app/current.new
+          mv -Tf /srv/mapky-app/current.new /srv/mapky-app/current
+          # Keep the 5 most recent releases by mtime; prune the rest.
+          ls -1dt /srv/mapky-app/releases/*/ 2>/dev/null \
+            | tail -n +6 \
+            | xargs -r rm -rf
+          EOF
+
+      - name: Health check
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+        run: |
+          # Confirm nginx is serving the new bundle (probe via the public
+          # hostname so cert + reverse-proxy path are exercised end-to-end).
+          for i in 1 2 3 4 5; do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" https://mapky.app/ || echo 000)
+            echo "attempt $i: $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 2
+          done
+          echo "Health check failed — site did not return 200" >&2
+          exit 1
