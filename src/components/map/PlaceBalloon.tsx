@@ -1,13 +1,24 @@
 import { memo } from "react";
 import { Star, type LucideIcon } from "lucide-react";
 
-export type BalloonVariant = "mapky" | "bitcoin" | "both";
+/**
+ * Balloon variant — drives the body color and whether the BTC badge
+ * shows. We collapsed to two variants once BTCMap data was synced into
+ * the :Place graph and the server started returning `accepts_bitcoin`
+ * on every place. The frontend no longer guesses about BTC status —
+ * either the place flag says yes (→ accent color + BTC badge) or no.
+ *
+ * `place-btc` is the accent variant the user asked us to elevate:
+ * Bitcoin-accepted places ARE the accent on the map. Non-BTC places
+ * render in a muted slate so the BTC ones pop.
+ */
+export type BalloonVariant = "place" | "place-btc";
 
 interface Props {
   variant: BalloonVariant;
   /** Pre-formatted rating string (e.g. "4.6") or null when the place
-   * has no reviews yet. Only meaningful for "mapky" / "both" — when
-   * present, renders as a small chip ABOVE the balloon head. */
+   * has no reviews yet. Renders as a small star chip ABOVE the balloon
+   * head when present. */
   rating: string | null;
   /** Lucide icon for the place's OSM category. Always shown inside
    * the balloon head (the rating no longer competes for that space).
@@ -22,12 +33,8 @@ interface Props {
 }
 
 const ACCENT = "#0d9488"; // teal-600 — matches --raw-accent
-const BITCOIN = "#f7931a";
-// Dark orange used for the stroke when a place is BOTH Mapky-rated AND
-// Bitcoin-accepting. White would blend with the teal core; the dark
-// orange ring reinforces "this place carries both signals" at a
-// glance.
-const BITCOIN_DARK = "#9a3412"; // orange-800
+const MUTED = "#475569"; // slate-600 — non-BTC places, less visually loud
+const BITCOIN = "#f7931a"; // BTC orange, used only on the corner badge
 
 /**
  * Teardrop balloon for OSM POIs we have a signal for. Same SVG path
@@ -37,15 +44,13 @@ const BITCOIN_DARK = "#9a3412"; // orange-800
  * as a small star chip.
  *
  * Variants:
- *   - "mapky":   accent-teal body
- *   - "bitcoin": Bitcoin-orange body
- *   - "both":    orange body wrapping a smaller accent-teal core
+ *   - "place"     → muted slate body — no BTC signal
+ *   - "place-btc" → accent teal body + small orange BTC badge in the
+ *                    upper-right corner of the head
  *
- * Head content priority:
- *   1. Category icon if Nominatim has resolved a known type
- *   2. Small white dot fallback while Nominatim is still loading
- * Rating (when present) renders as a separate chip above the head, so
- * "what is this" and "how rated" are readable at the same time.
+ * BTC acceptance is communicated by *both* the body color (accent
+ * teal) AND a corner badge — the accent color says "this is a place
+ * we care about" and the orange dot says "specifically because BTC".
  *
  * memoized on its primitive props (and Icon by reference, since
  * Lucide components are stable singletons) so panning the map
@@ -55,14 +60,15 @@ function PlaceBalloonImpl({ variant, rating, Icon, collectionColor }: Props) {
   // Collection membership overrides the variant body — places pinned
   // to an active collection render entirely in that collection's
   // color with a white outline. Only when no collection is active
-  // does the Mapky/Bitcoin variant drive the body color.
+  // does the place/place-btc variant drive the body color.
   const inCollection = !!collectionColor;
-  const outer = inCollection
+  const body = inCollection
     ? collectionColor
-    : variant === "mapky"
+    : variant === "place-btc"
       ? ACCENT
-      : BITCOIN;
-  const showRating = variant !== "bitcoin" && rating !== null;
+      : MUTED;
+  const showBtcBadge = !inCollection && variant === "place-btc";
+  const showRating = rating !== null;
   // Reserve vertical space for the chip when present so the SVG
   // bottom (the teardrop tip) still aligns with the marker anchor.
   const totalHeight = showRating ? 53 : 37;
@@ -113,16 +119,23 @@ function PlaceBalloonImpl({ variant, rating, Icon, collectionColor }: Props) {
       >
         <path
           d="M14 2 C7 2 2 7 2 14 C2 22 14 38 14 38 C14 38 26 22 26 14 C26 7 21 2 14 2 Z"
-          fill={outer}
-          stroke={!inCollection && variant === "both" ? BITCOIN_DARK : "#ffffff"}
+          fill={body}
+          stroke="#ffffff"
           strokeWidth={2}
         />
-        {!inCollection && variant === "both" && (
-          // Mapky+Bitcoin (no collection): orange body wraps a
-          // smaller accent-teal core so both signals show. When a
-          // collection takes over the body, we drop the core — the
-          // collection identity becomes the loudest signal.
-          <circle cx={14} cy={14} r={8} fill={ACCENT} />
+        {showBtcBadge && (
+          // Small BTC orange dot in the upper-right corner of the
+          // round head. Always-on signal — independent of any layer
+          // toggle, because BTC acceptance is intrinsic to the place,
+          // not a separate overlay anymore.
+          <circle
+            cx={22}
+            cy={6}
+            r={4}
+            fill={BITCOIN}
+            stroke="#ffffff"
+            strokeWidth={1.5}
+          />
         )}
       </svg>
       {/* Head overlay — category icon (always when known), with a

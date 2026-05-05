@@ -4,34 +4,18 @@ import {
   makeReverseKey,
   makeSearchKey,
 } from "./nominatim-cache";
-import { config } from "@/lib/config";
+import { nexusClient } from "./client";
 
 /**
- * Base URL for Nominatim. Dev default proxies through Vite (`/nominatim`)
- * for CORS; prod default is the public OSM instance. Override either
- * via `VITE_NOMINATIM_URL` (e.g. a self-hosted Nominatim mirror).
+ * All Nominatim traffic now flows through pubky-nexus's cached proxy
+ * (`/v0/mapky/osm/{lookup,search,reverse}`). The plugin holds a Redis
+ * cache (30 d for hits, 6 h for misses) and serializes upstream calls
+ * through a 1 req/s gate, so multiple users sharing a query only cost
+ * one upstream request total.
  *
- * Note: the high-volume `/lookup` calls now route through the plugin's
- * cached endpoint (see `OSM_LOOKUP_URL`). `NOMINATIM_BASE` still serves
- * `/search` and `/reverse` — both click-driven and far less chatty.
+ * The frontend keeps its localStorage 2nd-tier cache (`./nominatim-cache`)
+ * for offline PWA use and to skip the network entirely on warm reloads.
  */
-const NOMINATIM_BASE = config.nominatim.url;
-
-/**
- * Cached, batched Nominatim `/lookup` proxied through pubky-nexus.
- * The plugin holds a Redis cache (30 d TTL) and rate-limits the
- * upstream Nominatim call to 1 req/s, so multiple users sharing a
- * place only cost one upstream request total.
- *
- * Dev mode uses a relative path so Vite's `/v0/mapky` proxy serves
- * the response same-origin — Nexus on :8080 doesn't set CORS headers
- * for the dev frontend on :5173 and the browser would drop the
- * response otherwise. Prod hits the configured nexus URL directly
- * (Caddy or another reverse proxy is expected to share the origin).
- */
-const OSM_LOOKUP_URL = import.meta.env.DEV
-  ? "/v0/mapky/osm/lookup"
-  : `${config.nexus.url}/v0/mapky/osm/lookup`;
 
 export interface NominatimResult {
   osm_type: string | null;
@@ -59,27 +43,28 @@ export async function reverseGeocode(
   const cached = getCached<NominatimResult>(cacheKey);
   if (cached) return cached;
 
-  const url = new URL(`${NOMINATIM_BASE}/reverse`, window.location.origin);
-  url.searchParams.set("lat", String(lat));
-  url.searchParams.set("lon", String(lon));
-  url.searchParams.set("format", "json");
-  url.searchParams.set("zoom", "18");
-
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
-
-  const data = await res.json();
-  const result: NominatimResult = {
-    osm_type: data.osm_type || null,
-    osm_id: data.osm_id ? Number(data.osm_id) : null,
-    name: data.name || null,
-    display_name: data.display_name,
-    type: data.type || null,
-    category: data.category || data.class || null,
-    address: data.address ?? {},
-    lat: data.lat ? Number(data.lat) : null,
-    lon: data.lon ? Number(data.lon) : null,
-  };
+  // Plugin returns 404 when Nominatim has nothing — surface as an
+  // empty NominatimResult so callers don't have to handle Axios errors
+  // for the "no place here" case (matches the prior behavior).
+  const result = await fetchPluginNominatim<NominatimResult>(
+    "/v0/mapky/osm/reverse",
+    { lat, lon, zoom: 18 },
+  );
+  if (!result) {
+    const empty: NominatimResult = {
+      osm_type: null,
+      osm_id: null,
+      name: null,
+      display_name: "",
+      type: null,
+      category: null,
+      address: {},
+      lat: null,
+      lon: null,
+    };
+    setCache(cacheKey, empty);
+    return empty;
+  }
 
   setCache(cacheKey, result);
   return result;
@@ -103,35 +88,30 @@ export async function searchNearby(
   const delta = 0.002;
   const viewbox = `${lon - delta},${lat + delta},${lon + delta},${lat - delta}`;
 
-  const url = new URL(`${NOMINATIM_BASE}/search`, window.location.origin);
-  url.searchParams.set("q", name);
-  url.searchParams.set("format", "json");
-  url.searchParams.set("limit", "1");
-  url.searchParams.set("viewbox", viewbox);
-  url.searchParams.set("bounded", "1");
-  url.searchParams.set("dedupe", "1");
-
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
-
-  const data = await res.json();
+  const data = await fetchPluginSearch({
+    q: name,
+    viewbox,
+    bounded: true,
+    limit: 1,
+    dedupe: true,
+    addressdetails: true,
+  });
   if (!data.length) {
-    // Cache the miss to avoid repeated lookups
     setCache(cacheKey, null);
     return null;
   }
 
   const r = data[0];
   const result: NominatimResult = {
-    osm_type: r.osm_type || null,
-    osm_id: r.osm_id ? Number(r.osm_id) : null,
+    osm_type: r.osm_type ?? null,
+    osm_id: r.osm_id ?? null,
     name: r.name || r.display_name?.split(",")[0] || null,
     display_name: r.display_name || "",
-    type: r.type || null,
-    category: r.category || r.class || null,
+    type: r.type ?? null,
+    category: r.category ?? null,
     address: r.address ?? {},
-    lat: r.lat ? Number(r.lat) : null,
-    lon: r.lon ? Number(r.lon) : null,
+    lat: r.lat ?? null,
+    lon: r.lon ?? null,
   };
 
   setCache(cacheKey, result);
@@ -156,49 +136,37 @@ export async function searchPlaces(
   const cached = getCached<NominatimSearchResult[]>(cacheKey);
   if (cached) return cached;
 
-  const url = new URL(`${NOMINATIM_BASE}/search`, window.location.origin);
-  url.searchParams.set("q", query);
-  url.searchParams.set("format", "json");
-  url.searchParams.set("limit", "20");
-  url.searchParams.set("dedupe", "1");
-  url.searchParams.set("addressdetails", "0");
-
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
-
-  const data = await res.json();
-  const results: NominatimSearchResult[] = data.map(
-    (r: Record<string, unknown>) =>
-      ({
-        osm_type: String(r.osm_type),
-        osm_id: Number(r.osm_id),
-        name: String(r.name || String(r.display_name).split(",")[0]),
-        display_name: String(r.display_name),
-        type: String(r.type || ""),
-        category: String(r.category || r.class || ""),
-        lat: Number(r.lat),
-        lon: Number(r.lon),
-      }) satisfies NominatimSearchResult,
-  );
-
+  // Route through the plugin's cached /osm/search proxy. Adopt the
+  // limit master raised from 8 → 20 (richer search hit list).
+  const data = await fetchPluginSearch({
+    q: query,
+    limit: 20,
+    dedupe: true,
+    addressdetails: false,
+  });
+  const results = parseSearchResults(data);
   setCache(cacheKey, results);
   return results;
 }
 
-function parseSearchResults(data: Record<string, unknown>[]): NominatimSearchResult[] {
-  return data.map(
-    (r) =>
-      ({
-        osm_type: String(r.osm_type),
-        osm_id: Number(r.osm_id),
-        name: String(r.name || String(r.display_name).split(",")[0]),
-        display_name: String(r.display_name),
-        type: String(r.type || ""),
-        category: String(r.category || r.class || ""),
-        lat: Number(r.lat),
-        lon: Number(r.lon),
-      }) satisfies NominatimSearchResult,
-  );
+function parseSearchResults(data: PluginNominatimRow[]): NominatimSearchResult[] {
+  return data
+    .map((r) => {
+      const lat = r.lat ?? Number.NaN;
+      const lon = r.lon ?? Number.NaN;
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      return {
+        osm_type: r.osm_type ?? "",
+        osm_id: r.osm_id ?? 0,
+        name: r.name || r.display_name?.split(",")[0] || "",
+        display_name: r.display_name || "",
+        type: r.type ?? "",
+        category: r.category ?? "",
+        lat,
+        lon,
+      } satisfies NominatimSearchResult;
+    })
+    .filter((r): r is NominatimSearchResult => r !== null);
 }
 
 /**
@@ -216,19 +184,14 @@ export async function searchPlacesBounded(
   const cached = getCached<NominatimSearchResult[]>(cacheKey);
   if (cached) return cached;
 
-  const url = new URL(`${NOMINATIM_BASE}/search`, window.location.origin);
-  url.searchParams.set("q", query);
-  url.searchParams.set("format", "json");
-  url.searchParams.set("limit", String(limit));
-  url.searchParams.set("dedupe", "1");
-  url.searchParams.set("addressdetails", "0");
-  url.searchParams.set("viewbox", vb);
-  url.searchParams.set("bounded", "1");
-
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
-
-  const data = await res.json();
+  const data = await fetchPluginSearch({
+    q: query,
+    viewbox: vb,
+    bounded: true,
+    limit,
+    dedupe: true,
+    addressdetails: false,
+  });
   const results = parseSearchResults(data);
 
   // Sort by distance from viewport center
@@ -266,13 +229,10 @@ export async function lookupOsmElement(
   // Routes through the plugin's cached endpoint instead of public
   // Nominatim — addressdetails + extratags are always returned by
   // the plugin, no query params needed beyond `osm_ids`.
-  const url = new URL(OSM_LOOKUP_URL, window.location.origin);
-  url.searchParams.set("osm_ids", `${prefix}${osmId}`);
-
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
-
-  const data: Array<Record<string, unknown>> = await res.json();
+  const { data } = await nexusClient.get<PluginNominatimRow[]>(
+    "/v0/mapky/osm/lookup",
+    { params: { osm_ids: `${prefix}${osmId}` } },
+  );
   if (!data.length) {
     const empty: NominatimResult = {
       osm_type: osmType,
@@ -291,17 +251,16 @@ export async function lookupOsmElement(
 
   const r = data[0];
   const result: NominatimResult = {
-    osm_type: (r.osm_type as string) || osmType,
-    osm_id: r.osm_id ? Number(r.osm_id) : osmId,
-    name: (r.name as string) || null,
-    display_name: (r.display_name as string) || "",
-    type: (r.type as string) || null,
-    category:
-      (r.category as string) || (r.class as string) || null,
-    address: (r.address as Record<string, string>) ?? {},
-    lat: r.lat != null ? Number(r.lat) : null,
-    lon: r.lon != null ? Number(r.lon) : null,
-    extratags: (r.extratags as Record<string, string>) ?? undefined,
+    osm_type: r.osm_type ?? osmType,
+    osm_id: r.osm_id ?? osmId,
+    name: r.name ?? null,
+    display_name: r.display_name ?? "",
+    type: r.type ?? null,
+    category: r.category ?? null,
+    address: r.address ?? {},
+    lat: r.lat ?? null,
+    lon: r.lon ?? null,
+    extratags: r.extratags,
   };
 
   setCache(cacheKey, result);
@@ -355,19 +314,18 @@ export async function lookupOsmElements(
       })
       .join(",");
 
-    const url = new URL(OSM_LOOKUP_URL, window.location.origin);
-    url.searchParams.set("osm_ids", idsParam);
-
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Nominatim error: ${res.status}`);
-    const data: Array<Record<string, unknown>> = await res.json();
+    const { data } = await nexusClient.get<PluginNominatimRow[]>(
+      "/v0/mapky/osm/lookup",
+      { params: { osm_ids: idsParam } },
+    );
 
     // Index the response by osm_type:osm_id so we can map each input
     // ref back to its result regardless of Nominatim's response order.
-    const byKey = new Map<string, Record<string, unknown>>();
+    const byKey = new Map<string, PluginNominatimRow>();
     for (const r of data) {
-      const k = `${String(r.osm_type)}:${Number(r.osm_id)}`;
-      byKey.set(k, r);
+      if (r.osm_type != null && r.osm_id != null) {
+        byKey.set(`${r.osm_type}:${r.osm_id}`, r);
+      }
     }
 
     for (const idx of chunk) {
@@ -375,18 +333,16 @@ export async function lookupOsmElements(
       const r = byKey.get(`${osmType}:${osmId}`);
       const result: NominatimResult = r
         ? {
-            osm_type: (r.osm_type as string) || osmType,
-            osm_id: r.osm_id ? Number(r.osm_id) : osmId,
-            name: (r.name as string) || null,
-            display_name: (r.display_name as string) || "",
-            type: (r.type as string) || null,
-            category:
-              (r.category as string) || (r.class as string) || null,
-            address: (r.address as Record<string, string>) ?? {},
-            lat: r.lat ? Number(r.lat) : null,
-            lon: r.lon ? Number(r.lon) : null,
-            extratags:
-              (r.extratags as Record<string, string>) ?? undefined,
+            osm_type: r.osm_type ?? osmType,
+            osm_id: r.osm_id ?? osmId,
+            name: r.name ?? null,
+            display_name: r.display_name ?? "",
+            type: r.type ?? null,
+            category: r.category ?? null,
+            address: r.address ?? {},
+            lat: r.lat ?? null,
+            lon: r.lon ?? null,
+            extratags: r.extratags,
           }
         : {
             osm_type: osmType,
@@ -405,4 +361,65 @@ export async function lookupOsmElements(
   }
 
   return out as NominatimResult[];
+}
+
+// ── Plugin client helpers ──────────────────────────────────────────────
+
+/** Wire shape served by `/v0/mapky/osm/{lookup,search,reverse}`. */
+interface PluginNominatimRow {
+  osm_type: string | null;
+  osm_id: number | null;
+  name: string | null;
+  display_name: string;
+  type: string | null;
+  category: string | null;
+  address?: Record<string, string>;
+  lat: number | null;
+  lon: number | null;
+  extratags?: Record<string, string>;
+}
+
+interface PluginSearchParams {
+  q: string;
+  viewbox?: string;
+  bounded?: boolean;
+  limit?: number;
+  dedupe?: boolean;
+  addressdetails?: boolean;
+}
+
+/**
+ * Fetch a single record from a plugin endpoint that returns a single
+ * `NominatimLookup` (or 404). Returns `null` on 404 so callers can
+ * cache the miss; throws on other errors.
+ */
+async function fetchPluginNominatim<T>(
+  path: string,
+  params: Record<string, unknown>,
+): Promise<T | null> {
+  try {
+    const { data } = await nexusClient.get<T>(path, { params });
+    return data;
+  } catch (err: unknown) {
+    if (
+      err &&
+      typeof err === "object" &&
+      "response" in err &&
+      (err as { response?: { status?: number } }).response?.status === 404
+    ) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+/** Fetch a `/v0/mapky/osm/search` result list. */
+async function fetchPluginSearch(
+  params: PluginSearchParams,
+): Promise<PluginNominatimRow[]> {
+  const { data } = await nexusClient.get<PluginNominatimRow[]>(
+    "/v0/mapky/osm/search",
+    { params },
+  );
+  return data;
 }

@@ -11,6 +11,8 @@ import {
   Mountain,
   Building2,
   Bitcoin,
+  Star,
+  Tag,
 } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
@@ -32,11 +34,11 @@ export function LayerSheet() {
   const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
   const toggleCapturesLayer = useUiStore((s) => s.toggleCapturesLayer);
 
+  const placesFilters = useUiStore((s) => s.placesFilters);
+  const togglePlacesFilter = useUiStore((s) => s.togglePlacesFilter);
+
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
   const toggleMetroOverlay = useUiStore((s) => s.toggleMetroOverlay);
-
-  const bitcoinOverlayVisible = useUiStore((s) => s.bitcoinOverlayVisible);
-  const toggleBitcoinOverlay = useUiStore((s) => s.toggleBitcoinOverlay);
 
   const buildings3DVisible = useUiStore((s) => s.buildings3DVisible);
   const toggleBuildings3D = useUiStore((s) => s.toggleBuildings3D);
@@ -125,15 +127,40 @@ export function LayerSheet() {
         </div>
 
         {/* Mapky data — always-on toggles for the home map. Sidebars
-            override these via useAutoFocusLayer's hiddenLayers set. */}
+            override these via useAutoFocusLayer's hiddenLayers set.
+
+            The Places section also carries the per-layer filter pills
+            (BTC accepted / Reviewed / Tagged). These narrow what the
+            Places layer shows — they're only active when the master
+            Places toggle is on, and disabled (opacity-50) otherwise. */}
         <Section title="Mapky data">
           <Toggle
             icon={<MapPin className="h-4 w-4" />}
             label="Places"
-            description="Reviewed and tagged spots from Mapky users"
+            description="OSM places — Bitcoin merchants, reviewed spots, tagged POIs"
             on={placesLayerVisible}
             onChange={togglePlacesLayer}
           />
+          <FilterPillRow disabled={!placesLayerVisible}>
+            <FilterPill
+              icon={<Bitcoin className="h-3.5 w-3.5" />}
+              label="Bitcoin"
+              on={placesFilters.bitcoin}
+              onClick={() => togglePlacesFilter("bitcoin")}
+            />
+            <FilterPill
+              icon={<Star className="h-3.5 w-3.5" />}
+              label="Reviewed"
+              on={placesFilters.reviewed}
+              onClick={() => togglePlacesFilter("reviewed")}
+            />
+            <FilterPill
+              icon={<Tag className="h-3.5 w-3.5" />}
+              label="Tagged"
+              on={placesFilters.tagged}
+              onClick={() => togglePlacesFilter("tagged")}
+            />
+          </FilterPillRow>
           <Toggle
             icon={<Camera className="h-4 w-4" />}
             label="Captures"
@@ -208,13 +235,6 @@ export function LayerSheet() {
             onChange={toggleMetroOverlay}
           />
           <Toggle
-            icon={<Bitcoin className="h-4 w-4" />}
-            label="Bitcoin accepted"
-            description="OSM merchants tagged for on-chain, Lightning, or contactless"
-            on={bitcoinOverlayVisible}
-            onChange={toggleBitcoinOverlay}
-          />
-          <Toggle
             icon={<Building2 className="h-4 w-4" />}
             label="3D buildings"
             description="Tilt the map to see extruded volumes"
@@ -276,6 +296,65 @@ function Toggle({
         <span className="block text-[11px] text-muted">{description}</span>
       </span>
       <Switch on={on} />
+    </button>
+  );
+}
+
+/**
+ * Container row for a small group of FilterPill children. Sits under
+ * the parent Toggle, slightly indented and visually de-emphasized
+ * when the parent is off (so users see the filters but understand
+ * they're not active until the layer is enabled).
+ */
+function FilterPillRow({
+  children,
+  disabled,
+}: {
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <div
+      className={`flex flex-wrap gap-1 pl-7 pr-2 pb-1.5 ${
+        disabled ? "opacity-50 pointer-events-none" : ""
+      }`}
+      aria-hidden={disabled}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Toggleable filter chip — narrows the parent layer's visible set.
+ * Active = accent border + accent text; inactive = muted border. The
+ * chip layout matches the Tag/category chips in the discover sidebar
+ * so the visual language stays consistent.
+ */
+function FilterPill({
+  icon,
+  label,
+  on,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  on: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={`flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition-colors ${
+        on
+          ? "border-accent bg-accent text-white"
+          : "border-border bg-surface text-foreground hover:border-accent"
+      }`}
+    >
+      <span aria-hidden>{icon}</span>
+      <span>{label}</span>
     </button>
   );
 }

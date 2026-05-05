@@ -1,7 +1,6 @@
-import { config } from "@/lib/config";
+import axios from "axios";
+import { nexusClient } from "@/lib/api/client";
 import { waitForIndexed } from "@/lib/api/wait-for-indexed";
-
-const baseURL = import.meta.env.DEV ? "" : config.gateway.url;
 
 /**
  * Trigger Nexus to ingest a user's homeserver data, then poll until the
@@ -17,37 +16,38 @@ export async function ingestUserIntoNexus(
   publicKey: string,
 ): Promise<boolean> {
   try {
-    const response = await fetch(`${baseURL}/v0/ingest/${publicKey}`, {
-      method: "PUT",
-    });
-
-    if (!response.ok) {
+    await nexusClient.put(`/v0/ingest/${publicKey}`);
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response) {
       console.error(
-        `Failed to ingest user into Nexus: ${response.status} ${response.statusText}`,
+        `Failed to ingest user into Nexus: ${error.response.status} ${error.response.statusText}`,
       );
       return false;
     }
-
-    // Ingest accepted the request — but the watcher's actual graph write
-    // can lag a few hundred ms. Poll until /v0/user/{pk} returns 200 so
-    // hooks that fire on the next page see a populated user.
-    const ready = await waitForIndexed(
-      async () => {
-        const r = await fetch(`${baseURL}/v0/user/${publicKey}`);
-        return r.ok ? true : null;
-      },
-      { intervalMs: 300, timeoutMs: 8_000, initialDelayMs: 100 },
-    );
-
-    if (!ready) {
-      console.warn(
-        `Nexus ingest accepted but user ${publicKey} not yet queryable after 8s`,
-      );
-    }
-
-    return true;
-  } catch (error) {
     console.error("Error ingesting user into Nexus:", error);
     return false;
   }
+
+  // Ingest accepted the request — but the watcher's actual graph write
+  // can lag a few hundred ms. Poll until /v0/user/{pk} returns 200 so
+  // hooks that fire on the next page see a populated user.
+  const ready = await waitForIndexed(
+    async () => {
+      try {
+        await nexusClient.get(`/v0/user/${publicKey}`);
+        return true;
+      } catch {
+        return null;
+      }
+    },
+    { intervalMs: 300, timeoutMs: 8_000, initialDelayMs: 100 },
+  );
+
+  if (!ready) {
+    console.warn(
+      `Nexus ingest accepted but user ${publicKey} not yet queryable after 8s`,
+    );
+  }
+
+  return true;
 }

@@ -10,6 +10,42 @@ export interface PlaceDetails {
   tag_count: number;
   photo_count: number;
   indexed_at: number;
+  /** OSM `name` tag, populated for BTCMap-imported places and any
+   * place where Nominatim has resolved a name. Optional because
+   * legacy entries created before the BTCMap sync may lack it. */
+  name?: string | null;
+  /** True when the place carries `currency:XBT=yes` /
+   * `payment:bitcoin=yes` (cross-referenced from BTCMap). Drives the
+   * accent-coloured balloon and the "Bitcoin" filter pill. */
+  accepts_bitcoin?: boolean;
+  btc_onchain?: boolean;
+  btc_lightning?: boolean;
+  btc_lightning_contactless?: boolean;
+}
+
+/** One row from `/v0/mapky/viewport` cluster mode. */
+export interface PlaceCluster {
+  lat: number;
+  lon: number;
+  total: number;
+  btc: number;
+  reviewed: number;
+  tagged: number;
+}
+
+/** Discriminated envelope returned by `/v0/mapky/viewport`. The frontend
+ * switches between cluster bubbles (low zoom) and individual balloons
+ * (high zoom) based on `kind`. */
+export type ViewportResponse =
+  | { kind: "clusters"; clusters: PlaceCluster[]; cell: number }
+  | { kind: "places"; places: PlaceDetails[] };
+
+/** Filter pills layered on the place viewport. All-`false` (the default)
+ * means "show every place"; flipping a flag narrows the result. */
+export interface PlaceFilters {
+  bitcoin: boolean;
+  reviewed: boolean;
+  tagged: boolean;
 }
 
 export interface PostDetails {
