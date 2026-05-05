@@ -2,7 +2,11 @@ import { useMemo } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { fetchPlaceDetail, fetchPlaceTags } from "@/lib/api/mapky";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
-import type { PlaceDetails, PostTagDetails } from "@/types/mapky";
+import type {
+  PlaceDetails,
+  PostTagDetails,
+  ViewportResponse,
+} from "@/types/mapky";
 
 export interface EnrichedResult {
   result: NominatimSearchResult;
@@ -30,17 +34,22 @@ export function useEnrichedSearchResults(
 ): EnrichedResult[] {
   const qc = useQueryClient();
 
-  // Pull every cached PlaceDetails out of every viewport-places query
-  // and index it by `osm_type:osm_id`. Cheap — these are already in
-  // memory; no fetch.
+  // Pull every cached PlaceDetails out of every viewport query and
+  // index it by `osm_type:osm_id`. Cheap — already in memory, no fetch.
+  //
+  // The viewport cache now holds a discriminated envelope:
+  //   { kind: "places", places: [...] }   at high zoom
+  //   { kind: "clusters", clusters: [...] } at low zoom
+  // We can only enrich from `places` entries — cluster summaries don't
+  // carry per-place metadata. Skip cluster cache entries silently.
   const cachedByOsm = useMemo(() => {
     const map = new Map<string, PlaceDetails>();
     for (const q of qc
       .getQueryCache()
       .findAll({ queryKey: ["mapky", "viewport"] })) {
-      const data = q.state.data as PlaceDetails[] | undefined;
-      if (!data) continue;
-      for (const p of data) map.set(`${p.osm_type}:${p.osm_id}`, p);
+      const data = q.state.data as ViewportResponse | undefined;
+      if (!data || data.kind !== "places") continue;
+      for (const p of data.places) map.set(`${p.osm_type}:${p.osm_id}`, p);
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps

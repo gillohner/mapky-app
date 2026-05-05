@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
-import { useViewportBitcoinPois } from "@/lib/btcmap/use-viewport-bitcoin-pois";
 import { useOsmLookupBatch } from "@/lib/api/hooks";
 import { categoryIcon } from "@/lib/places/category-icon";
 import { PlaceBalloon, type BalloonVariant } from "./PlaceBalloon";
@@ -44,34 +43,18 @@ export function SearchResultsOverlay({
 }: SearchResultsOverlayProps) {
   const map = useMapStore((s) => s.map);
 
-  // Viewport-snapped Bitcoin keys → drives "both" variant on results
-  // that are also tagged Bitcoin-accepting. Same shared hook the
-  // PlaceAnnotationsLayer uses, so this is a free cache hit.
-  const zoomEnough = useMapStore((s) => s.zoom >= 9);
-  const bounds = useMemo(() => {
-    if (!map) return null;
-    const b = map.getBounds();
-    return {
-      minLat: b.getSouth(),
-      minLon: b.getWest(),
-      maxLat: b.getNorth(),
-      maxLon: b.getEast(),
-    };
-  }, [map]);
-  const { keys: bitcoinKeys } = useViewportBitcoinPois(bounds, zoomEnough);
-
   // Build the feature set the balloons render against.
+  // BTC acceptance comes straight off the indexed PlaceDetails now
+  // (server-driven `accepts_bitcoin`), no separate Overpass hook
+  // round-trip needed — the place was already fetched as part of the
+  // enriched search result.
   const features = useMemo<SearchFeature[]>(() => {
     return results.map(({ result, place }) => {
       const key = `${result.osm_type}:${result.osm_id}`;
       const ratedNum =
         place && place.review_count > 0 ? place.avg_rating / 2 : null;
-      const isBitcoin = bitcoinKeys.has(key);
-      const variant: BalloonVariant = isBitcoin
-        ? ratedNum != null
-          ? "both"
-          : "bitcoin"
-        : "mapky";
+      const isBitcoin = !!place?.accepts_bitcoin;
+      const variant: BalloonVariant = isBitcoin ? "place-btc" : "place";
       return {
         key,
         osmType: result.osm_type,
@@ -83,7 +66,7 @@ export function SearchResultsOverlay({
         name: result.name,
       };
     });
-  }, [results, bitcoinKeys]);
+  }, [results]);
 
   // Batched Nominatim lookup for category icons (free cache hit when
   // the user just left /places, since PlaceList seeds the same key).

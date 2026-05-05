@@ -12,15 +12,15 @@ import type {
   RouteSnapResult,
   Waypoint,
 } from "./types";
-import { config } from "@/lib/config";
+import axios from "axios";
+import { nexusClient } from "@/lib/api/client";
 
-// In dev we proxy through Vite (`/valhalla` → valhalla1.openstreetmap.de)
-// because the FOSSGIS instance omits CORS headers on rate-limit
-// responses, which surfaces as opaque "NetworkError" instead of the
-// useful 429 body. In prod, set VITE_VALHALLA_URL to a server-side proxy
-// you control (or self-hosted Valhalla). Both defaults are encoded
-// inside `config.valhalla.url` so the rest of the app stays uniform.
-const VALHALLA_URL = config.valhalla.url;
+// All Valhalla traffic flows through the pubky-nexus plugin's cached
+// proxy at `/v0/mapky/routing/valhalla`. The plugin holds a 24 h Redis
+// cache keyed by a content hash of the request body, so identical
+// waypoint/costing pairs are served instantly without re-hitting the
+// public Valhalla instance. Configure the upstream via
+// `MAPKY_VALHALLA_URL` on the plugin side, not here.
 
 interface ValhallaLocation {
   lat: number;
@@ -136,47 +136,53 @@ export async function requestRoute(
     directions_options: { units: "kilometers" },
   };
 
-  let res: Response;
+  let data: ValhallaResponse;
   try {
-    res = await fetch(VALHALLA_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: opts.signal,
-    });
+    const response = await nexusClient.post<ValhallaResponse>(
+      "/v0/mapky/routing/valhalla",
+      body,
+      { signal: opts.signal },
+    );
+    data = response.data;
   } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") throw err;
+    if (axios.isCancel(err) || (err instanceof Error && err.name === "CanceledError")) {
+      throw err;
+    }
+    if (axios.isAxiosError(err) && err.response) {
+      const status = err.response.status;
+      // The plugin forwards Valhalla's status verbatim on upstream
+      // errors and wraps the body in `{ error }`. Pull the original
+      // error text back out so `parseValhallaError` keeps working.
+      const bodyData = err.response.data;
+      const text =
+        typeof bodyData === "string"
+          ? bodyData
+          : typeof bodyData?.error === "string"
+            ? bodyData.error
+            : JSON.stringify(bodyData ?? "");
+      if (status === 429) {
+        throw new RoutingError("Routing temporarily rate-limited.", {
+          status: 429,
+          hint: "The free Valhalla service throttles bursts. Wait a few seconds and try again, or simplify the route.",
+        });
+      }
+      const parsed = parseValhallaError(text);
+      const { message, hint } = friendlyValhallaError(
+        parsed?.code,
+        costing,
+        text,
+      );
+      throw new RoutingError(message, {
+        status,
+        code: parsed?.code,
+        hint,
+      });
+    }
     throw new RoutingError(
       err instanceof Error ? err.message : "Network error reaching Valhalla",
     );
   }
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    const parsed = parseValhallaError(text);
-    // 429 = upstream rate limit. FOSSGIS is fair-use; this is the user's
-    // signal to slow down. Map it to a friendly message regardless of
-    // whether the body parsed (the proxy strips CORS issues but Valhalla
-    // sometimes returns plain text on rate-limit too).
-    if (res.status === 429) {
-      throw new RoutingError("Routing temporarily rate-limited.", {
-        status: 429,
-        hint: "The free Valhalla service throttles bursts. Wait a few seconds and try again, or simplify the route.",
-      });
-    }
-    const { message, hint } = friendlyValhallaError(
-      parsed?.code,
-      costing,
-      text,
-    );
-    throw new RoutingError(message, {
-      status: res.status,
-      code: parsed?.code,
-      hint,
-    });
-  }
-
-  const data = (await res.json()) as ValhallaResponse;
   if (!data.trip?.legs?.length) {
     throw new RoutingError("Routing engine returned no legs.");
   }

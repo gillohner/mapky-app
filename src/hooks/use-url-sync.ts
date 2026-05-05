@@ -20,7 +20,7 @@ import { useMapStore } from "@/stores/map-store";
  *   pl  places layer       (0 to hide; default visible)
  *   ca  captures layer     (0 to hide; default visible)
  *   mt  metro overlay      (1 to show)
- *   bt  bitcoin overlay    (1 to show)
+ *   pf  places filters     (csv of `btc|reviewed|tagged`; absent = no narrowing)
  *   b3  3D buildings       (1 to show)
  *   z   zoom level
  *   c   center as "lat,lon"
@@ -50,8 +50,18 @@ function hydrateFromUrl() {
   if (params.get("sl") === "0") m.setSatelliteLabels(false);
 
   if (params.get("mt") === "1") ui.setMetroOverlayVisible(true);
-  if (params.get("bt") === "1") ui.setBitcoinOverlayVisible(true);
   if (params.get("b3") === "1") ui.setBuildings3DVisible(true);
+
+  // Places filter pills — comma-separated. Tokens beyond the known
+  // set are ignored so a stale shared link from a future-version
+  // schema can't crash hydration.
+  const pf = params.get("pf");
+  if (pf) {
+    const tokens = new Set(pf.split(",").map((t) => t.trim()));
+    if (tokens.has("btc")) ui.setPlacesFilter("bitcoin", true);
+    if (tokens.has("reviewed")) ui.setPlacesFilter("reviewed", true);
+    if (tokens.has("tagged")) ui.setPlacesFilter("tagged", true);
+  }
 
   const z = parseFloat(params.get("z") ?? "");
   const c = params.get("c");
@@ -95,7 +105,7 @@ function applyUrlViewportSmoothly() {
 
 export function useUrlSync() {
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
-  const bitcoinOverlayVisible = useUiStore((s) => s.bitcoinOverlayVisible);
+  const placesFilters = useUiStore((s) => s.placesFilters);
   const buildings3DVisible = useUiStore((s) => s.buildings3DVisible);
 
   const theme = useMapStore((s) => s.theme);
@@ -129,7 +139,19 @@ export function useUrlSync() {
     );
 
     setOrDelete(params, "mt", metroOverlayVisible ? "1" : null);
-    setOrDelete(params, "bt", bitcoinOverlayVisible ? "1" : null);
+    // Places filter pills — emit a comma-separated list when any are
+    // active; absent param means "no narrowing", matching the default
+    // store state.
+    const filterTokens = [
+      placesFilters.bitcoin ? "btc" : null,
+      placesFilters.reviewed ? "reviewed" : null,
+      placesFilters.tagged ? "tagged" : null,
+    ].filter((t): t is string => t !== null);
+    setOrDelete(
+      params,
+      "pf",
+      filterTokens.length > 0 ? filterTokens.join(",") : null,
+    );
     setOrDelete(params, "b3", buildings3DVisible ? "1" : null);
 
     setOrDelete(params, "z", zoom.toFixed(2));
@@ -152,7 +174,7 @@ export function useUrlSync() {
     }
   }, [
     metroOverlayVisible,
-    bitcoinOverlayVisible,
+    placesFilters,
     buildings3DVisible,
     theme,
     basemap,

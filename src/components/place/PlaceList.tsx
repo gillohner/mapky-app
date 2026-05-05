@@ -3,13 +3,13 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQueries } from "@tanstack/react-query";
 import { Bitcoin, Loader2, MapPin } from "lucide-react";
 import { placeStarsLabel } from "@/lib/places/enrich-search";
-import { useViewportBitcoinPois } from "@/lib/btcmap/use-viewport-bitcoin-pois";
 import {
   useViewportPlaces,
   useOsmLookup,
   useOsmLookupBatch,
 } from "@/lib/api/hooks";
 import { fetchPlaceTags } from "@/lib/api/mapky";
+import { CLUSTER_ZOOM_THRESHOLD } from "@/lib/api/mapky";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import {
@@ -50,19 +50,27 @@ export function PlaceList() {
 
   const liveBbox = useViewportBounds();
   const bbox = useFrozenWhile(liveBbox, filterActive);
-  const viewport = useViewportPlaces(bbox);
-  // Shared Bitcoin keys — same Overpass query the map layer uses, so
-  // the per-row chip is a free piggy-back on the cache. Renders the
-  // chip regardless of the Layers-sheet toggle (the toggle only gates
-  // the orange BORDER on the map).
-  const zoomEnough = useMapStore((s) => s.zoom >= 9);
-  const { keys: bitcoinKeys } = useViewportBitcoinPois(bbox, zoomEnough);
+  const placesFilters = useUiStore((s) => s.placesFilters);
+  // Sidebar always wants individual places (clusters don't make sense
+  // in a list view). Force zoom = CLUSTER_ZOOM_THRESHOLD so the server
+  // returns the `places` envelope variant regardless of the map's
+  // current zoom — the filter pills still apply.
+  const viewport = useViewportPlaces(
+    bbox,
+    CLUSTER_ZOOM_THRESHOLD,
+    placesFilters,
+  );
   const close = () => navigate({ to: "/" });
 
   // Batch-fetch tags for every place in the viewport. TanStack caches
   // each per (osmType, osmId), so opening a place detail later reuses
   // the same query. With ~20–50 places per viewport this stays cheap.
-  const places = viewport.data ?? [];
+  //
+  // We force zoom = CLUSTER_ZOOM_THRESHOLD above, so the envelope
+  // arrives in `places` mode — the empty fallback covers the
+  // never-fired-yet case.
+  const places: PlaceDetails[] =
+    viewport.data?.kind === "places" ? viewport.data.places : [];
   const tagQueries = useQueries({
     queries: places.map((p) => ({
       queryKey: ["mapky", "place", p.osm_type, p.osm_id, "tags"] as const,
@@ -254,7 +262,7 @@ export function PlaceList() {
             key={placeKey(p)}
             place={p}
             tags={tagsByPlace.get(placeKey(p)) ?? []}
-            acceptsBitcoin={bitcoinKeys.has(`${p.osm_type}:${p.osm_id}`)}
+            acceptsBitcoin={!!p.accepts_bitcoin}
           />
         ))}
       </div>

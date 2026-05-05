@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { GeoCaptureDetails } from "@/types/mapky";
+import type { GeoCaptureDetails, PlaceFilters } from "@/types/mapky";
 
 export interface PendingPoiClick {
   lng: number;
@@ -80,10 +80,16 @@ interface UiStore {
   setMetroOverlayVisible: (visible: boolean) => void;
   toggleMetroOverlay: () => void;
 
-  /** Bitcoin Accepted overlay — OSM POIs with currency:XBT=yes. */
-  bitcoinOverlayVisible: boolean;
-  setBitcoinOverlayVisible: (visible: boolean) => void;
-  toggleBitcoinOverlay: () => void;
+  /**
+   * Filter pills for the Places layer. Each one when `true` narrows
+   * the result set; all-`false` (the default) means "show every
+   * place". Sent as query params to `/v0/mapky/viewport` so the
+   * server applies the filter in the same Cypher pass — no client-
+   * side post-filtering, no second query.
+   */
+  placesFilters: PlaceFilters;
+  setPlacesFilter: (key: keyof PlaceFilters, on: boolean) => void;
+  togglePlacesFilter: (key: keyof PlaceFilters) => void;
 
   /** Extrude buildings using the height field from Protomaps tiles. */
   buildings3DVisible: boolean;
@@ -212,11 +218,15 @@ export const useUiStore = create<UiStore>()(
       toggleMetroOverlay: () =>
         set((s) => ({ metroOverlayVisible: !s.metroOverlayVisible })),
 
-      bitcoinOverlayVisible: false,
-      setBitcoinOverlayVisible: (visible) =>
-        set({ bitcoinOverlayVisible: visible }),
-      toggleBitcoinOverlay: () =>
-        set((s) => ({ bitcoinOverlayVisible: !s.bitcoinOverlayVisible })),
+      placesFilters: { bitcoin: false, reviewed: false, tagged: false },
+      setPlacesFilter: (key, on) =>
+        set((s) => ({
+          placesFilters: { ...s.placesFilters, [key]: on },
+        })),
+      togglePlacesFilter: (key) =>
+        set((s) => ({
+          placesFilters: { ...s.placesFilters, [key]: !s.placesFilters[key] },
+        })),
 
       buildings3DVisible: false,
       setBuildings3DVisible: (visible) =>
@@ -337,9 +347,11 @@ export const useUiStore = create<UiStore>()(
     }),
     {
       name: "mapky-layers",
-      // v6: add bitcoinOverlayVisible — BTCMap-style OSM Bitcoin
-      // acceptance overlay (currency:XBT=yes).
-      version: 6,
+      // v7: drop bitcoinOverlayVisible (replaced by placesFilters.bitcoin),
+      //     add placesFilters. The standalone BTC overlay collapsed into
+      //     a narrowing filter on the Places layer once BTCMap data was
+      //     ingested into Neo4j as :Place nodes.
+      version: 7,
       // Persist user-controlled toggles only. Theme/basemap lives in
       // map-store; dimmedLayers / hiddenLayers / sheet open-state /
       // sidebar / streetview / POI-click context are all ephemeral
@@ -348,7 +360,7 @@ export const useUiStore = create<UiStore>()(
         placesLayerVisible: state.placesLayerVisible,
         capturesLayerVisible: state.capturesLayerVisible,
         metroOverlayVisible: state.metroOverlayVisible,
-        bitcoinOverlayVisible: state.bitcoinOverlayVisible,
+        placesFilters: state.placesFilters,
         buildings3DVisible: state.buildings3DVisible,
       }),
     },

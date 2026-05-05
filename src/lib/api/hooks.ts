@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import {
-  fetchViewportPlaces,
+  fetchViewport,
   fetchPlaceDetail,
   fetchPlacePosts,
   fetchPlaceTags,
@@ -45,17 +45,77 @@ import type {
 } from "./nominatim";
 import type {
   GeoCaptureDetails,
+  PlaceFilters,
   RouteFull,
   RouteFullJson,
   ViewportBounds,
+  ViewportResponse,
 } from "@/types/mapky";
 import { parseSequenceUri } from "@/lib/map/sequence-uri";
 
-export function useViewportPlaces(bounds: ViewportBounds | null) {
+/**
+ * Pad a viewport bbox by a fraction of its size, then snap the result
+ * to a coarse grid so small pans land in the same query bucket.
+ *
+ * Padding gives us pre-fetched margin around the viewport (small pans
+ * become cache hits via TanStack's query key matching). Snapping
+ * trades some over-fetch for fewer unique bboxes — without it, every
+ * 1-pixel pan would still produce a fresh queryKey and bypass the
+ * 30 s `staleTime` window.
+ *
+ * Defaults: 30 % padding, snap to ~0.01° (~1 km at the equator,
+ * smaller at higher latitudes — fine for typical zoom levels).
+ */
+function snapBoundsForCache(
+  bounds: ViewportBounds | null,
+  pad = 0.3,
+  snapStep = 0.01,
+): ViewportBounds | null {
+  if (!bounds) return null;
+  const latSpan = bounds.maxLat - bounds.minLat;
+  const lonSpan = bounds.maxLon - bounds.minLon;
+  if (!Number.isFinite(latSpan) || !Number.isFinite(lonSpan)) return bounds;
+  const latPad = latSpan * pad;
+  const lonPad = lonSpan * pad;
+  const snap = (v: number, dir: 1 | -1) =>
+    dir === -1
+      ? Math.floor(v / snapStep) * snapStep
+      : Math.ceil(v / snapStep) * snapStep;
+  return {
+    minLat: snap(bounds.minLat - latPad, -1),
+    minLon: snap(bounds.minLon - lonPad, -1),
+    maxLat: snap(bounds.maxLat + latPad, 1),
+    maxLon: snap(bounds.maxLon + lonPad, 1),
+  };
+}
+
+/**
+ * Zoom-aware viewport hook. Returns either cluster bubbles or
+ * individual places via a discriminated envelope; the rendering
+ * layer switches on `data.kind`.
+ *
+ * Snaps zoom to a coarse step (every 2 levels) so a smooth zoom
+ * animation doesn't fire one query per zoom delta. The cluster cell
+ * size is bucketed in the same direction server-side, so identical
+ * zoom snaps map to identical responses.
+ */
+export function useViewportPlaces(
+  bounds: ViewportBounds | null,
+  zoom: number,
+  filters: PlaceFilters,
+) {
+  const padded = useMemo(() => snapBoundsForCache(bounds), [bounds]);
+  // Snap zoom to the nearest integer — keeps the queryKey stable
+  // across small wheel-tick zoom steps within ±0.5, but never drops
+  // below the user's visible zoom (which would silently push us into
+  // cluster mode at zooms that should already show individual
+  // places). Math.round(11.99) → 12, Math.round(11.49) → 11.
+  const snappedZoom = Math.round(zoom);
   return useQuery({
-    queryKey: ["mapky", "viewport", bounds],
-    queryFn: () => fetchViewportPlaces(bounds!),
-    enabled: !!bounds,
+    queryKey: ["mapky", "viewport", padded, snappedZoom, filters] as const,
+    queryFn: () =>
+      fetchViewport(padded!, snappedZoom, filters) as Promise<ViewportResponse>,
+    enabled: !!padded,
     staleTime: 30_000,
     // Hold the previous bbox's results on screen while a new fetch is
     // in flight. Without this, every map pan flashes the markers off
@@ -282,11 +342,13 @@ export function useUserCollections(userId: string | null) {
 }
 
 export function useViewportCollections(bounds: ViewportBounds | null) {
+  const padded = useMemo(() => snapBoundsForCache(bounds), [bounds]);
   return useQuery({
-    queryKey: ["mapky", "collections", "viewport", bounds],
-    queryFn: () => fetchViewportCollections(bounds!),
-    enabled: !!bounds,
+    queryKey: ["mapky", "collections", "viewport", padded],
+    queryFn: () => fetchViewportCollections(padded!),
+    enabled: !!padded,
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -317,11 +379,13 @@ export function useCollectionsForPlace(osmType: string, osmId: number) {
 }
 
 export function useViewportCaptures(bounds: ViewportBounds | null) {
+  const padded = useMemo(() => snapBoundsForCache(bounds), [bounds]);
   return useQuery({
-    queryKey: ["mapky", "geo_captures", "viewport", bounds],
-    queryFn: () => fetchViewportCaptures(bounds!),
-    enabled: !!bounds,
+    queryKey: ["mapky", "geo_captures", "viewport", padded],
+    queryFn: () => fetchViewportCaptures(padded!),
+    enabled: !!padded,
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -433,11 +497,13 @@ export function useUserGeoCaptures(userId: string | null) {
 }
 
 export function useViewportRoutes(bounds: ViewportBounds | null) {
+  const padded = useMemo(() => snapBoundsForCache(bounds), [bounds]);
   return useQuery({
-    queryKey: ["mapky", "routes", "viewport", bounds],
-    queryFn: () => fetchViewportRoutes(bounds!),
-    enabled: !!bounds,
+    queryKey: ["mapky", "routes", "viewport", padded],
+    queryFn: () => fetchViewportRoutes(padded!),
+    enabled: !!padded,
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -564,4 +630,55 @@ export function useBoundedSearch(
 ): { data: NominatimSearchResult[]; isLoading: boolean } {
   const nominatim = useBoundedNominatimSearch(query, viewbox);
   return { data: nominatim.data ?? [], isLoading: nominatim.isLoading };
+}
+
+// ── Prefetch helpers (hover-to-prefetch) ────────────────────────────────
+
+/**
+ * Prefetch a place's detail + its routes when the user hovers a card.
+ * Uses TanStack's `prefetchQuery` so the data lands in cache and the
+ * subsequent navigation skips the spinner.
+ *
+ * Returns handlers safe to wire up via `onMouseEnter`/`onFocus` — both
+ * fire `prefetchQuery` only if the entry isn't already fresh.
+ *
+ * Example:
+ * ```tsx
+ * const prefetch = usePrefetchPlace(osmType, osmId);
+ * <li {...prefetch}>...</li>
+ * ```
+ */
+export function usePrefetchPlace(osmType: string, osmId: number) {
+  const qc = useQueryClient();
+  const prime = () => {
+    if (!osmType || !osmId) return;
+    qc.prefetchQuery({
+      queryKey: ["mapky", "place", osmType, osmId],
+      queryFn: () => fetchPlaceDetail(osmType, osmId),
+      staleTime: 60_000,
+    });
+  };
+  return { onMouseEnter: prime, onFocus: prime };
+}
+
+/**
+ * Prefetch a route's metadata + body on hover. Both round-trips are
+ * primed in parallel so opening the detail panel renders instantly.
+ */
+export function usePrefetchRoute(authorId: string, routeId: string) {
+  const qc = useQueryClient();
+  const prime = () => {
+    if (!authorId || !routeId) return;
+    qc.prefetchQuery({
+      queryKey: ["mapky", "route", authorId, routeId],
+      queryFn: () => fetchRouteDetails(authorId, routeId),
+      staleTime: 60_000,
+    });
+    qc.prefetchQuery({
+      queryKey: ["mapky", "route-body", authorId, routeId],
+      queryFn: () => readRouteBody<RouteFullJson>(authorId, routeId),
+      staleTime: 5 * 60_000,
+    });
+  };
+  return { onMouseEnter: prime, onFocus: prime };
 }
