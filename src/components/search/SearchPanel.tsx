@@ -5,6 +5,9 @@ import {
   FolderHeart,
   MessageSquare,
   Route as RouteIcon,
+  Camera,
+  Layers,
+  AlertTriangle,
 } from "lucide-react";
 import { MobileBottomSheet } from "@/components/shared/MobileBottomSheet";
 import { useNavigate } from "@tanstack/react-router";
@@ -21,7 +24,12 @@ import { useSidebarPresence } from "@/hooks/use-sidebar-presence";
 import { parseOsmCanonical } from "@/lib/map/osm-url";
 import { resolvePlaceName } from "@/lib/places/place-name";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
-import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
+import type {
+  MapkyPostDetails,
+  PlaceDetails,
+  ReviewDetails,
+  RouteDetails,
+} from "@/types/mapky";
 import { SearchResultsOverlay } from "@/components/map/SearchResultsOverlay";
 import {
   placeStarsLabel,
@@ -203,8 +211,8 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
       refs.push({ osmType, osmId });
     };
     for (const p of tagResults.places ?? []) add(p.osm_type, p.osm_id);
-    for (const post of tagResults.posts ?? []) {
-      const parsed = parseOsmCanonical(post.osm_canonical);
+    for (const review of tagResults.reviews ?? []) {
+      const parsed = parseOsmCanonical(review.osm_canonical);
       if (parsed) add(parsed.osmType, parsed.osmId);
     }
     return refs;
@@ -306,8 +314,8 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
     });
   };
 
-  const handleSelectPost = (post: PostDetails) => {
-    const parsed = parseOsmCanonical(post.osm_canonical);
+  const handleSelectReview = (review: ReviewDetails) => {
+    const parsed = parseOsmCanonical(review.osm_canonical);
     if (!parsed) return;
     navigate({
       to: "/place/$osmType/$osmId",
@@ -320,13 +328,103 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
     });
   };
 
+  /**
+   * Navigation target for a `:MapkyAppPost` search result. We don't have a
+   * standalone post-detail route, so we follow `parent_uri` to the nearest
+   * anchored context: the OSM place, the route / collection / capture detail,
+   * or the place behind a review parent. When the parent is itself another
+   * post, we walk the chain (bounded depth) using whatever posts the
+   * tag-search payload already returned — no extra round-trips.
+   */
+  const handleSelectPost = (post: MapkyPostDetails) => {
+    const visited = new Set<string>();
+    let current: MapkyPostDetails | undefined = post;
+    for (let i = 0; i < 5 && current; i++) {
+      const parentUri: string | null = current.parent_uri;
+      if (!parentUri) return;
+
+      const osm = parentUri.match(
+        /^https:\/\/www\.openstreetmap\.org\/(node|way|relation)\/(\d+)\/?$/,
+      );
+      if (osm) {
+        navigate({
+          to: "/place/$osmType/$osmId",
+          params: { osmType: osm[1], osmId: osm[2] },
+          search: {
+            from: "search",
+            fromSearchQuery: query,
+            fromSearchMode: mode,
+          },
+        });
+        return;
+      }
+
+      const matched = parentUri.match(
+        /^pubky:\/\/([^/]+)\/pub\/mapky\.app\/(reviews|routes|collections|geo_captures|sequences|incidents|posts)\/([^/?#]+)/,
+      );
+      if (!matched) return;
+      const parentAuthor: string = matched[1];
+      const parentType: string = matched[2];
+      const parentId: string = matched[3];
+
+      if (parentType === "routes") {
+        navigate({
+          to: "/route/$authorId/$routeId",
+          params: { authorId: parentAuthor, routeId: parentId },
+        });
+        return;
+      }
+      if (parentType === "collections") {
+        handleSelectCollection(parentAuthor, parentId);
+        return;
+      }
+      if (parentType === "geo_captures") {
+        navigate({
+          to: "/capture/$authorId/$captureId",
+          params: { authorId: parentAuthor, captureId: parentId },
+        });
+        return;
+      }
+      if (parentType === "reviews") {
+        const reviewCompound = `${parentAuthor}:${parentId}`;
+        const review = tagResults?.reviews?.find(
+          (r) =>
+            r.id === reviewCompound ||
+            (r.author_id === parentAuthor && r.id === parentId),
+        );
+        if (review) handleSelectReview(review);
+        return;
+      }
+      if (parentType === "posts") {
+        // Walk up: find the parent post in this same tag-search payload and
+        // re-resolve from it. Stop if we've already seen this id (cycle) or
+        // the parent isn't in the payload (would need a network fetch).
+        const key = `${parentAuthor}:${parentId}`;
+        if (visited.has(key)) return;
+        visited.add(key);
+        current = tagResults?.posts?.find(
+          (p) =>
+            p.id === parentId &&
+            (p.author_id === parentAuthor || p.id === key),
+        );
+        continue;
+      }
+      // sequences / incidents — no detail route yet.
+      return;
+    }
+  };
+
   const resultCount =
     mode === "places"
       ? allPlaceResults.length
       : (tagResults?.places?.length ?? 0) +
         (tagResults?.collections?.length ?? 0) +
+        (tagResults?.reviews?.length ?? 0) +
         (tagResults?.posts?.length ?? 0) +
-        (tagResults?.routes?.length ?? 0);
+        (tagResults?.routes?.length ?? 0) +
+        (tagResults?.geo_captures?.length ?? 0) +
+        (tagResults?.sequences?.length ?? 0) +
+        (tagResults?.incidents?.length ?? 0);
 
   const handleSelectRoute = (route: RouteDetails) => {
     const idx = route.id.indexOf(":");
@@ -452,32 +550,28 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
             </div>
           )}
 
-          {tagResults.posts?.length > 0 && (
+          {tagResults.reviews?.length > 0 && (
             <div>
               <div className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
-                Posts
+                Reviews
               </div>
-              {tagResults.posts.map((post) => (
+              {tagResults.reviews.map((review) => (
                 <button
-                  key={`${post.author_id}-${post.id}`}
-                  onClick={() => handleSelectPost(post)}
+                  key={`${review.author_id}-${review.id}`}
+                  onClick={() => handleSelectReview(review)}
                   className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-surface"
                 >
                   <MessageSquare className="h-4 w-4 flex-shrink-0 text-accent" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-foreground">
-                      {post.content
-                        ? post.content.slice(0, 80) +
-                          (post.content.length > 80 ? "..." : "")
-                        : post.kind === "review"
-                          ? "Review"
-                          : "Post"}
+                      {review.content
+                        ? review.content.slice(0, 80) +
+                          (review.content.length > 80 ? "..." : "")
+                        : "Review"}
                     </p>
                     <p className="text-xs text-muted">
-                      {post.kind === "review" && post.rating
-                        ? `${(post.rating / 2).toFixed(1)} stars · `
-                        : ""}
-                      <OsmPlaceName osmCanonical={post.osm_canonical} />
+                      {`${(review.rating / 2).toFixed(1)} stars · `}
+                      <OsmPlaceName osmCanonical={review.osm_canonical} />
                     </p>
                   </div>
                 </button>
@@ -506,6 +600,112 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
                     </p>
                   </div>
                 </button>
+              ))}
+            </div>
+          )}
+
+          {tagResults.posts?.length > 0 && (
+            <div>
+              <div className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                Posts
+              </div>
+              {tagResults.posts.map((post) => (
+                <button
+                  key={`${post.author_id}-${post.id}`}
+                  onClick={() => handleSelectPost(post)}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-surface"
+                >
+                  <MessageSquare className="h-4 w-4 flex-shrink-0 text-accent" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-foreground">
+                      {post.content
+                        ? post.content.slice(0, 80) +
+                          (post.content.length > 80 ? "..." : "")
+                        : "Post"}
+                    </p>
+                    <p className="text-xs text-muted">{post.kind}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {tagResults.geo_captures?.length > 0 && (
+            <div>
+              <div className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                Captures
+              </div>
+              {tagResults.geo_captures.map((c) => {
+                const compoundId = c.id.includes(":") ? c.id : `${c.author_id}:${c.id}`;
+                const [authorId, captureId] = compoundId.split(":");
+                return (
+                  <button
+                    key={compoundId}
+                    onClick={() =>
+                      navigate({
+                        to: "/capture/$authorId/$captureId",
+                        params: { authorId, captureId },
+                      })
+                    }
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-surface"
+                  >
+                    <Camera className="h-4 w-4 flex-shrink-0 text-accent" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {c.caption || "Untitled capture"}
+                      </p>
+                      <p className="text-xs uppercase text-muted">{c.kind}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {tagResults.sequences?.length > 0 && (
+            <div>
+              <div className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                Sequences
+              </div>
+              {tagResults.sequences.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-surface"
+                >
+                  <Layers className="h-4 w-4 flex-shrink-0 text-accent" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {s.name || "Untitled sequence"}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {s.capture_count} captures
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tagResults.incidents?.length > 0 && (
+            <div>
+              <div className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                Incidents
+              </div>
+              {tagResults.incidents.map((i) => (
+                <div
+                  key={i.id}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-surface"
+                >
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {i.description || i.incident_type}
+                    </p>
+                    <p className="text-xs uppercase text-muted">
+                      {i.incident_type} · {i.severity}
+                    </p>
+                  </div>
+                </div>
               ))}
             </div>
           )}

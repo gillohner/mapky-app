@@ -11,7 +11,8 @@ import {
   sourceLayersForType,
 } from "@/lib/map/feature-id";
 import { PlaceHeader } from "./PlaceHeader";
-import { PlacePosts } from "./PlacePosts";
+import { PlaceReviews } from "./PlaceReviews";
+import { PlaceComments } from "./PlaceComments";
 import { PlaceActions } from "./PlaceActions";
 import { PlaceDirectionsButton } from "./PlaceDirectionsButton";
 import { PlaceTags } from "./PlaceTags";
@@ -158,10 +159,12 @@ export function PlacePanel({
         </div>
         <PlaceTags osmType={osmType} osmId={osmId} />
         <div className="border-t border-border pt-4">
-          <h3 className="mb-2 text-sm font-medium text-foreground">
-            Posts & Reviews
-          </h3>
-          <PlacePosts osmType={osmType} osmId={osmId} />
+          <h3 className="mb-2 text-sm font-medium text-foreground">Reviews</h3>
+          <PlaceReviews osmType={osmType} osmId={osmId} />
+        </div>
+        <div className="border-t border-border pt-4">
+          <h3 className="mb-2 text-sm font-medium text-foreground">Posts</h3>
+          <PlaceComments osmType={osmType} osmId={osmId} />
         </div>
         <PlaceCollections osmType={osmType} osmId={osmId} />
         <PlaceRoutes osmType={osmType} osmId={osmId} />

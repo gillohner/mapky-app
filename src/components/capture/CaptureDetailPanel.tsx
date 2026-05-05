@@ -51,6 +51,7 @@ import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import type { GeoCaptureDetails, GeoCaptureKind } from "@/types/mapky";
+import { ResourceDiscussion } from "@/components/posts/ResourceDiscussion";
 
 function parseSequenceUri(
   uri: string | null,
@@ -632,6 +633,13 @@ export function CaptureDetailPanel({
               </div>
               <CaptureTags authorId={authorId} captureId={captureId} />
             </div>
+
+            <ResourceDiscussion
+              resourceType="geo_captures"
+              authorId={authorId}
+              resourceId={captureId}
+              parentPreview={capture?.caption ?? "Capture"}
+            />
           </div>
         )}
       </DiscoverSidebar>

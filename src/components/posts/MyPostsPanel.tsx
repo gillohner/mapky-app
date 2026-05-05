@@ -3,6 +3,7 @@ import { Star, MessageSquare, MapPin } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
+  useUserReviews,
   useUserPosts,
   useOsmLookup,
   useOsmLookupBatch,
@@ -11,7 +12,7 @@ import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import { parseOsmCanonical } from "@/lib/map/osm-url";
 import { resolvePlaceName } from "@/lib/places/place-name";
-import type { PostDetails } from "@/types/mapky";
+import type { MapkyPostDetails, ReviewDetails } from "@/types/mapky";
 
 function timeAgo(timestamp: number): string {
   const ms = timestamp < 1e12 ? timestamp * 1000 : timestamp;
@@ -40,96 +41,104 @@ function PlaceName({ osmCanonical }: { osmCanonical: string }) {
   return <>{name}</>;
 }
 
-function MyPostCard({ post }: { post: PostDetails }) {
+function MyReviewCard({ review }: { review: ReviewDetails }) {
   const navigate = useNavigate();
-  const parsed = parseOsmCanonical(post.osm_canonical);
-
+  const parsed = parseOsmCanonical(review.osm_canonical);
   const goToPlace = () => {
     if (!parsed) return;
     navigate({
       to: "/place/$osmType/$osmId",
       params: { osmType: parsed.osmType, osmId: String(parsed.osmId) },
-      search: { from: "my-posts", thread: `${post.author_id}:${post.id}` },
+      search: { from: "my-posts" },
     });
   };
-
   return (
     <button
       onClick={goToPlace}
       className="flex w-full gap-3 rounded-lg p-2 text-left transition-colors hover:bg-surface"
     >
       <div className="mt-0.5 flex-shrink-0">
-        {post.kind === "review" ? (
-          <Star className="h-4 w-4 text-amber-400" />
-        ) : (
-          <MessageSquare className="h-4 w-4 text-accent" />
-        )}
+        <Star className="h-4 w-4 text-amber-400" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1 truncate text-sm font-medium text-foreground">
             <MapPin className="h-3 w-3 flex-shrink-0 text-muted" />
-            <PlaceName osmCanonical={post.osm_canonical} />
+            <PlaceName osmCanonical={review.osm_canonical} />
           </span>
           <span className="flex-shrink-0 text-xs text-muted">
-            {timeAgo(post.indexed_at)}
+            {timeAgo(review.indexed_at)}
           </span>
         </div>
-        {post.kind === "review" && post.rating != null && (
-          <div className="mt-0.5 flex items-center gap-0.5">
-            {Array.from({ length: 5 }, (_, i) => {
-              const display = post.rating! / 2;
-              return (
-                <Star
-                  key={i}
-                  className={`h-3 w-3 ${
-                    i < Math.floor(display)
-                      ? "fill-amber-400 text-amber-400"
-                      : i < display
-                        ? "fill-amber-400/50 text-amber-400"
-                        : "text-border"
-                  }`}
-                />
-              );
-            })}
-            <span className="ml-1 text-xs text-muted">
-              {(post.rating / 2).toFixed(1)}
-            </span>
-          </div>
-        )}
-        {post.content && (
-          <p className="mt-0.5 line-clamp-2 text-sm text-muted">
-            {post.content}
-          </p>
-        )}
-        {post.parent_uri && (
-          <span className="mt-0.5 text-[10px] text-muted/60">reply</span>
+        <div className="mt-0.5 flex items-center gap-0.5">
+          {Array.from({ length: 5 }, (_, i) => {
+            const display = review.rating / 2;
+            return (
+              <Star
+                key={i}
+                className={`h-3 w-3 ${
+                  i < Math.floor(display)
+                    ? "fill-amber-400 text-amber-400"
+                    : i < display
+                      ? "fill-amber-400/50 text-amber-400"
+                      : "text-border"
+                }`}
+              />
+            );
+          })}
+          <span className="ml-1 text-xs text-muted">
+            {(review.rating / 2).toFixed(1)}
+          </span>
+        </div>
+        {review.content && (
+          <p className="mt-0.5 line-clamp-2 text-sm text-muted">{review.content}</p>
         )}
       </div>
     </button>
   );
 }
 
+function MyPostCard({ post }: { post: MapkyPostDetails }) {
+  // Cross-namespace posts don't have an OSM anchor in the row payload; the
+  // user's anchor (if any) lives in the `parent_uri`. Surface them as a
+  // simple list — clicking goes to a future post detail page; for now we
+  // just render the content snippet.
+  return (
+    <div className="flex w-full gap-3 rounded-lg p-2 text-left">
+      <div className="mt-0.5 flex-shrink-0">
+        <MessageSquare className="h-4 w-4 text-accent" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium text-foreground">
+            {post.parent_uri ? "Reply" : "Post"}
+          </span>
+          <span className="flex-shrink-0 text-xs text-muted">
+            {timeAgo(post.indexed_at)}
+          </span>
+        </div>
+        {post.content && (
+          <p className="mt-0.5 line-clamp-2 text-sm text-muted">{post.content}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function MyPostsPanel() {
   const navigate = useNavigate();
   const { isAuthenticated, publicKey } = useAuth();
-  const { data: posts, isLoading } = useUserPosts(publicKey);
+  const { data: reviews, isLoading: reviewsLoading } = useUserReviews(publicKey);
+  const { data: posts, isLoading: postsLoading } = useUserPosts(publicKey);
 
-  // Posts are anchored to places, so dim captures while browsing them.
-  // Posts are anchored to places — hide captures entirely so the
-  // place markers your posts attach to stand alone.
   useAutoFocusLayer("places", { hide: true });
 
-  // ONE batched Nominatim lookup for every post's anchor place.
-  // Without this, each <PlaceName /> below fans out a single-id
-  // request and trips the public Nominatim rate limiter on lists
-  // with more than a handful of posts.
   const lookupRefs = useMemo(() => {
-    if (!posts) return [];
+    if (!reviews) return [];
     const seen = new Set<string>();
     const refs: Array<{ osmType: string; osmId: number }> = [];
-    for (const p of posts) {
-      const parsed = parseOsmCanonical(p.osm_canonical);
+    for (const r of reviews) {
+      const parsed = parseOsmCanonical(r.osm_canonical);
       if (!parsed) continue;
       const k = `${parsed.osmType}:${parsed.osmId}`;
       if (seen.has(k)) continue;
@@ -137,8 +146,12 @@ export function MyPostsPanel() {
       refs.push({ osmType: parsed.osmType, osmId: parsed.osmId });
     }
     return refs;
-  }, [posts]);
+  }, [reviews]);
   useOsmLookupBatch(lookupRefs);
+
+  const isLoading = reviewsLoading || postsLoading;
+  const isEmpty =
+    !isLoading && (!reviews || reviews.length === 0) && (!posts || posts.length === 0);
 
   return (
     <DiscoverSidebar title="My Posts" onClose={() => navigate({ to: "/" })}>
@@ -160,17 +173,34 @@ export function MyPostsPanel() {
           ))}
         </div>
       )}
-      {isAuthenticated && !isLoading && (!posts || posts.length === 0) && (
+      {isAuthenticated && isEmpty && (
         <p className="py-8 text-center text-sm text-muted">
           No posts yet. Review and post on places to see them here.
         </p>
       )}
+      {reviews && reviews.length > 0 && (
+        <>
+          <h4 className="mb-1 mt-2 text-xs font-medium uppercase tracking-wide text-muted">
+            Reviews
+          </h4>
+          <div className="space-y-0.5">
+            {reviews.map((r) => (
+              <MyReviewCard key={`${r.author_id}-${r.id}`} review={r} />
+            ))}
+          </div>
+        </>
+      )}
       {posts && posts.length > 0 && (
-        <div className="space-y-0.5">
-          {posts.map((post) => (
-            <MyPostCard key={`${post.author_id}-${post.id}`} post={post} />
-          ))}
-        </div>
+        <>
+          <h4 className="mb-1 mt-3 text-xs font-medium uppercase tracking-wide text-muted">
+            Posts & replies
+          </h4>
+          <div className="space-y-0.5">
+            {posts.map((p) => (
+              <MyPostCard key={`${p.author_id}-${p.id}`} post={p} />
+            ))}
+          </div>
+        </>
       )}
     </DiscoverSidebar>
   );

@@ -48,14 +48,33 @@ export interface PlaceFilters {
   tagged: boolean;
 }
 
-export interface PostDetails {
+/** A rating-mandatory review of an OSM place (`:MapkyAppReview` in Neo4j).
+ * Reviews are never replies; threaded discussion lives in `MapkyPostDetails`. */
+export interface ReviewDetails {
   id: string;
   author_id: string;
   osm_canonical: string;
   content: string | null;
-  rating: number | null;
-  kind: "review" | "post";
+  rating: number;
+  attachments: string[];
+  indexed_at: number;
+}
+
+/** A `PubkyAppPost`-shaped comment stored under the MapKy namespace at
+ * `/pub/mapky.app/posts/{id}` and indexed as a dual-labeled `:Post:MapkyAppPost`
+ * node. Used as the threaded reply unit on any MapKy resource (review, route,
+ * collection, geo-capture, sequence, incident, or another mapky-namespaced
+ * post). */
+export type MapkyPostKind = "short" | "long" | "image" | "video" | "link" | "file";
+
+export interface MapkyPostDetails {
+  id: string;
+  author_id: string;
+  content: string;
+  kind: MapkyPostKind;
   parent_uri: string | null;
+  embed_uri: string | null;
+  embed_kind: string | null;
   attachments: string[];
   indexed_at: number;
 }
@@ -96,11 +115,46 @@ export interface CollectionDetails {
   indexed_at: number;
 }
 
+export interface IncidentDetails {
+  id: string;
+  author_id: string;
+  incident_type: string;
+  severity: string;
+  lat: number;
+  lon: number;
+  heading: number | null;
+  description: string | null;
+  attachments: string[];
+  expires_at: number | null;
+  indexed_at: number;
+}
+
+export interface SequenceDetails {
+  id: string;
+  author_id: string;
+  name: string | null;
+  description: string | null;
+  kind: GeoCaptureKind;
+  captured_at_start: number;
+  captured_at_end: number;
+  capture_count: number;
+  min_lat: number | null;
+  min_lon: number | null;
+  max_lat: number | null;
+  max_lon: number | null;
+  device: string | null;
+  indexed_at: number;
+}
+
 export interface TagSearchResult {
   places: PlaceDetails[];
   collections: CollectionDetails[];
-  posts: PostDetails[];
+  reviews: ReviewDetails[];
+  posts: MapkyPostDetails[];
   routes: RouteDetails[];
+  geo_captures: GeoCaptureDetails[];
+  sequences: SequenceDetails[];
+  incidents: IncidentDetails[];
 }
 
 export type GeoCaptureKind =

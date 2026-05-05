@@ -1,7 +1,8 @@
 import { nexusClient } from "./client";
 import type {
   PlaceDetails,
-  PostDetails,
+  ReviewDetails,
+  MapkyPostDetails,
   PostTagDetails,
   CollectionDetails,
   GeoCaptureDetails,
@@ -11,6 +12,16 @@ import type {
   ViewportResponse,
   PlaceFilters,
 } from "@/types/mapky";
+
+/** Resource segments that can host a `:MapkyAppPost` reply thread. */
+export type MapkyResourceType =
+  | "reviews"
+  | "routes"
+  | "collections"
+  | "geo_captures"
+  | "sequences"
+  | "incidents"
+  | "posts";
 
 /** Zoom at or above which the server returns individual places.
  *  Below this, we get cluster bubbles. Mirror the constant in
@@ -65,18 +76,37 @@ export async function fetchPlaceDetail(
   return data;
 }
 
+/** Reviews (rating-mandatory) for a place, most recent first. */
+export async function fetchPlaceReviews(
+  osmType: string,
+  osmId: number,
+  options?: { skip?: number; limit?: number },
+): Promise<ReviewDetails[]> {
+  const { data } = await nexusClient.get<ReviewDetails[]>(
+    `/v0/mapky/place/${osmType}/${osmId}/reviews`,
+    {
+      params: {
+        skip: options?.skip ?? 0,
+        limit: options?.limit ?? 100,
+      },
+    },
+  );
+  return data;
+}
+
+/** `:MapkyAppPost` (cross-namespace comments) anchored to a place via reply
+ * chain — i.e. posts whose parent is a `:MapkyAppReview` for this place. */
 export async function fetchPlacePosts(
   osmType: string,
   osmId: number,
-  options?: { skip?: number; limit?: number; reviewsOnly?: boolean },
-): Promise<PostDetails[]> {
-  const { data } = await nexusClient.get<PostDetails[]>(
+  options?: { skip?: number; limit?: number },
+): Promise<MapkyPostDetails[]> {
+  const { data } = await nexusClient.get<MapkyPostDetails[]>(
     `/v0/mapky/place/${osmType}/${osmId}/posts`,
     {
       params: {
         skip: options?.skip ?? 0,
         limit: options?.limit ?? 100,
-        reviews_only: options?.reviewsOnly ?? false,
       },
     },
   );
@@ -99,6 +129,37 @@ export async function fetchPostTags(
 ): Promise<PostTagDetails[]> {
   const { data } = await nexusClient.get<PostTagDetails[]>(
     `/v0/mapky/posts/${authorId}/${postId}/tags`,
+  );
+  return data;
+}
+
+/** Tags on a `:MapkyAppReview`. */
+export async function fetchReviewTags(
+  authorId: string,
+  reviewId: string,
+): Promise<PostTagDetails[]> {
+  const { data } = await nexusClient.get<PostTagDetails[]>(
+    `/v0/mapky/reviews/${authorId}/${reviewId}/tags`,
+  );
+  return data;
+}
+
+/** `:MapkyAppPost` replies to any MapKy resource. The endpoint dispatches on
+ * the path segment to the matching Neo4j label. */
+export async function fetchResourceReplies(
+  resourceType: MapkyResourceType,
+  authorId: string,
+  resourceId: string,
+  options?: { skip?: number; limit?: number },
+): Promise<MapkyPostDetails[]> {
+  const { data } = await nexusClient.get<MapkyPostDetails[]>(
+    `/v0/mapky/${resourceType}/${authorId}/${resourceId}/posts`,
+    {
+      params: {
+        skip: options?.skip ?? 0,
+        limit: options?.limit ?? 100,
+      },
+    },
   );
   return data;
 }
@@ -169,12 +230,30 @@ export async function fetchCollectionTags(
   return data;
 }
 
+/** A user's `:MapkyAppPost` (cross-namespace comments). */
 export async function fetchUserPosts(
   userId: string,
   options?: { skip?: number; limit?: number },
-): Promise<PostDetails[]> {
-  const { data } = await nexusClient.get<PostDetails[]>(
+): Promise<MapkyPostDetails[]> {
+  const { data } = await nexusClient.get<MapkyPostDetails[]>(
     `/v0/mapky/posts/user/${userId}`,
+    {
+      params: {
+        skip: options?.skip ?? 0,
+        limit: options?.limit ?? 100,
+      },
+    },
+  );
+  return data;
+}
+
+/** A user's `:MapkyAppReview` rows. */
+export async function fetchUserReviews(
+  userId: string,
+  options?: { skip?: number; limit?: number },
+): Promise<ReviewDetails[]> {
+  const { data } = await nexusClient.get<ReviewDetails[]>(
+    `/v0/mapky/reviews/user/${userId}`,
     {
       params: {
         skip: options?.skip ?? 0,

@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { MessageSquarePlus, Star, TagIcon, FolderHeart } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { PostForm } from "./PostForm";
+import { makeOsmUrl } from "@/lib/mapky-specs";
+import type { MapkyPostDetails } from "@/types/mapky";
+import { ReviewForm } from "./ReviewForm";
+import { CommentForm } from "./CommentForm";
 import { TagForm } from "./TagForm";
 import { CollectionPicker } from "@/components/collection/CollectionPicker";
 
@@ -12,15 +16,35 @@ interface PlaceActionsProps {
 
 export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
   const { isAuthenticated } = useAuth();
-  const [formMode, setFormMode] = useState<"review" | "post" | "tag" | "collect" | null>(null);
+  const queryClient = useQueryClient();
+  const [formMode, setFormMode] =
+    useState<"review" | "post" | "tag" | "collect" | null>(null);
 
-  if (formMode === "review" || formMode === "post") {
+  if (formMode === "review") {
     return (
-      <PostForm
+      <ReviewForm
         osmType={osmType}
         osmId={osmId}
-        mode={formMode}
         onClose={() => setFormMode(null)}
+      />
+    );
+  }
+
+  if (formMode === "post") {
+    // Place-level post: anchor it to the OSM URL so the plugin creates a
+    // (:MapkyAppPost)-[:ABOUT]->(:Place) edge — symmetric with reviews.
+    const osmUrl = makeOsmUrl(osmType, osmId);
+    return (
+      <CommentForm
+        parent={osmUrl}
+        parentPreview={`About ${osmType}/${osmId}`}
+        onClose={() => setFormMode(null)}
+        onPosted={(post: MapkyPostDetails) => {
+          queryClient.setQueryData<MapkyPostDetails[]>(
+            ["mapky", "place", osmType, osmId, "posts"],
+            (old) => (old ? [post, ...old] : [post]),
+          );
+        }}
       />
     );
   }

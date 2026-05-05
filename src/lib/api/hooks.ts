@@ -8,15 +8,19 @@ import { useEffect, useMemo } from "react";
 import {
   fetchViewport,
   fetchPlaceDetail,
+  fetchPlaceReviews,
   fetchPlacePosts,
   fetchPlaceTags,
   fetchPostTags,
+  fetchReviewTags,
+  fetchResourceReplies,
   fetchCollection,
   fetchUserCollections,
   fetchViewportCollections,
   fetchCollectionsForPlace,
   fetchCollectionTags,
   fetchUserPosts,
+  fetchUserReviews,
   fetchViewportCaptures,
   fetchGeoCaptureDetail,
   fetchGeoCaptureTags,
@@ -28,6 +32,7 @@ import {
   fetchRouteTags,
   fetchPlaceRoutes,
   searchByTag,
+  type MapkyResourceType,
 } from "./mapky";
 import { fetchUserProfile } from "./user";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
@@ -150,14 +155,37 @@ export function usePlaceDetail(osmType: string, osmId: number) {
   });
 }
 
-export function usePlacePosts(
-  osmType: string,
-  osmId: number,
-  options?: { reviewsOnly?: boolean },
+export function usePlaceReviews(osmType: string, osmId: number) {
+  return useQuery({
+    queryKey: ["mapky", "place", osmType, osmId, "reviews"],
+    queryFn: () => fetchPlaceReviews(osmType, osmId),
+    enabled: !!osmType && !!osmId,
+    retry: noRetryOn404,
+  });
+}
+
+export function usePlacePosts(osmType: string, osmId: number) {
+  return useQuery({
+    queryKey: ["mapky", "place", osmType, osmId, "posts"],
+    queryFn: () => fetchPlacePosts(osmType, osmId),
+    enabled: !!osmType && !!osmId,
+    retry: noRetryOn404,
+  });
+}
+
+/** Replies (`:MapkyAppPost`) anchored to any MapKy resource. Mount this on
+ * route, collection, geo-capture, sequence, incident, review, or post detail
+ * views to render the reply thread. */
+export function useResourceReplies(
+  resourceType: MapkyResourceType,
+  authorId: string | null,
+  resourceId: string | null,
 ) {
   return useQuery({
-    queryKey: ["mapky", "place", osmType, osmId, "posts", options],
-    queryFn: () => fetchPlacePosts(osmType, osmId, options),
+    queryKey: ["mapky", resourceType, authorId, resourceId, "replies"],
+    queryFn: () =>
+      fetchResourceReplies(resourceType, authorId!, resourceId!),
+    enabled: !!authorId && !!resourceId,
     retry: noRetryOn404,
   });
 }
@@ -176,6 +204,15 @@ export function usePostTags(authorId: string, postId: string) {
     queryKey: ["mapky", "posts", authorId, postId, "tags"],
     queryFn: () => fetchPostTags(authorId, postId),
     enabled: !!authorId && !!postId,
+    retry: noRetryOn404,
+  });
+}
+
+export function useReviewTags(authorId: string, reviewId: string) {
+  return useQuery({
+    queryKey: ["mapky", "reviews", authorId, reviewId, "tags"],
+    queryFn: () => fetchReviewTags(authorId, reviewId),
+    enabled: !!authorId && !!reviewId,
     retry: noRetryOn404,
   });
 }
@@ -356,6 +393,14 @@ export function useUserPosts(userId: string | null) {
   return useQuery({
     queryKey: ["mapky", "posts", "user", userId],
     queryFn: () => fetchUserPosts(userId!),
+    enabled: !!userId,
+  });
+}
+
+export function useUserReviews(userId: string | null) {
+  return useQuery({
+    queryKey: ["mapky", "reviews", "user", userId],
+    queryFn: () => fetchUserReviews(userId!),
     enabled: !!userId,
   });
 }

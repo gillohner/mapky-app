@@ -17,6 +17,7 @@ import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { parseOsmCanonical } from "@/lib/map/osm-url";
 import { toast } from "sonner";
 import type { CollectionDetails } from "@/types/mapky";
+import { ResourceDiscussion } from "@/components/posts/ResourceDiscussion";
 
 interface CollectionPanelProps {
   authorId: string;
@@ -203,6 +204,12 @@ export function CollectionPanel({
               onRemove={handleRemovePlace}
             />
           </div>
+          <ResourceDiscussion
+            resourceType="collections"
+            authorId={authorId}
+            resourceId={collectionId}
+            parentPreview={collection?.name ?? "Collection"}
+          />
         </div>
       )}
     </DiscoverSidebar>

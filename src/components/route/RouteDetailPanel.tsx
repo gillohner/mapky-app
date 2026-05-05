@@ -18,6 +18,7 @@ import { RouteWaypointPins } from "@/components/map/RouteWaypointPins";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import { RouteStats } from "./RouteStats";
 import { RouteTags } from "./RouteTags";
+import { ResourceDiscussion } from "@/components/posts/ResourceDiscussion";
 
 interface RouteDetailPanelProps {
   authorId: string;
@@ -313,6 +314,13 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
               </p>
             </div>
           )}
+
+          <ResourceDiscussion
+            resourceType="routes"
+            authorId={authorId}
+            resourceId={routeId}
+            parentPreview={data.name || "Route"}
+          />
         </div>
       </DiscoverSidebar>
     </>

@@ -22,7 +22,12 @@ import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getInitials, getPubkyAvatarUrl } from "@/lib/api/user";
 import type { NominatimSearchResult } from "@/lib/api/nominatim";
-import type { PlaceDetails, PostDetails, RouteDetails } from "@/types/mapky";
+import type {
+  MapkyPostDetails,
+  PlaceDetails,
+  ReviewDetails,
+  RouteDetails,
+} from "@/types/mapky";
 import { parseOsmCanonical, fallbackPlaceLabel } from "@/lib/map/osm-url";
 import {
   placeStarsLabel,
@@ -106,16 +111,22 @@ export function SearchBar() {
           select: () => handleSelectCollection(authorId, collectionId),
         });
       }
-      for (const post of tagResults.posts ?? []) {
+      for (const review of tagResults.reviews ?? []) {
         rows.push({
-          key: `post-${post.author_id}-${post.id}`,
-          select: () => handleSelectPost(post),
+          key: `review-${review.author_id}-${review.id}`,
+          select: () => handleSelectReview(review),
         });
       }
       for (const route of tagResults.routes ?? []) {
         rows.push({
           key: `route-${route.id}`,
           select: () => handleSelectRoute(route),
+        });
+      }
+      for (const post of tagResults.posts ?? []) {
+        rows.push({
+          key: `post-${post.author_id}-${post.id}`,
+          select: () => handleSelectPost(post),
         });
       }
       return rows;
@@ -276,13 +287,12 @@ export function SearchBar() {
     });
   };
 
-  const handleSelectPost = (post: PostDetails) => {
+  const handleSelectReview = (review: ReviewDetails) => {
     setInput("");
     setQuery("");
     setShowResults(false);
 
-    // Parse osm_canonical to navigate to the place
-    const parsed = parseOsmCanonical(post.osm_canonical);
+    const parsed = parseOsmCanonical(review.osm_canonical);
     if (!parsed) return;
 
     navigate({
@@ -343,8 +353,12 @@ export function SearchBar() {
       : tagResults &&
         ((tagResults.places?.length ?? 0) > 0 ||
           (tagResults.collections?.length ?? 0) > 0 ||
+          (tagResults.reviews?.length ?? 0) > 0 ||
           (tagResults.posts?.length ?? 0) > 0 ||
-          (tagResults.routes?.length ?? 0) > 0);
+          (tagResults.routes?.length ?? 0) > 0 ||
+          (tagResults.geo_captures?.length ?? 0) > 0 ||
+          (tagResults.sequences?.length ?? 0) > 0 ||
+          (tagResults.incidents?.length ?? 0) > 0);
 
   // Hide whenever the directions sidebar is actually visible — it
   // takes the same left slot and owns the search/picker UX. The store's
@@ -530,34 +544,30 @@ export function SearchBar() {
                 </div>
               )}
 
-              {tagResults.posts?.length > 0 && (
+              {tagResults.reviews?.length > 0 && (
                 <div>
                   <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
-                    Posts
+                    Reviews
                   </div>
-                  {tagResults.posts.map((post) => {
-                    const k = `post-${post.author_id}-${post.id}`;
+                  {tagResults.reviews.map((review) => {
+                    const k = `review-${review.author_id}-${review.id}`;
                     return (
                       <button
-                        key={`${post.author_id}-${post.id}`}
-                        onClick={() => handleSelectPost(post)}
+                        key={`${review.author_id}-${review.id}`}
+                        onClick={() => handleSelectReview(review)}
                         className={`flex w-full items-center gap-3 px-4 py-2 text-left ${selectedKey === k ? "bg-accent/10" : "hover:bg-surface"}`}
                       >
                         <MessageSquare className="h-4 w-4 flex-shrink-0 text-accent" />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm text-foreground">
-                            {post.content
-                              ? post.content.slice(0, 80) +
-                                (post.content.length > 80 ? "..." : "")
-                              : post.kind === "review"
-                                ? "Review"
-                                : "Post"}
+                            {review.content
+                              ? review.content.slice(0, 80) +
+                                (review.content.length > 80 ? "..." : "")
+                              : "Review"}
                           </p>
                           <p className="text-xs text-muted">
-                            {post.kind === "review" && post.rating
-                              ? `${(post.rating / 2).toFixed(1)} stars · `
-                              : ""}
-                            <OsmPlaceName osmCanonical={post.osm_canonical} />
+                            {`${(review.rating / 2).toFixed(1)} stars · `}
+                            <OsmPlaceName osmCanonical={review.osm_canonical} />
                           </p>
                         </div>
                       </button>
@@ -593,12 +603,118 @@ export function SearchBar() {
                   })}
                 </div>
               )}
+
+              {tagResults.posts?.length > 0 && (
+                <div>
+                  <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                    Posts
+                  </div>
+                  {tagResults.posts.map((post) => {
+                    const k = `post-${post.author_id}-${post.id}`;
+                    return (
+                      <button
+                        key={k}
+                        onClick={() => handleSelectPost(post)}
+                        className={`flex w-full items-center gap-3 px-4 py-2 text-left ${selectedKey === k ? "bg-accent/10" : "hover:bg-surface"}`}
+                      >
+                        <MessageSquare className="h-4 w-4 flex-shrink-0 text-accent" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm text-foreground">
+                            {post.content
+                              ? post.content.slice(0, 80) +
+                                (post.content.length > 80 ? "..." : "")
+                              : "Post"}
+                          </p>
+                          <p className="text-xs text-muted">{post.kind}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
         </div>
       )}
     </div>
   );
+
+  function handleSelectPost(post: MapkyPostDetails) {
+    setInput("");
+    setQuery("");
+    setShowResults(false);
+
+    const visited = new Set<string>();
+    let current: MapkyPostDetails | undefined = post;
+    for (let i = 0; i < 5 && current; i++) {
+      const parentUri: string | null = current.parent_uri;
+      if (!parentUri) return;
+
+      const osm = parentUri.match(
+        /^https:\/\/www\.openstreetmap\.org\/(node|way|relation)\/(\d+)\/?$/,
+      );
+      if (osm) {
+        navigate({
+          to: "/place/$osmType/$osmId",
+          params: { osmType: osm[1], osmId: osm[2] },
+        });
+        return;
+      }
+
+      const matched = parentUri.match(
+        /^pubky:\/\/([^/]+)\/pub\/mapky\.app\/(reviews|routes|collections|geo_captures|sequences|incidents|posts)\/([^/?#]+)/,
+      );
+      if (!matched) return;
+      const parentAuthor: string = matched[1];
+      const parentType: string = matched[2];
+      const parentId: string = matched[3];
+
+      if (parentType === "routes") {
+        navigate({
+          to: "/route/$authorId/$routeId",
+          params: { authorId: parentAuthor, routeId: parentId },
+        });
+        return;
+      }
+      if (parentType === "collections") {
+        navigate({
+          to: "/collection/$authorId/$collectionId",
+          params: { authorId: parentAuthor, collectionId: parentId },
+        });
+        return;
+      }
+      if (parentType === "geo_captures") {
+        navigate({
+          to: "/capture/$authorId/$captureId",
+          params: { authorId: parentAuthor, captureId: parentId },
+        });
+        return;
+      }
+      if (parentType === "reviews") {
+        const reviewCompound = `${parentAuthor}:${parentId}`;
+        const review = tagResults?.reviews?.find(
+          (r) =>
+            r.id === reviewCompound ||
+            (r.author_id === parentAuthor && r.id === parentId),
+        );
+        if (review) handleSelectReview(review);
+        return;
+      }
+      if (parentType === "posts") {
+        const key = `${parentAuthor}:${parentId}`;
+        if (visited.has(key)) return;
+        visited.add(key);
+        current = tagResults?.posts?.find(
+          (p) =>
+            p.id === parentId &&
+            (p.author_id === parentAuthor || p.id === key),
+        );
+        continue;
+      }
+      // sequences / incidents — no detail route yet; bail silently.
+      return;
+    }
+  }
 
   function handleSelectRoute(route: RouteDetails) {
     setInput("");

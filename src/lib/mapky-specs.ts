@@ -1,12 +1,13 @@
 import {
   MapkySpecsBuilder,
-  MapkyAppPostKind,
+  PubkyAppPostKind,
+  PubkyAppPostEmbed,
   GeoCaptureKind,
   PubkySpecsBuilder,
   RouteActivityType,
 } from "mapky-app-specs";
 
-import type { GeoCaptureKind as GeoCaptureKindType } from "@/types/mapky";
+import type { GeoCaptureKind as GeoCaptureKindType, MapkyPostKind } from "@/types/mapky";
 import type { Waypoint } from "@/lib/routing/types";
 
 export function makeOsmUrl(osmType: string, osmId: number): string {
@@ -84,7 +85,47 @@ export function createUserProfile(
   return { path, json };
 }
 
-export interface CreatePostResult {
+export interface CreateReviewResult {
+  /** Homeserver path to write the blob, e.g. /pub/mapky.app/reviews/XXXX */
+  path: string;
+  /** Full pubky:// URI */
+  url: string;
+  /** JSON string to write */
+  json: string;
+}
+
+/** Create a `MapkyAppReview` — rating-mandatory, place-anchored, never a reply. */
+export function createReview(
+  pubkyId: string,
+  osmType: string,
+  osmId: number,
+  opts: {
+    rating: number;
+    content?: string;
+    attachments?: string[];
+  },
+): CreateReviewResult {
+  const builder = new MapkySpecsBuilder(pubkyId);
+  const place = makeOsmUrl(osmType, osmId);
+
+  const result = builder.createReview(
+    place,
+    opts.rating,
+    opts.content || null,
+    opts.attachments?.length ? opts.attachments : null,
+  );
+
+  const json = JSON.stringify(result.review.toJson());
+  const path = result.meta.path;
+  const url = result.meta.url;
+
+  result.free();
+  builder.free();
+
+  return { path, url, json };
+}
+
+export interface CreateMapkyPostResult {
   /** Homeserver path to write the blob, e.g. /pub/mapky.app/posts/XXXX */
   path: string;
   /** Full pubky:// URI */
@@ -93,30 +134,42 @@ export interface CreatePostResult {
   json: string;
 }
 
-export function createPost(
-  pubkyId: string,
-  osmType: string,
-  osmId: number,
-  opts: {
-    kind: "review" | "post";
-    content?: string;
-    rating?: number;
-    attachments?: string[];
-    parent?: string;
-  },
-): CreatePostResult {
-  const builder = new MapkySpecsBuilder(pubkyId);
-  const place = makeOsmUrl(osmType, osmId);
-  const kind =
-    opts.kind === "review" ? MapkyAppPostKind.Review : MapkyAppPostKind.Post;
+const MAPKY_POST_KIND_MAP: Record<MapkyPostKind, PubkyAppPostKind> = {
+  short: PubkyAppPostKind.Short,
+  long: PubkyAppPostKind.Long,
+  image: PubkyAppPostKind.Image,
+  video: PubkyAppPostKind.Video,
+  link: PubkyAppPostKind.Link,
+  file: PubkyAppPostKind.File,
+};
 
-  const result = builder.createPost(
+/** Create a `PubkyAppPost` (generic comment / threaded reply) stored under the
+ * MapKy namespace at `/pub/mapky.app/posts/{id}`. The `parent` URI can target
+ * any MapKy resource (review, route, collection, geo-capture, sequence,
+ * incident, or another mapky-namespaced post). Cross-domain parents are
+ * accepted but only edge-indexed when the target is a MapKy resource. */
+export function createMapkyPost(
+  pubkyId: string,
+  opts: {
+    content: string;
+    kind?: MapkyPostKind;
+    parent?: string;
+    embed?: { uri: string; kind: MapkyPostKind };
+    attachments?: string[];
+  },
+): CreateMapkyPostResult {
+  const builder = new MapkySpecsBuilder(pubkyId);
+  const kind = MAPKY_POST_KIND_MAP[opts.kind ?? "short"];
+  const embed = opts.embed
+    ? new PubkyAppPostEmbed(opts.embed.uri, MAPKY_POST_KIND_MAP[opts.embed.kind])
+    : null;
+
+  const result = builder.createMapkyPost(
+    opts.content,
     kind,
-    place,
-    opts.content || null,
-    opts.rating ?? null,
-    opts.attachments?.length ? opts.attachments : null,
     opts.parent ?? null,
+    embed,
+    opts.attachments?.length ? opts.attachments : null,
   );
 
   const json = JSON.stringify(result.post.toJson());
@@ -519,6 +572,7 @@ export function createRouteTag(
   return { path, json };
 }
 
+/** Tag a cross-namespace `MapkyAppPost` (PubkyAppPost stored at /pub/mapky.app/posts/). */
 export function createPostTag(
   pubkyId: string,
   authorId: string,
@@ -529,6 +583,26 @@ export function createPostTag(
   const postUri = `pubky://${authorId}/pub/mapky.app/posts/${postId}`;
 
   const result = builder.createPlaceTag(postUri, label);
+  const json = JSON.stringify(result.tag.toJson());
+  const path = result.meta.path;
+
+  result.free();
+  builder.free();
+
+  return { path, json };
+}
+
+/** Tag a `MapkyAppReview`. */
+export function createReviewTag(
+  pubkyId: string,
+  authorId: string,
+  reviewId: string,
+  label: string,
+): CreateTagResult {
+  const builder = new MapkySpecsBuilder(pubkyId);
+  const reviewUri = `pubky://${authorId}/pub/mapky.app/reviews/${reviewId}`;
+
+  const result = builder.createPlaceTag(reviewUri, label);
   const json = JSON.stringify(result.tag.toJson());
   const path = result.meta.path;
 
