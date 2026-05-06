@@ -55,9 +55,15 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # Production env vars — override via repo Variables/Secrets if you
-          # want a different nexus URL etc.
+          # Production env vars — pulled from repo Variables (or Secrets, if
+          # you decide to treat the key as sensitive). Vite inlines `VITE_*`
+          # at build time, so any default here ends up baked into the bundle.
           VITE_NEXUS_URL: ${{ vars.VITE_NEXUS_URL || 'https://nexus.mapky.app' }}
+          # Protomaps client API key. Without it the bundle calls
+          # `api.protomaps.com/tiles/v4.json?key=` (empty) → 403 + missing
+          # CORS, and the basemap fails to render. Set the GH variable
+          # `VITE_PROTOMAPS_KEY` to your key value.
+          VITE_PROTOMAPS_KEY: ${{ vars.VITE_PROTOMAPS_KEY }}
 
       - name: Setup SSH
         env:
