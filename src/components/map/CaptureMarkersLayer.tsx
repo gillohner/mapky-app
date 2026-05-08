@@ -5,7 +5,7 @@ import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import {
-  useViewportCaptures,
+  useMapViewport,
   useSequenceMembersFanOut,
 } from "@/lib/api/hooks";
 import { useLayerOpacityMultiplier } from "@/lib/map/dim";
@@ -148,7 +148,13 @@ export function CaptureMarkersLayer() {
     };
   }, [map, updateBounds]);
 
-  const { data: captures } = useViewportCaptures(bounds);
+  // Composite map-viewport — shared queryKey with PlaceAnnotationsLayer
+  // and SequenceCoverageLayer so the three render off ONE request per
+  // pan. Zoom + filters come from stores so the inputs to `useMapViewport`
+  // are identical across consumers, satisfying the dedup invariant.
+  const zoom = useMapStore((s) => s.zoom);
+  const placesFilters = useUiStore((s) => s.placesFilters);
+  const captures = useMapViewport(bounds, zoom, placesFilters).data?.captures;
   const visibleIds = useUiStore((s) => s.visibleCaptureIds);
   const pinned = useUiStore((s) => s.pinnedCaptures);
   // Pull in every sequence's full member list so dots that anchor the

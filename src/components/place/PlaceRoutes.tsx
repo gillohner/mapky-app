@@ -1,5 +1,5 @@
 import { Route as RouteIcon } from "lucide-react";
-import { usePlaceRoutes } from "@/lib/api/hooks";
+import { usePlaceFullRoutes } from "@/lib/api/hooks";
 import { RouteCard } from "@/components/route/RouteCard";
 
 interface PlaceRoutesProps {
@@ -14,7 +14,7 @@ interface PlaceRoutesProps {
  * matches so the panel doesn't have an empty state every time.
  */
 export function PlaceRoutes({ osmType, osmId }: PlaceRoutesProps) {
-  const { data: routes, isLoading } = usePlaceRoutes(osmType, osmId);
+  const { data: routes, isLoading } = usePlaceFullRoutes(osmType, osmId);
 
   if (isLoading) {
     return (

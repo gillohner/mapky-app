@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { Star, FileDown, ImageOff, Pencil } from "lucide-react";
 import {
-  usePlaceReviews,
+  usePlaceFullReviews,
   useResourceReplies,
   useUserProfile,
 } from "@/lib/api/hooks";
@@ -256,7 +256,7 @@ interface PlaceReviewsProps {
 }
 
 export function PlaceReviews({ osmType, osmId }: PlaceReviewsProps) {
-  const { data: reviews, isLoading } = usePlaceReviews(osmType, osmId);
+  const { data: reviews, isLoading } = usePlaceFullReviews(osmType, osmId);
 
   if (isLoading) {
     return (

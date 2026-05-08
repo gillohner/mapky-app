@@ -7,7 +7,9 @@ import {
 import { useEffect, useMemo } from "react";
 import {
   fetchViewport,
+  fetchViewportAll,
   fetchPlaceDetail,
+  fetchPlaceDetailFull,
   fetchPlaceReviews,
   fetchPlacePosts,
   fetchPlaceTags,
@@ -50,11 +52,14 @@ import type {
 } from "./nominatim";
 import type {
   GeoCaptureDetails,
+  MultiViewportResponse,
   PlaceFilters,
+  PlaceFullResponse,
   RouteFull,
   RouteFullJson,
   ViewportBounds,
   ViewportResponse,
+  ViewportLayer,
 } from "@/types/mapky";
 import { parseSequenceUri } from "@/lib/map/sequence-uri";
 
@@ -92,6 +97,57 @@ function snapBoundsForCache(
     maxLat: snap(bounds.maxLat + latPad, 1),
     maxLon: snap(bounds.maxLon + lonPad, 1),
   };
+}
+
+/** Layers always requested by `useMapViewport`. Sorted alphabetically so
+ * the resulting `include` string is identical regardless of how the
+ * source array is shaped — identical query string ⇒ identical Redis key
+ * server-side and identical TanStack queryKey client-side. */
+const MAP_VIEWPORT_LAYERS: readonly ViewportLayer[] = [
+  "captures",
+  "collections",
+  "places",
+  "routes",
+] as const;
+
+/**
+ * Composite map-viewport hook for always-mounted map layers. Hits the
+ * plugin's `/v0/mapky/viewport/all` endpoint with all four slices
+ * (places + collections + captures + routes) in one request — server
+ * runs them in parallel via `tokio::try_join!` so the wall-clock cost
+ * is max(t_layers), not sum(t_layers).
+ *
+ * Use this in components that mount on the map and react to pan/zoom.
+ * All such consumers share a single queryKey for the same
+ * (bounds, zoom, filters) tuple, so TanStack dedups them into one
+ * network round-trip per pan no matter how many layers subscribe.
+ *
+ * Sidebar lists (PlaceList, CollectionList, …) stay on the per-layer
+ * hooks below — they have different lifecycles (only mounted when the
+ * user opens the sidebar) and different zoom semantics (PlaceList
+ * pins zoom to the cluster threshold to always get individual places).
+ */
+export function useMapViewport(
+  bounds: ViewportBounds | null,
+  zoom: number,
+  filters: PlaceFilters,
+) {
+  const padded = useMemo(() => snapBoundsForCache(bounds), [bounds]);
+  const snappedZoom = Math.round(zoom);
+  return useQuery<MultiViewportResponse>({
+    queryKey: [
+      "mapky",
+      "viewport-all",
+      padded,
+      snappedZoom,
+      filters,
+    ] as const,
+    queryFn: () =>
+      fetchViewportAll(padded!, snappedZoom, filters, MAP_VIEWPORT_LAYERS),
+    enabled: !!padded,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
 }
 
 /**
@@ -153,6 +209,60 @@ export function usePlaceDetail(osmType: string, osmId: number) {
     enabled: !!osmType && !!osmId,
     retry: noRetryOn404,
   });
+}
+
+/**
+ * Shared queryKey for the composite place-detail (`/place/.../full`).
+ * Every `usePlaceFull*` slice hook below produces this exact key for the
+ * same `(osmType, osmId)` so TanStack dedups them into a single network
+ * request when PlacePanel mounts six sub-components at once.
+ *
+ * `staleTime: 60s` mitigates the back-navigation refetch noted in
+ * BACKLOG.md — a place that was open a moment ago doesn't need a fresh
+ * round-trip just because the user tapped Back and then the same row
+ * again.
+ */
+function placeFullKey(osmType: string, osmId: number) {
+  return ["mapky", "place-full", osmType, osmId] as const;
+}
+
+const PLACE_FULL_STALE_MS = 60_000;
+
+function usePlaceFullSlice<T>(
+  osmType: string,
+  osmId: number,
+  select: (data: PlaceFullResponse) => T,
+) {
+  return useQuery({
+    queryKey: placeFullKey(osmType, osmId),
+    queryFn: () => fetchPlaceDetailFull(osmType, osmId),
+    enabled: !!osmType && !!osmId,
+    staleTime: PLACE_FULL_STALE_MS,
+    retry: noRetryOn404,
+    select,
+  });
+}
+
+/** Composite-backed slice hooks — drop-in replacements for the per-endpoint
+ * hooks below, intended for PlacePanel sub-components. They share a query
+ * key, so all five fire one network request total per place open. */
+export function usePlaceFullDetail(osmType: string, osmId: number) {
+  return usePlaceFullSlice(osmType, osmId, (d) => d.detail);
+}
+export function usePlaceFullReviews(osmType: string, osmId: number) {
+  return usePlaceFullSlice(osmType, osmId, (d) => d.reviews);
+}
+export function usePlaceFullPosts(osmType: string, osmId: number) {
+  return usePlaceFullSlice(osmType, osmId, (d) => d.posts);
+}
+export function usePlaceFullTags(osmType: string, osmId: number) {
+  return usePlaceFullSlice(osmType, osmId, (d) => d.tags);
+}
+export function usePlaceFullCollections(osmType: string, osmId: number) {
+  return usePlaceFullSlice(osmType, osmId, (d) => d.collections);
+}
+export function usePlaceFullRoutes(osmType: string, osmId: number) {
+  return usePlaceFullSlice(osmType, osmId, (d) => d.routes);
 }
 
 export function usePlaceReviews(osmType: string, osmId: number) {

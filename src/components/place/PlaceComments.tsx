@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pencil, Reply } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  usePlacePosts,
+  usePlaceFullPosts,
   useResourceReplies,
   useUserProfile,
 } from "@/lib/api/hooks";
@@ -140,7 +140,7 @@ interface PlaceCommentsProps {
 }
 
 export function PlaceComments({ osmType, osmId }: PlaceCommentsProps) {
-  const { data: posts, isLoading } = usePlacePosts(osmType, osmId);
+  const { data: posts, isLoading } = usePlaceFullPosts(osmType, osmId);
 
   if (isLoading) {
     return (

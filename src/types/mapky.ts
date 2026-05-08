@@ -48,6 +48,34 @@ export interface PlaceFilters {
   tagged: boolean;
 }
 
+/** Layer selector for the composite `/v0/mapky/viewport/all` endpoint.
+ * Maps to the `include` query param; flags toggle whether each layer's
+ * Neo4j query runs server-side. */
+export type ViewportLayer = "places" | "collections" | "captures" | "routes";
+
+/** Response envelope from `/v0/mapky/place/{osm_type}/{osm_id}/full`.
+ * All six slices are served in one request — replaces the six independent
+ * fetches PlacePanel used to mount on every place open. */
+export interface PlaceFullResponse {
+  detail: PlaceDetails;
+  reviews: ReviewDetails[];
+  posts: MapkyPostDetails[];
+  tags: PostTagDetails[];
+  collections: CollectionDetails[];
+  routes: RouteDetails[];
+}
+
+/** Response envelope from `/v0/mapky/viewport/all`. Each branch is
+ * present iff the layer was in `include`; the four `Vec<T>` fields
+ * (`collections`, `captures`, `routes`) come back as plain arrays,
+ * `places` as the discriminated cluster/places envelope. */
+export interface MultiViewportResponse {
+  places?: ViewportResponse;
+  collections?: CollectionDetails[];
+  captures?: GeoCaptureDetails[];
+  routes?: RouteDetails[];
+}
+
 /** A rating-mandatory review of an OSM place (`:MapkyAppReview` in Neo4j).
  * Reviews are never replies; threaded discussion lives in `MapkyPostDetails`. */
 export interface ReviewDetails {

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Loader2, Navigation } from "lucide-react";
 import { toast } from "sonner";
-import { usePlaceDetail } from "@/lib/api/hooks";
+import { usePlaceFullDetail } from "@/lib/api/hooks";
 import { lookupOsmElement } from "@/lib/api/nominatim";
 import { useUserLocation } from "@/lib/hooks/useUserLocation";
 
@@ -38,7 +38,7 @@ export function PlaceDirectionsButton({
   fallbackName: _fallbackName,
 }: PlaceDirectionsButtonProps) {
   const navigate = useNavigate();
-  const { data: place } = usePlaceDetail(osmType, osmId);
+  const { data: place } = usePlaceFullDetail(osmType, osmId);
   const userLoc = useUserLocation();
   const [resolving, setResolving] = useState(false);
 

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
-import { usePlaceDetail, useOsmLookup } from "@/lib/api/hooks";
+import { usePlaceFullDetail, useOsmLookup } from "@/lib/api/hooks";
 import { categoryIcon } from "@/lib/places/category-icon";
 
 const SEL_SOURCE = "mapky-selected-place";
@@ -170,11 +170,11 @@ export function SelectedPlaceMarker() {
   const [iconSlot, setIconSlot] = useState<HTMLSpanElement | null>(null);
 
   // Pull the indexer's rating so the selected pin can mirror the
-  // hover-balloon chip ("★ 4.6"). usePlaceDetail's queryKey matches
-  // PlaceList / PlacePanel, so this is a free cache hit when the user
-  // selected from a list — only the first selection from a search
-  // result actually fetches.
-  const { data: place } = usePlaceDetail(
+  // hover-balloon chip ("★ 4.6"). Reads off the place-full composite
+  // cache so we share the queryKey with PlacePanel and its sub-components
+  // — selecting a feature fires ONE network round-trip total instead of
+  // duplicating the place-detail fetch.
+  const { data: place } = usePlaceFullDetail(
     selected?.osmType ?? "",
     selected?.osmId ?? 0,
   );

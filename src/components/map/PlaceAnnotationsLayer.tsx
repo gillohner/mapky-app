@@ -12,7 +12,7 @@ import maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
-import { useViewportPlaces, useOsmLookupBatch } from "@/lib/api/hooks";
+import { useMapViewport, useOsmLookupBatch } from "@/lib/api/hooks";
 import { useLayerOpacityMultiplier } from "@/lib/map/dim";
 import { fetchCollection } from "@/lib/api/mapky";
 import { parseOsmCanonical } from "@/lib/map/osm-url";
@@ -97,14 +97,13 @@ export function PlaceAnnotationsLayer() {
       : null,
   );
 
-  // One zoom-aware query → either clusters or places. The hook snaps
-  // zoom to even integers so a smooth zoom doesn't fan out queries.
-  const viewportQuery = useViewportPlaces(
-    placesEnabled ? bounds : null,
-    zoom,
-    placesFilters,
-  );
-  const envelope = viewportQuery.data;
+  // Composite map-viewport: shared queryKey with CaptureMarkersLayer
+  // and SequenceCoverageLayer so all three render off ONE request per
+  // pan. We always pass `bounds` (not gated on `placesEnabled`) so the
+  // request fires even when the place layer is hidden — the captures
+  // layer still needs it. We just gate the rendered slice locally.
+  const viewportQuery = useMapViewport(bounds, zoom, placesFilters);
+  const envelope = placesEnabled ? viewportQuery.data?.places : undefined;
 
   // ─── Active collection memberships → collection-color border ────
   const activeCollections = useUiStore((s) => s.activeCollectionOverlays);

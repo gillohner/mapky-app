@@ -11,6 +11,9 @@ import type {
   ViewportBounds,
   ViewportResponse,
   PlaceFilters,
+  ViewportLayer,
+  MultiViewportResponse,
+  PlaceFullResponse,
 } from "@/types/mapky";
 
 /** Resource segments that can host a `:MapkyAppPost` reply thread. */
@@ -66,12 +69,77 @@ export async function fetchViewport(
   return data;
 }
 
+/**
+ * Composite map-viewport fetch: one request, up to four layers in parallel
+ * server-side. Backed by the plugin's `/v0/mapky/viewport/all` endpoint.
+ *
+ * `include` selects which layers to compute. Layers not in `include` are
+ * omitted from the response (`undefined`). The place filters are only
+ * meaningful when `places` is included; harmless to pass through otherwise
+ * (the server ignores them when the place layer isn't in `include`).
+ *
+ * Used by `useViewportAll` and the per-slice hooks (`useViewportPlaces`,
+ * `useViewportCollections`, `useViewportCaptures`, `useViewportRoutes`)
+ * which share a query key and split the response via TanStack `select`,
+ * so all consumers of the same bbox/zoom/filters/include set share one
+ * round-trip.
+ */
+export async function fetchViewportAll(
+  bounds: ViewportBounds,
+  zoom: number,
+  filters: PlaceFilters,
+  include: readonly ViewportLayer[],
+  limit = 500,
+): Promise<MultiViewportResponse> {
+  const { data } = await nexusClient.get<MultiViewportResponse>(
+    "/v0/mapky/viewport/all",
+    {
+      params: {
+        min_lat: bounds.minLat,
+        min_lon: bounds.minLon,
+        max_lat: bounds.maxLat,
+        max_lon: bounds.maxLon,
+        zoom: Math.max(0, Math.min(22, Math.floor(zoom))),
+        limit,
+        include: include.join(","),
+        ...(filters.bitcoin ? { bitcoin: true } : null),
+        ...(filters.reviewed ? { reviewed: true } : null),
+        ...(filters.tagged ? { tagged: true } : null),
+      },
+    },
+  );
+  return data;
+}
+
 export async function fetchPlaceDetail(
   osmType: string,
   osmId: number,
 ): Promise<PlaceDetails> {
   const { data } = await nexusClient.get<PlaceDetails>(
     `/v0/mapky/place/${osmType}/${osmId}`,
+  );
+  return data;
+}
+
+/**
+ * Composite place-detail fetch: one request, six slices.
+ *
+ * Backed by `/v0/mapky/place/{osm_type}/{osm_id}/full`. Server-side runs
+ * detail synchronously (need lat/lon for routes-near + 404 short-circuit)
+ * then fans out reviews + posts + tags + collections + routes via
+ * `tokio::try_join!`. Wall-clock is `t_detail + max(t_others)`.
+ *
+ * The frontend's PlacePanel sub-components (`PlaceTags`, `PlaceReviews`,
+ * `PlaceComments`, `PlaceCollections`, `PlaceRoutes`) all read slices off
+ * this single composite via `usePlaceFull*` selectors — so opening a
+ * place fires ONE request instead of six.
+ */
+export async function fetchPlaceDetailFull(
+  osmType: string,
+  osmId: number,
+): Promise<PlaceFullResponse> {
+  const { data } = await nexusClient.get<PlaceFullResponse>(
+    `/v0/mapky/place/${osmType}/${osmId}/full`,
   );
   return data;
 }

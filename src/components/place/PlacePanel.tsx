@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { usePlaceDetail, useCollection } from "@/lib/api/hooks";
+import { usePlaceFullDetail, useCollection } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
@@ -55,7 +55,7 @@ export function PlacePanel({
   from,
 }: PlacePanelProps) {
   const navigate = useNavigate();
-  const { data: place } = usePlaceDetail(osmType, osmId);
+  const { data: place } = usePlaceFullDetail(osmType, osmId);
   const { data: parentCollection } = useCollection(
     fromAuthor ?? "",
     fromCollection ?? "",

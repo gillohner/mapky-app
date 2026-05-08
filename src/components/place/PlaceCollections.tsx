@@ -1,6 +1,6 @@
 import { FolderHeart, MapPin } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useCollectionsForPlace } from "@/lib/api/hooks";
+import { usePlaceFullCollections } from "@/lib/api/hooks";
 import { CreatorBadge } from "@/components/discover/CreatorBadge";
 
 interface PlaceCollectionsProps {
@@ -10,7 +10,7 @@ interface PlaceCollectionsProps {
 
 export function PlaceCollections({ osmType, osmId }: PlaceCollectionsProps) {
   const navigate = useNavigate();
-  const { data: collections } = useCollectionsForPlace(osmType, osmId);
+  const { data: collections } = usePlaceFullCollections(osmType, osmId);
 
   if (!collections || collections.length === 0) return null;
 

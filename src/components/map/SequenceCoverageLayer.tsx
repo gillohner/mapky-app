@@ -5,7 +5,7 @@ import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import {
-  useViewportCaptures,
+  useMapViewport,
   useSequenceMembersFanOut,
 } from "@/lib/api/hooks";
 import { useLayerOpacityMultiplier } from "@/lib/map/dim";
@@ -133,7 +133,11 @@ export function SequenceCoverageLayer() {
     };
   }, [map, updateBounds]);
 
-  const { data: captures } = useViewportCaptures(bounds);
+  // Composite map-viewport — shares its query with PlaceAnnotationsLayer
+  // and CaptureMarkersLayer so all three render off one request per pan.
+  const zoom = useMapStore((s) => s.zoom);
+  const placesFilters = useUiStore((s) => s.placesFilters);
+  const captures = useMapViewport(bounds, zoom, placesFilters).data?.captures;
   const visibleIds = useUiStore((s) => s.visibleCaptureIds);
   const pinned = useUiStore((s) => s.pinnedCaptures);
   // Fan out a sequence-members fetch for every sequence the viewport
