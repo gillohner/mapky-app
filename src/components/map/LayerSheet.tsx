@@ -11,11 +11,10 @@ import {
   Mountain,
   Building2,
   Bitcoin,
-  Star,
-  Tag,
 } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
+import { PlaceFilterControls } from "@/components/place/PlaceFilterControls";
 
 /**
  * Layers sheet — Mapky data toggles + basemap + raster/extrusion
@@ -34,8 +33,8 @@ export function LayerSheet() {
   const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
   const toggleCapturesLayer = useUiStore((s) => s.toggleCapturesLayer);
 
-  const placesFilters = useUiStore((s) => s.placesFilters);
-  const togglePlacesFilter = useUiStore((s) => s.togglePlacesFilter);
+  const btcOverlayVisible = useUiStore((s) => s.btcOverlayVisible);
+  const toggleBtcOverlay = useUiStore((s) => s.toggleBtcOverlay);
 
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
   const toggleMetroOverlay = useUiStore((s) => s.toggleMetroOverlay);
@@ -137,30 +136,11 @@ export function LayerSheet() {
           <Toggle
             icon={<MapPin className="h-4 w-4" />}
             label="Places"
-            description="OSM places — Bitcoin merchants, reviewed spots, tagged POIs"
+            description="OSM places with reviews, tags, posts, or collections"
             on={placesLayerVisible}
             onChange={togglePlacesLayer}
           />
-          <FilterPillRow disabled={!placesLayerVisible}>
-            <FilterPill
-              icon={<Bitcoin className="h-3.5 w-3.5" />}
-              label="Bitcoin"
-              on={placesFilters.bitcoin}
-              onClick={() => togglePlacesFilter("bitcoin")}
-            />
-            <FilterPill
-              icon={<Star className="h-3.5 w-3.5" />}
-              label="Reviewed"
-              on={placesFilters.reviewed}
-              onClick={() => togglePlacesFilter("reviewed")}
-            />
-            <FilterPill
-              icon={<Tag className="h-3.5 w-3.5" />}
-              label="Tagged"
-              on={placesFilters.tagged}
-              onClick={() => togglePlacesFilter("tagged")}
-            />
-          </FilterPillRow>
+          <PlaceFilterControls disabled={!placesLayerVisible} />
           <Toggle
             icon={<Camera className="h-4 w-4" />}
             label="Captures"
@@ -227,6 +207,13 @@ export function LayerSheet() {
 
         {/* Overlays */}
         <Section title="Overlays" lastSection>
+          <Toggle
+            icon={<Bitcoin className="h-4 w-4" />}
+            label="Bitcoin POIs"
+            description="BTCMap merchants — independent of Mapky place filters"
+            on={btcOverlayVisible}
+            onChange={toggleBtcOverlay}
+          />
           <Toggle
             icon={<TrainFront className="h-4 w-4" />}
             label="Rail & metro"
@@ -296,65 +283,6 @@ function Toggle({
         <span className="block text-[11px] text-muted">{description}</span>
       </span>
       <Switch on={on} />
-    </button>
-  );
-}
-
-/**
- * Container row for a small group of FilterPill children. Sits under
- * the parent Toggle, slightly indented and visually de-emphasized
- * when the parent is off (so users see the filters but understand
- * they're not active until the layer is enabled).
- */
-function FilterPillRow({
-  children,
-  disabled,
-}: {
-  children: React.ReactNode;
-  disabled?: boolean;
-}) {
-  return (
-    <div
-      className={`flex flex-wrap gap-1 pl-7 pr-2 pb-1.5 ${
-        disabled ? "opacity-50 pointer-events-none" : ""
-      }`}
-      aria-hidden={disabled}
-    >
-      {children}
-    </div>
-  );
-}
-
-/**
- * Toggleable filter chip — narrows the parent layer's visible set.
- * Active = accent border + accent text; inactive = muted border. The
- * chip layout matches the Tag/category chips in the discover sidebar
- * so the visual language stays consistent.
- */
-function FilterPill({
-  icon,
-  label,
-  on,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  on: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      className={`flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition-colors ${
-        on
-          ? "border-accent bg-accent text-white"
-          : "border-border bg-surface text-foreground hover:border-accent"
-      }`}
-    >
-      <span aria-hidden>{icon}</span>
-      <span>{label}</span>
     </button>
   );
 }

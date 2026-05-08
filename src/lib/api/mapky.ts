@@ -16,6 +16,21 @@ import type {
   PlaceFullResponse,
 } from "@/types/mapky";
 
+/** Build the `activity` + `min_rating` query params for the place
+ *  viewport endpoints. Sorted activity tokens keep the cache key stable
+ *  regardless of selection order; both fields are omitted when empty so
+ *  the no-filter case sends the smallest possible URL. */
+function placeFilterParams(filters: PlaceFilters): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (filters.activities.length > 0) {
+    out.activity = [...filters.activities].sort().join(",");
+  }
+  if (filters.minRating !== undefined && filters.minRating > 0) {
+    out.min_rating = filters.minRating.toString();
+  }
+  return out;
+}
+
 /** Resource segments that can host a `:MapkyAppPost` reply thread. */
 export type MapkyResourceType =
   | "reviews"
@@ -58,11 +73,7 @@ export async function fetchViewport(
         max_lon: bounds.maxLon,
         zoom: Math.max(0, Math.min(22, Math.floor(zoom))),
         limit,
-        // Send only flags that are on so the cache key stays compact
-        // when no filters are active (the default case).
-        ...(filters.bitcoin ? { bitcoin: true } : null),
-        ...(filters.reviewed ? { reviewed: true } : null),
-        ...(filters.tagged ? { tagged: true } : null),
+        ...placeFilterParams(filters),
       },
     },
   );
@@ -102,9 +113,40 @@ export async function fetchViewportAll(
         zoom: Math.max(0, Math.min(22, Math.floor(zoom))),
         limit,
         include: include.join(","),
-        ...(filters.bitcoin ? { bitcoin: true } : null),
-        ...(filters.reviewed ? { reviewed: true } : null),
-        ...(filters.tagged ? { tagged: true } : null),
+        ...placeFilterParams(filters),
+      },
+    },
+  );
+  return data;
+}
+
+/** Bitcoin-accepting POIs from BTCMap, plotted by the standalone BTC
+ *  overlay layer. Independent of `placesFilters` — this overlay sits
+ *  on top of the Places layer rather than narrowing it. */
+export interface BitcoinPoi {
+  osm_type: string;
+  osm_id: number;
+  lat: number;
+  lon: number;
+  name: string | null;
+  onchain: boolean;
+  lightning: boolean;
+  lightning_contactless: boolean;
+}
+
+export async function fetchBtcViewport(
+  bounds: ViewportBounds,
+  limit = 500,
+): Promise<BitcoinPoi[]> {
+  const { data } = await nexusClient.get<BitcoinPoi[]>(
+    "/v0/mapky/btc/viewport",
+    {
+      params: {
+        min_lat: bounds.minLat,
+        min_lon: bounds.minLon,
+        max_lat: bounds.maxLat,
+        max_lon: bounds.maxLon,
+        limit,
       },
     },
   );

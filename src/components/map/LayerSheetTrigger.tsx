@@ -22,16 +22,24 @@ export function LayerSheetTrigger() {
 
   // Light "active dot" hint when the user has flipped any toggle off
   // its default — a non-default overlay/basemap is on, a Mapky data
-  // layer has been turned off, or any Places filter pill is active.
+  // layer has been turned off, or any place filter is active.
   const metro = useUiStore((s) => s.metroOverlayVisible);
+  const btcOverlay = useUiStore((s) => s.btcOverlayVisible);
   const filters = useUiStore((s) => s.placesFilters);
   const buildings = useUiStore((s) => s.buildings3DVisible);
   const places = useUiStore((s) => s.placesLayerVisible);
   const captures = useUiStore((s) => s.capturesLayerVisible);
   const basemap = useMapStore((s) => s.basemap);
-  const filtersActive = filters.bitcoin || filters.reviewed || filters.tagged;
+  const filtersActive =
+    filters.activities.length > 0 || (filters.minRating ?? 0) > 0;
   const nonDefault =
-    metro || filtersActive || buildings || !places || !captures || basemap !== "default";
+    metro ||
+    btcOverlay ||
+    filtersActive ||
+    buildings ||
+    !places ||
+    !captures ||
+    basemap !== "default";
 
   return (
     <button

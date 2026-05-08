@@ -24,6 +24,7 @@ import {
   fetchUserPosts,
   fetchUserReviews,
   fetchViewportCaptures,
+  fetchBtcViewport,
   fetchGeoCaptureDetail,
   fetchGeoCaptureTags,
   fetchSequenceCaptures,
@@ -530,6 +531,20 @@ export function useCollectionsForPlace(osmType: string, osmId: number) {
     queryFn: () => fetchCollectionsForPlace(osmType, osmId),
     enabled: !!osmType && !!osmId,
     retry: noRetryOn404,
+  });
+}
+
+/** Bitcoin POI overlay — independent of the place layer. Fed by
+ *  `/v0/mapky/btc/viewport`, queried only when the BTC overlay is on
+ *  (caller passes `null` bounds when off to short-circuit). */
+export function useBtcViewport(bounds: ViewportBounds | null) {
+  const padded = useMemo(() => snapBoundsForCache(bounds), [bounds]);
+  return useQuery({
+    queryKey: ["mapky", "btc", "viewport", padded] as const,
+    queryFn: () => fetchBtcViewport(padded!),
+    enabled: !!padded,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
 }
 

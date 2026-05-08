@@ -8,6 +8,7 @@ import { SequenceCoverageLayer } from "@/components/map/SequenceCoverageLayer";
 import { PoiClickHandler } from "@/components/map/PoiClickHandler";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
 import { RailOverlayLayer } from "@/components/map/RailOverlayLayer";
+import { BtcOverlayLayer } from "@/components/map/BtcOverlayLayer";
 import { MapLegends } from "@/components/map/MapLegends";
 import { Buildings3DLayer } from "@/components/map/Buildings3DLayer";
 import { LayerSheet } from "@/components/map/LayerSheet";
@@ -37,6 +38,7 @@ function RootLayout() {
           <SequenceCoverageLayer />
           <MainMapCaptureOverlay />
           <RailOverlayLayer />
+          <BtcOverlayLayer />
           <Buildings3DLayer />
           <PoiClickHandler />
           <SelectedPlaceMarker />
