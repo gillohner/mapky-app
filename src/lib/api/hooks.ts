@@ -38,6 +38,7 @@ import {
 } from "./mapky";
 import { fetchUserProfile } from "./user";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
+import { applyPending } from "./optimistic-overlay";
 import {
   reverseGeocode,
   searchPlaces,
@@ -301,29 +302,35 @@ export function useResourceReplies(
 }
 
 export function usePlaceTags(osmType: string, osmId: number) {
+  const queryKey = ["mapky", "place", osmType, osmId, "tags"] as const;
   return useQuery({
-    queryKey: ["mapky", "place", osmType, osmId, "tags"],
+    queryKey,
     queryFn: () => fetchPlaceTags(osmType, osmId),
     enabled: !!osmType && !!osmId,
     retry: noRetryOn404,
+    select: (data) => applyPending(queryKey, data),
   });
 }
 
 export function usePostTags(authorId: string, postId: string) {
+  const queryKey = ["mapky", "posts", authorId, postId, "tags"] as const;
   return useQuery({
-    queryKey: ["mapky", "posts", authorId, postId, "tags"],
+    queryKey,
     queryFn: () => fetchPostTags(authorId, postId),
     enabled: !!authorId && !!postId,
     retry: noRetryOn404,
+    select: (data) => applyPending(queryKey, data),
   });
 }
 
 export function useReviewTags(authorId: string, reviewId: string) {
+  const queryKey = ["mapky", "reviews", authorId, reviewId, "tags"] as const;
   return useQuery({
-    queryKey: ["mapky", "reviews", authorId, reviewId, "tags"],
+    queryKey,
     queryFn: () => fetchReviewTags(authorId, reviewId),
     enabled: !!authorId && !!reviewId,
     retry: noRetryOn404,
+    select: (data) => applyPending(queryKey, data),
   });
 }
 
@@ -472,19 +479,23 @@ export function useOsmLookupBatch(
 }
 
 export function useCollection(authorId: string, collectionId: string) {
+  const queryKey = ["mapky", "collection", authorId, collectionId] as const;
   return useQuery({
-    queryKey: ["mapky", "collection", authorId, collectionId],
+    queryKey,
     queryFn: () => fetchCollection(authorId, collectionId),
     enabled: !!authorId && !!collectionId,
     retry: noRetryOn404,
+    select: (data) => applyPending(queryKey, data),
   });
 }
 
 export function useUserCollections(userId: string | null) {
+  const queryKey = ["mapky", "collections", "user", userId] as const;
   return useQuery({
-    queryKey: ["mapky", "collections", "user", userId],
+    queryKey,
     queryFn: () => fetchUserCollections(userId!),
     enabled: !!userId,
+    select: (data) => applyPending(queryKey, data),
   });
 }
 
@@ -516,20 +527,36 @@ export function useUserReviews(userId: string | null) {
 }
 
 export function useCollectionTags(authorId: string, collectionId: string) {
+  const queryKey = [
+    "mapky",
+    "collection",
+    authorId,
+    collectionId,
+    "tags",
+  ] as const;
   return useQuery({
-    queryKey: ["mapky", "collection", authorId, collectionId, "tags"],
+    queryKey,
     queryFn: () => fetchCollectionTags(authorId, collectionId),
     enabled: !!authorId && !!collectionId,
     retry: noRetryOn404,
+    select: (data) => applyPending(queryKey, data),
   });
 }
 
 export function useCollectionsForPlace(osmType: string, osmId: number) {
+  const queryKey = [
+    "mapky",
+    "collections",
+    "place",
+    osmType,
+    osmId,
+  ] as const;
   return useQuery({
-    queryKey: ["mapky", "collections", "place", osmType, osmId],
+    queryKey,
     queryFn: () => fetchCollectionsForPlace(osmType, osmId),
     enabled: !!osmType && !!osmId,
     retry: noRetryOn404,
+    select: (data) => applyPending(queryKey, data),
   });
 }
 
@@ -554,11 +581,19 @@ export function useGeoCaptureDetail(authorId: string, captureId: string) {
 }
 
 export function useGeoCaptureTags(authorId: string, captureId: string) {
+  const queryKey = [
+    "mapky",
+    "geo_capture",
+    authorId,
+    captureId,
+    "tags",
+  ] as const;
   return useQuery({
-    queryKey: ["mapky", "geo_capture", authorId, captureId, "tags"],
+    queryKey,
     queryFn: () => fetchGeoCaptureTags(authorId, captureId),
     enabled: !!authorId && !!captureId,
     retry: noRetryOn404,
+    select: (data) => applyPending(queryKey, data),
   });
 }
 
@@ -680,11 +715,13 @@ export function useRouteDetails(authorId: string, routeId: string) {
 }
 
 export function useRouteTags(authorId: string, routeId: string) {
+  const queryKey = ["mapky", "route", authorId, routeId, "tags"] as const;
   return useQuery({
-    queryKey: ["mapky", "route", authorId, routeId, "tags"],
+    queryKey,
     queryFn: () => fetchRouteTags(authorId, routeId),
     enabled: !!authorId && !!routeId,
     retry: noRetryOn404,
+    select: (data) => applyPending(queryKey, data),
   });
 }
 

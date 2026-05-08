@@ -15,8 +15,17 @@ import {
   makeOsmUrl,
 } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
+import {
+  pendingEntityFieldPatch,
+  pendingSingleFieldPatch,
+  pendingListAdd,
+  pendingListRemove,
+} from "@/lib/api/optimistic-overlay";
 import { toast } from "sonner";
 import type { CollectionDetails } from "@/types/mapky";
+
+const sameItems = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((v, i) => v === b[i]);
 
 interface CollectionPickerProps {
   osmType: string;
@@ -69,7 +78,10 @@ export function CollectionPicker({
       await queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, cId] });
       await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "place", osmType, osmId] });
 
-      // Optimistic cache updates
+      // Optimistic cache updates + matching overlay registrations.
+      // Cache writes give the user immediate feedback; overlays survive
+      // the delayed reconcile-refetch even if nexus hasn't indexed the
+      // change yet (issue #7 — fast back-to-back adds were dropping).
       queryClient.setQueryData<CollectionDetails[]>(
         ["mapky", "collections", "user", publicKey],
         (old) => old?.map((c) => {
@@ -88,6 +100,43 @@ export function CollectionPicker({
           return [...(old ?? []), { ...collection, items: newItems }];
         },
       );
+
+      const patchOpId = `coll-items:${cId}`;
+      pendingEntityFieldPatch<CollectionDetails, string[]>({
+        queryKey: ["mapky", "collections", "user", publicKey],
+        opId: patchOpId,
+        entityId: collection.id,
+        getEntityId: (c) => c.id,
+        field: "items",
+        value: newItems,
+        matches: sameItems,
+      });
+      pendingSingleFieldPatch<CollectionDetails, string[]>({
+        queryKey: ["mapky", "collection", publicKey, cId],
+        opId: patchOpId,
+        field: "items",
+        value: newItems,
+        matches: sameItems,
+      });
+      // Place ↔ collection membership view: add/remove this collection
+      // from the place's collection list.
+      const placeKey = ["mapky", "collections", "place", osmType, osmId];
+      const membershipOpId = `coll-membership:${cId}:${osmType}:${osmId}`;
+      if (hasPlace) {
+        pendingListRemove<CollectionDetails>({
+          queryKey: placeKey,
+          opId: membershipOpId,
+          itemId: collection.id,
+          getId: (c) => c.id,
+        });
+      } else {
+        pendingListAdd<CollectionDetails>({
+          queryKey: placeKey,
+          opId: membershipOpId,
+          item: { ...collection, items: newItems },
+          getId: (c) => c.id,
+        });
+      }
 
       toast.success(hasPlace ? "Removed from collection" : "Added to collection");
       onClose();
@@ -144,6 +193,22 @@ export function CollectionPicker({
         ["mapky", "collections", "place", osmType, osmId],
         (old) => [...(old ?? []), optimistic],
       );
+
+      // Overlay both lists so the new collection survives the delayed
+      // refetch even if its node + edge haven't reached neo4j yet.
+      const newColOpId = `coll-new:${optimistic.id}`;
+      pendingListAdd<CollectionDetails>({
+        queryKey: ["mapky", "collections", "user", publicKey],
+        opId: newColOpId,
+        item: optimistic,
+        getId: (c) => c.id,
+      });
+      pendingListAdd<CollectionDetails>({
+        queryKey: ["mapky", "collections", "place", osmType, osmId],
+        opId: newColOpId,
+        item: optimistic,
+        getId: (c) => c.id,
+      });
 
       toast.success(`Created "${newName.trim()}" with this place`);
       onClose();

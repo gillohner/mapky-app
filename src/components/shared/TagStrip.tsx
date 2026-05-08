@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
+import { registerPending } from "@/lib/api/optimistic-overlay";
 import type { PostTagDetails } from "@/types/mapky";
 
 /**
@@ -110,21 +111,10 @@ export function TagStrip({
 
       await queryClient.cancelQueries({ queryKey });
 
-      queryClient.setQueryData<PostTagDetails[]>(queryKey, (old) => {
-        if (removing) {
-          if (!old) return old;
-          return old
-            .map((tg) =>
-              tg.label === tagLabel
-                ? {
-                    ...tg,
-                    taggers: tg.taggers.filter((id) => id !== publicKey),
-                    taggers_count: tg.taggers_count - 1,
-                  }
-                : tg,
-            )
-            .filter((tg) => tg.taggers_count > 0);
-        }
+      // Pure mutation logic — applied immediately to the cache AND
+      // registered as a pending overlay so a stale refetch (issue #7)
+      // can't drop the change before nexus catches up.
+      const applyAdd = (old: PostTagDetails[] | undefined): PostTagDetails[] => {
         if (!old) return [{ label: tagLabel, taggers: [publicKey], taggers_count: 1 }];
         const existing = old.find((tg) => tg.label === tagLabel);
         if (existing) {
@@ -140,6 +130,41 @@ export function TagStrip({
           );
         }
         return [...old, { label: tagLabel, taggers: [publicKey], taggers_count: 1 }];
+      };
+      const applyRemove = (old: PostTagDetails[] | undefined): PostTagDetails[] | undefined => {
+        if (!old) return old;
+        return old
+          .map((tg) =>
+            tg.label === tagLabel
+              ? {
+                  ...tg,
+                  taggers: tg.taggers.filter((id) => id !== publicKey),
+                  taggers_count: tg.taggers_count - 1,
+                }
+              : tg,
+          )
+          .filter((tg) => tg.taggers_count > 0);
+      };
+
+      queryClient.setQueryData<PostTagDetails[]>(queryKey, (old) =>
+        removing ? applyRemove(old) : applyAdd(old),
+      );
+
+      // Same logical mutation registered as an overlay — re-applied
+      // every time the cache is replaced by a refetch, so a stale
+      // server response can't strand the user's recent change.
+      // Re-registering with the same opId replaces, so toggling on
+      // and off doesn't stack two ops.
+      const opId = `tag:${publicKey}:${tagLabel}`;
+      registerPending<PostTagDetails[] | undefined>(queryKey, {
+        id: opId,
+        apply: (old) => (removing ? applyRemove(old) : applyAdd(old)),
+        isConfirmed: (old) => {
+          if (!old) return removing;
+          const existing = old.find((tg) => tg.label === tagLabel);
+          const hasUser = existing?.taggers.includes(publicKey) ?? false;
+          return removing ? !hasUser : hasUser;
+        },
       });
 
       onCountDelta?.(removing ? -1 : 1);
