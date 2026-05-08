@@ -26,7 +26,10 @@ import type { PlaceCluster, ViewportBounds } from "@/types/mapky";
  * server-side envelope:
  *
  *   - At low zoom (server returns `kind: "clusters"`), shows
- *     ClusterBubbles with total + BTC ratio. Click → flyTo deeper.
+ *     ClusterBubbles with the total Mapky-engaged-place count and a
+ *     stronger ring when the cell carries any reviewed places. Bitcoin
+ *     merchants no longer factor into the cluster — they live in the
+ *     dedicated BTC overlay. Click → flyTo deeper.
  *   - At high zoom (`kind: "places"`), shows individual PlaceBalloons
  *     in two variants: place-btc (accent teal + BTC corner badge) for
  *     bitcoin-accepting places, and plain place (muted slate) for
@@ -621,9 +624,7 @@ export function PlaceAnnotationsLayer() {
             >
               <ClusterBubble
                 total={spec.cluster.total}
-                btc={spec.cluster.btc}
                 reviewed={spec.cluster.reviewed}
-                tagged={spec.cluster.tagged}
               />
             </button>,
             el,
