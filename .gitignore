@@ -9,6 +9,10 @@ dist-ssr/
 # every run. The driver scripts (e2e/*.mjs, e2e/README.md) stay tracked.
 e2e/output/
 
+# Playwright MCP smoke-test scratch — screenshots, console/network logs
+# the MCP browser tool drops into the cwd of whatever spawned it.
+.playwright-mcp/
+
 # Environment
 .env
 .env.local
