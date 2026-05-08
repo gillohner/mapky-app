@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
+import { PlaceBalloon } from "./PlaceBalloon";
 
 interface LegendItem {
   label: string;
@@ -169,55 +170,43 @@ function LegendCard({
 }
 
 // ── Mapky data legend samples ──────────────────────────────────────
+//
+// The samples below render the *actual* PlaceBalloon component scaled
+// down inside a fixed-size slot, so what the user sees in the legend
+// is pixel-identical to what they see on the map. Earlier hand-drawn
+// SVGs drifted from the real markers as the balloon design evolved;
+// reusing the component keeps them in lockstep.
 
-const PLACE_ACCENT = "#0d9488"; // teal-600 — matches `--raw-accent`
-const PLACE_MUTED = "#475569"; // slate-600 — non-rated places
 const BTC_ORANGE = "#f7931a";
-const SELECTED_RED = "#dc2626"; // red-600 — selected place pin
-const CAPTURE_BLUE = "#0284c7"; // sky-600 — matches CaptureMarkersLayer light theme
-const CLUSTER_BG = "#0d9488";
+const BTC_ORANGE_DARK = "#cc7700";
+const CAPTURE_BLUE = "#0284c7"; // matches CaptureMarkersLayer light theme
 
-/** Tiny teardrop balloon sample — same SVG path PlaceBalloon uses, at
- *  a fraction of the size so it fits a 28×16 legend slot. */
-function balloonSample({
-  body,
-  withBtcBadge = false,
-  withRatingChip = false,
+/** Wrap any node in a fixed-size slot, scaled to fit. The legend slot
+ *  is 24×24 px; the marker is anchored to the bottom (matches how it
+ *  sits on its anchor on the map). */
+function MarkerSlot({
+  children,
+  scale = 0.5,
 }: {
-  body: string;
-  withBtcBadge?: boolean;
-  withRatingChip?: boolean;
+  children: React.ReactNode;
+  scale?: number;
 }) {
   return (
-    <svg
-      width="22"
-      height="16"
-      viewBox="-2 -4 22 22"
+    <span
+      className="relative inline-block"
+      style={{ width: 24, height: 24 }}
       aria-hidden
-      style={{ overflow: "visible" }}
     >
-      {withRatingChip && (
-        <g transform="translate(8, -4)">
-          <rect
-            x="-3"
-            y="0"
-            width="6"
-            height="3"
-            rx="1.5"
-            fill="#fbbf24"
-          />
-        </g>
-      )}
-      <path
-        d="M9 1 C5 1 1 5 1 9 C1 14 9 19 9 19 C9 19 17 14 17 9 C17 5 13 1 9 1 Z"
-        fill={body}
-        stroke="white"
-        strokeWidth="1.5"
-      />
-      {withBtcBadge && (
-        <circle cx="14" cy="4" r="2.5" fill={BTC_ORANGE} stroke="white" strokeWidth="0.6" />
-      )}
-    </svg>
+      <span
+        className="absolute left-1/2 bottom-0"
+        style={{
+          transform: `translate(-50%, 0) scale(${scale})`,
+          transformOrigin: "bottom center",
+        }}
+      >
+        {children}
+      </span>
+    </span>
   );
 }
 
@@ -232,24 +221,6 @@ function dotSample({ color, stroke }: { color: string; stroke?: string }) {
         stroke={stroke ?? "white"}
         strokeWidth="1.5"
       />
-    </svg>
-  );
-}
-
-function clusterSample() {
-  return (
-    <svg width="22" height="16" viewBox="0 0 22 16" aria-hidden>
-      <circle cx="11" cy="8" r="6.5" fill={CLUSTER_BG} stroke="white" strokeWidth="1.5" />
-      <text
-        x="11"
-        y="10.5"
-        textAnchor="middle"
-        fontSize="6"
-        fontWeight="700"
-        fill="white"
-      >
-        12
-      </text>
     </svg>
   );
 }
@@ -275,34 +246,37 @@ export function MapLegends() {
   const selectedFeature = useUiStore((s) => s.selectedFeature);
 
   // Mapky-data items, conditioned on each layer's visibility so the
-  // card mirrors what's actually drawn. Order: balloon variants first,
-  // then cluster, then non-place markers (BTC overlay, captures), then
-  // the per-interaction selected pin.
+  // card mirrors what's actually drawn. Each balloon sample reuses
+  // the *real* PlaceBalloon component scaled down — exactly what
+  // the map renders, never a hand-drawn approximation.
   const mapkyItems: LegendItem[] = [];
   if (placesLayerVisible) {
     mapkyItems.push(
       {
-        label: "Mapky-rated place",
-        sample: balloonSample({ body: PLACE_ACCENT, withRatingChip: true }),
+        // Mapky-engaged places use the accent variant (place-btc body)
+        // when accepts_bitcoin is true; the badge appears alongside.
+        // Either way the body is teal/accent — that's the signal.
+        label: "Place with Mapky data",
+        sample: (
+          <MarkerSlot>
+            <PlaceBalloon variant="place-btc" rating={null} Icon={null} />
+          </MarkerSlot>
+        ),
       },
       {
-        label: "OSM place (no Mapky data yet)",
-        sample: balloonSample({ body: PLACE_MUTED }),
-      },
-      {
-        label: "Bitcoin-accepting place",
-        sample: balloonSample({ body: PLACE_ACCENT, withBtcBadge: true }),
-      },
-      {
-        label: "Place cluster (low zoom)",
-        sample: clusterSample(),
+        label: "Place with a rating",
+        sample: (
+          <MarkerSlot>
+            <PlaceBalloon variant="place-btc" rating="4.6" Icon={null} />
+          </MarkerSlot>
+        ),
       },
     );
   }
   if (btcOverlayVisible) {
     mapkyItems.push({
       label: "Bitcoin POI (BTCMap overlay)",
-      sample: dotSample({ color: BTC_ORANGE, stroke: "#cc7700" }),
+      sample: dotSample({ color: BTC_ORANGE, stroke: BTC_ORANGE_DARK }),
     });
   }
   if (capturesLayerVisible) {
@@ -312,9 +286,21 @@ export function MapLegends() {
     });
   }
   if (selectedFeature) {
+    // The selected pin uses its own teardrop SVG (mapky-place-pin in
+    // SelectedPlaceMarker), tinted red. Sample it with a small inline
+    // copy of the same path to stay accurate.
     mapkyItems.push({
       label: "Selected place",
-      sample: balloonSample({ body: SELECTED_RED }),
+      sample: (
+        <svg width="20" height="22" viewBox="-2 -2 32 44" aria-hidden>
+          <path
+            d="M14 2 C7 2 2 7 2 14 C2 22 14 38 14 38 C14 38 26 22 26 14 C26 7 21 2 14 2 Z"
+            fill="#dc2626"
+            stroke="white"
+            strokeWidth="2"
+          />
+        </svg>
+      ),
     });
   }
 
@@ -349,11 +335,20 @@ export function MapLegends() {
 
       {/* Bottom-RIGHT — Mapky data legend. Defaults collapsed since
           most users learn the symbols by seeing them once; the dot
-          stays available for newcomers and shared-link viewers. */}
+          stays available for newcomers and shared-link viewers.
+          Sits ABOVE MapLibre's NavigationControl + GeolocateControl
+          stack (4 buttons ≈ 150 px) so it doesn't cover zoom / rotate /
+          locate, and aligns at right-3 like the controls themselves. */}
       {mapkyItems.length > 0 && (
         <div
-          className="pointer-events-none absolute bottom-20 right-3 z-20 flex max-w-[16rem] flex-col gap-2"
-          style={{ paddingBottom: "max(0px, env(safe-area-inset-bottom))" }}
+          className="pointer-events-none absolute right-3 z-20 flex max-w-[16rem] flex-col gap-2"
+          style={{
+            // 11rem ≈ 176 px — clears the four stacked maplibre controls
+            // plus their 10 px bottom margin. The safe-area inset adds
+            // bottom-padding on iOS where the home-indicator pushes
+            // controls up too.
+            bottom: "calc(11rem + env(safe-area-inset-bottom))",
+          }}
         >
           <LegendCard
             icon={<MapkyLegendIcon btc={btcOverlayVisible} />}
