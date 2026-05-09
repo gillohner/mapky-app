@@ -92,11 +92,17 @@ function snapBoundsForCache(
     dir === -1
       ? Math.floor(v / snapStep) * snapStep
       : Math.ceil(v / snapStep) * snapStep;
+  // Clamp to valid lat/lon ranges. Without this, very low zooms produce
+  // padded bboxes outside [-90,90] × [-180,180], which Neo4j's
+  // point.withinBBox rejects with a 500 — the world view would silently
+  // break the place + BTC viewport endpoints.
+  const clamp = (v: number, min: number, max: number) =>
+    v < min ? min : v > max ? max : v;
   return {
-    minLat: snap(bounds.minLat - latPad, -1),
-    minLon: snap(bounds.minLon - lonPad, -1),
-    maxLat: snap(bounds.maxLat + latPad, 1),
-    maxLon: snap(bounds.maxLon + lonPad, 1),
+    minLat: clamp(snap(bounds.minLat - latPad, -1), -90, 90),
+    minLon: clamp(snap(bounds.minLon - lonPad, -1), -180, 180),
+    maxLat: clamp(snap(bounds.maxLat + latPad, 1), -90, 90),
+    maxLon: clamp(snap(bounds.maxLon + lonPad, 1), -180, 180),
   };
 }
 
