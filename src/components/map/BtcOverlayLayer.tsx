@@ -4,7 +4,7 @@ import maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useBtcViewport } from "@/lib/api/hooks";
-import type { ViewportBounds, BitcoinPoi } from "@/types/mapky";
+import type { ViewportBounds } from "@/types/mapky";
 
 const SOURCE_ID = "mapky-btc-poi";
 const CIRCLE_LAYER = "mapky-btc-circle";
@@ -16,18 +16,14 @@ const BTC_ORANGE_DARK = "#cc7700";
 /**
  * Bitcoin-accepting POI overlay. Sits on top of (and is independent of)
  * the Places layer — flipping it on doesn't narrow Mapky data; it adds
- * a second layer of orange BTC dots / cluster bubbles.
+ * a second layer of orange BTC dots.
  *
- * Backed by `/v0/mapky/btc/viewport`. Zoom-aware envelope returned by
- * the new plugin: at low zoom we get `kind: "clusters"`, at high zoom
- * we get `kind: "places"`. We render both branches as GeoJSON layers
- * (circle for individual POIs, larger circle + count text for
- * clusters) — keeps the rendering pipeline a single MapLibre source
- * regardless of mode and avoids HTML-marker churn at thousands of
- * points.
- *
- * Click → `/place/{osm_type}/{osm_id}` (POIs) or flyTo two zoom levels
- * deeper (clusters), same drill-in flow as the Mapky cluster bubbles.
+ * Backed by `/v0/mapky/btc/viewport`. The zoom-aware envelope returns
+ * either `kind: "places"` (high zoom; renders as dots here) or
+ * `kind: "clusters"` (low zoom). For now the overlay only renders the
+ * `places` branch as dots — a pure GeoJSON source + circle layer so
+ * 500+ POIs stay smooth on pan/zoom. Cluster-mode rendering is
+ * deferred so an addLayer-time exception can't break the basemap.
  */
 export function BtcOverlayLayer() {
   const map = useMapStore((s) => s.map);
@@ -70,36 +66,23 @@ export function BtcOverlayLayer() {
 
   const { data: envelope } = useBtcViewport(visible ? bounds : null, zoom);
 
-  // Build a single GeoJSON FeatureCollection covering both modes.
-  // `kind` on the feature props lets the layer styles filter the
-  // right shapes — clusters render as labeled larger circles, POIs
-  // as small dots. `total` carries the cluster count for label +
-  // size scaling.
+  // Only the "places" branch renders today; the cluster branch is
+  // a no-op (empty FeatureCollection) so the layers stay attached
+  // and re-show when the user zooms back into POI range.
   const featureCollection = useMemo<GeoJSON.FeatureCollection>(() => {
-    if (!envelope) {
+    if (envelope?.kind !== "places") {
       return { type: "FeatureCollection", features: [] };
-    }
-    if (envelope.kind === "clusters") {
-      return {
-        type: "FeatureCollection",
-        features: envelope.clusters.map((c, i) => ({
-          type: "Feature",
-          id: i,
-          geometry: { type: "Point", coordinates: [c.lon, c.lat] },
-          properties: { kind: "cluster", total: c.total },
-        })),
-      };
     }
     return {
       type: "FeatureCollection",
-      features: envelope.places.map((p: BitcoinPoi) => ({
+      features: envelope.places.map((p) => ({
         type: "Feature",
         id: `${p.osm_type}:${p.osm_id}`,
         geometry: { type: "Point", coordinates: [p.lon, p.lat] },
         properties: {
-          kind: "poi",
           osm_type: p.osm_type,
           osm_id: p.osm_id,
+          name: p.name,
         },
       })),
     };
@@ -116,13 +99,11 @@ export function BtcOverlayLayer() {
           data: featureCollection,
         });
       }
-      // Halo (POI dots only) — soft glow underneath the dot.
       if (!map.getLayer(HALO_LAYER)) {
         map.addLayer({
           id: HALO_LAYER,
           type: "circle",
           source: SOURCE_ID,
-          filter: ["==", ["get", "kind"], "poi"],
           paint: {
             "circle-radius": [
               "interpolate",
@@ -139,13 +120,11 @@ export function BtcOverlayLayer() {
           },
         });
       }
-      // POI dot.
       if (!map.getLayer(CIRCLE_LAYER)) {
         map.addLayer({
           id: CIRCLE_LAYER,
           type: "circle",
           source: SOURCE_ID,
-          filter: ["==", ["get", "kind"], "poi"],
           paint: {
             "circle-radius": [
               "interpolate",
@@ -162,69 +141,30 @@ export function BtcOverlayLayer() {
           },
         });
       }
-      // Cluster circle — bigger filled disk scaled by `total`.
-      const CLUSTER_LAYER = `${CIRCLE_LAYER}-cluster`;
-      if (!map.getLayer(CLUSTER_LAYER)) {
-        map.addLayer({
-          id: CLUSTER_LAYER,
-          type: "circle",
-          source: SOURCE_ID,
-          filter: ["==", ["get", "kind"], "cluster"],
-          paint: {
-            "circle-radius": [
-              "interpolate",
-              ["linear"],
-              ["log10", ["max", ["get", "total"], 1]],
-              0, // log10(1)
-              16,
-              2, // log10(100)
-              22,
-              4, // log10(10000)
-              28,
-            ],
-            "circle-color": "rgba(255,255,255,0.95)",
-            "circle-stroke-color": BTC_ORANGE,
-            "circle-stroke-width": 2,
-          },
-        });
-      }
-      // Cluster count label — a symbol layer that pulls `total` from
-      // the feature properties and renders it inside the disk.
-      const CLUSTER_LABEL = `${CIRCLE_LAYER}-cluster-label`;
-      if (!map.getLayer(CLUSTER_LABEL)) {
-        map.addLayer({
-          id: CLUSTER_LABEL,
-          type: "symbol",
-          source: SOURCE_ID,
-          filter: ["==", ["get", "kind"], "cluster"],
-          layout: {
-            "text-field": ["to-string", ["get", "total"]],
-            "text-size": 12,
-            "text-allow-overlap": true,
-            "text-ignore-placement": true,
-            // Use the basemap's already-loaded font set so we don't
-            // need to register a new glyph stack.
-            "text-font": ["Noto Sans Regular"],
-          },
-          paint: {
-            "text-color": BTC_ORANGE_DARK,
-          },
-        });
-      }
     };
 
     const remove = () => {
-      const ids = [
+      // Defensive: also clear any cluster-mode layers a previous
+      // build of this component may have attached. Without this an
+      // HMR swap from a version that added a now-removed `text-font`
+      // symbol layer leaves the broken layer on the style and the
+      // basemap stops rendering. Order matters: layers before source.
+      const legacyIds = [
         `${CIRCLE_LAYER}-cluster-label`,
         `${CIRCLE_LAYER}-cluster`,
         CIRCLE_LAYER,
         HALO_LAYER,
       ];
-      for (const id of ids) {
+      for (const id of legacyIds) {
         if (map.getLayer(id)) map.removeLayer(id);
       }
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
     };
+
+    // Run remove() once unconditionally on (re)mount BEFORE ensure()
+    // re-adds the live layers, so an HMR-leftover broken symbol layer
+    // can't keep the basemap stuck.
+    remove();
 
     if (visible) {
       if (map.isStyleLoaded()) ensure();
@@ -253,11 +193,10 @@ export function BtcOverlayLayer() {
     if (src) src.setData(featureCollection);
   }, [map, visible, featureCollection]);
 
-  // Click handlers — POI dots open the place panel; cluster bubbles
-  // drill in two zoom levels (capped at the cluster threshold).
+  // POI click → place panel.
   useEffect(() => {
     if (!map || !visible) return;
-    const onPoiClick = (
+    const onClick = (
       e: maplibregl.MapMouseEvent & { features?: GeoJSON.Feature[] },
     ) => {
       const f = e.features?.[0];
@@ -271,35 +210,19 @@ export function BtcOverlayLayer() {
         params: { osmType: props.osm_type, osmId: String(props.osm_id) },
       });
     };
-    const CLUSTER_LAYER = `${CIRCLE_LAYER}-cluster`;
-    const onClusterClick = (
-      e: maplibregl.MapMouseEvent & { features?: GeoJSON.Feature[] },
-    ) => {
-      const f = e.features?.[0];
-      if (!f || f.geometry.type !== "Point") return;
-      const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
-      const next = Math.min(map.getZoom() + 2, 11);
-      map.flyTo({ center: [lon, lat], zoom: next, duration: 600 });
-    };
     const onEnter = () => {
       map.getCanvas().style.cursor = "pointer";
     };
     const onLeave = () => {
       map.getCanvas().style.cursor = "";
     };
-    map.on("click", CIRCLE_LAYER, onPoiClick);
-    map.on("click", CLUSTER_LAYER, onClusterClick);
+    map.on("click", CIRCLE_LAYER, onClick);
     map.on("mouseenter", CIRCLE_LAYER, onEnter);
     map.on("mouseleave", CIRCLE_LAYER, onLeave);
-    map.on("mouseenter", CLUSTER_LAYER, onEnter);
-    map.on("mouseleave", CLUSTER_LAYER, onLeave);
     return () => {
-      map.off("click", CIRCLE_LAYER, onPoiClick);
-      map.off("click", CLUSTER_LAYER, onClusterClick);
+      map.off("click", CIRCLE_LAYER, onClick);
       map.off("mouseenter", CIRCLE_LAYER, onEnter);
       map.off("mouseleave", CIRCLE_LAYER, onLeave);
-      map.off("mouseenter", CLUSTER_LAYER, onEnter);
-      map.off("mouseleave", CLUSTER_LAYER, onLeave);
     };
   }, [map, visible, navigate]);
 
