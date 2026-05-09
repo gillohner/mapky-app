@@ -46,7 +46,7 @@ export function LayerSheetTrigger() {
       onClick={toggle}
       data-mapky-layer-trigger
       aria-label={open ? "Close layers" : "Open layers"}
-      className={`mapky-layer-trigger pointer-events-auto fixed z-30 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur transition-[left,bottom] duration-300 hover:border-accent ${
+      className={`mapky-layer-trigger pointer-events-auto fixed z-30 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur transition-[left] duration-300 hover:border-accent ${
         sidebarOpen ? "left-3 md:left-[440px]" : "left-3 md:left-14"
       }`}
       style={{
