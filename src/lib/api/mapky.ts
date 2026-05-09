@@ -15,6 +15,7 @@ import type {
   MultiViewportResponse,
   PlaceFullResponse,
   BtcViewportResponse,
+  BitcoinPoi,
 } from "@/types/mapky";
 
 /** Build the `activity` + `min_rating` query params for the place
@@ -126,13 +127,19 @@ export async function fetchViewportAll(
  * `/v0/mapky/viewport`. Below the cluster threshold the response
  * carries `kind: "clusters"` (orange-themed cluster bubbles); at or
  * above, individual `kind: "places"` POIs.
+ *
+ * Back-compat shim: older nexusd builds (pre-BTC-clustering) return
+ * a flat `BitcoinPoi[]` for this endpoint regardless of zoom. Wrap
+ * those into the new `{kind:"places"}` envelope so the BtcOverlayLayer
+ * keeps rendering individual POIs while the user rolls forward to
+ * the new plugin.
  */
 export async function fetchBtcViewport(
   bounds: ViewportBounds,
   zoom: number,
   limit = 500,
 ): Promise<BtcViewportResponse> {
-  const { data } = await nexusClient.get<BtcViewportResponse>(
+  const { data } = await nexusClient.get<BtcViewportResponse | unknown[]>(
     "/v0/mapky/btc/viewport",
     {
       params: {
@@ -145,6 +152,12 @@ export async function fetchBtcViewport(
       },
     },
   );
+  if (Array.isArray(data)) {
+    // Legacy nexusd: flat array of BitcoinPoi. Treat as the new
+    // envelope's `places` branch so the rest of the pipeline keeps
+    // working without conditional logic at the call site.
+    return { kind: "places", places: data as BitcoinPoi[] };
+  }
   return data;
 }
 
