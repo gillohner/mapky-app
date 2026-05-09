@@ -16,14 +16,22 @@ const BTC_ORANGE_DARK = "#cc7700";
 /**
  * Bitcoin-accepting POI overlay. Sits on top of (and is independent of)
  * the Places layer — flipping it on doesn't narrow Mapky data; it adds
- * a second layer of orange BTC dots.
+ * a second layer of orange BTC dots / cluster bubbles.
  *
- * Backed by `/v0/mapky/btc/viewport`. The zoom-aware envelope returns
- * either `kind: "places"` (high zoom; renders as dots here) or
- * `kind: "clusters"` (low zoom). For now the overlay only renders the
- * `places` branch as dots — a pure GeoJSON source + circle layer so
- * 500+ POIs stay smooth on pan/zoom. Cluster-mode rendering is
- * deferred so an addLayer-time exception can't break the basemap.
+ * Two-mode rendering off the same `/v0/mapky/btc/viewport` envelope:
+ *
+ *   - **Low zoom** (server returns `kind: "clusters"`): orange-bordered
+ *     cluster bubbles via vanilla-DOM HTML markers. Cell midpoints
+ *     align with the Mapky place layer's clusters at the same cell —
+ *     a place that's both Mapky-engaged AND BTC produces stacked
+ *     teal+orange bubbles at the same lat/lon, conveying both signals.
+ *   - **High zoom** (`kind: "places"`): GeoJSON source + circle layer
+ *     so 500+ individual POIs stay smooth on pan/zoom.
+ *
+ * Vanilla-DOM (innerHTML) for the cluster bubbles instead of React
+ * portals: avoids the effect-vs-render race where the portal useMemo
+ * runs before the marker creation effect. Click handler binds via
+ * addEventListener on the cluster element directly.
  */
 export function BtcOverlayLayer() {
   const map = useMapStore((s) => s.map);
@@ -66,16 +74,15 @@ export function BtcOverlayLayer() {
 
   const { data: envelope } = useBtcViewport(visible ? bounds : null, zoom);
 
-  // Only the "places" branch renders today; the cluster branch is
-  // a no-op (empty FeatureCollection) so the layers stay attached
-  // and re-show when the user zooms back into POI range.
+  const clusters = envelope?.kind === "clusters" ? envelope.clusters : [];
+  const places = envelope?.kind === "places" ? envelope.places : [];
+
+  // ─── HIGH ZOOM: GeoJSON source + circle layer ────────────────────
+
   const featureCollection = useMemo<GeoJSON.FeatureCollection>(() => {
-    if (envelope?.kind !== "places") {
-      return { type: "FeatureCollection", features: [] };
-    }
     return {
       type: "FeatureCollection",
-      features: envelope.places.map((p) => ({
+      features: places.map((p) => ({
         type: "Feature",
         id: `${p.osm_type}:${p.osm_id}`,
         geometry: { type: "Point", coordinates: [p.lon, p.lat] },
@@ -86,9 +93,8 @@ export function BtcOverlayLayer() {
         },
       })),
     };
-  }, [envelope]);
+  }, [places]);
 
-  // ─── Layer attach/update ──────────────────────────────────────────
   useEffect(() => {
     if (!map) return;
 
@@ -145,10 +151,7 @@ export function BtcOverlayLayer() {
 
     const remove = () => {
       // Defensive: also clear any cluster-mode layers a previous
-      // build of this component may have attached. Without this an
-      // HMR swap from a version that added a now-removed `text-font`
-      // symbol layer leaves the broken layer on the style and the
-      // basemap stops rendering. Order matters: layers before source.
+      // build of this component may have attached.
       const legacyIds = [
         `${CIRCLE_LAYER}-cluster-label`,
         `${CIRCLE_LAYER}-cluster`,
@@ -161,16 +164,12 @@ export function BtcOverlayLayer() {
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
     };
 
-    // Run remove() once unconditionally on (re)mount BEFORE ensure()
-    // re-adds the live layers, so an HMR-leftover broken symbol layer
-    // can't keep the basemap stuck.
     remove();
 
     if (visible) {
       if (map.isStyleLoaded()) ensure();
       else map.once("idle", ensure);
     } else {
-      remove();
       return;
     }
 
@@ -184,7 +183,6 @@ export function BtcOverlayLayer() {
     };
   }, [map, visible, featureCollection]);
 
-  // Push fresh data into the existing source on every envelope change.
   useEffect(() => {
     if (!map || !visible) return;
     const src = map.getSource(SOURCE_ID) as
@@ -225,6 +223,120 @@ export function BtcOverlayLayer() {
       map.off("mouseleave", CIRCLE_LAYER, onLeave);
     };
   }, [map, visible, navigate]);
+
+  // ─── LOW ZOOM: vanilla-DOM cluster markers ───────────────────────
+
+  const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+
+  const handleClusterClick = useCallback(
+    (lat: number, lon: number) => {
+      if (!map) return;
+      const next = Math.min(map.getZoom() + 2, 11);
+      map.flyTo({ center: [lon, lat], zoom: next, duration: 600 });
+    },
+    [map],
+  );
+
+  // Render cluster bubble HTML directly into the marker element. Sized
+  // log-scaled by `total` to mirror ClusterBubble's diameter formula.
+  const renderClusterEl = useCallback(
+    (total: number, lat: number, lon: number): HTMLDivElement => {
+      const el = document.createElement("div");
+      el.style.pointerEvents = "auto";
+      el.style.cursor = "pointer";
+      const diameter = Math.max(32, Math.min(52, 28 + Math.log10(total + 1) * 8));
+      const fontSize =
+        diameter >= 46 ? 14 : diameter >= 38 ? 12 : 11;
+      const label =
+        total < 1000
+          ? String(total)
+          : total < 10_000
+            ? `${(total / 1000).toFixed(1)}k`
+            : total < 1_000_000
+              ? `${Math.round(total / 1000)}k`
+              : `${(total / 1_000_000).toFixed(1)}M`;
+      // Pure CSS — no Tailwind utility classes needed inside the
+      // marker since we're outside the React tree. Inline styles win
+      // against any global resets.
+      el.innerHTML = `
+        <div style="
+          position: relative;
+          width: ${diameter}px;
+          height: ${diameter}px;
+          border-radius: 9999px;
+          background: rgba(255, 255, 255, 0.95);
+          box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+          backdrop-filter: blur(4px);
+          border: 2px solid ${BTC_ORANGE};
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: ${BTC_ORANGE_DARK};
+          font-weight: 700;
+          font-size: ${fontSize}px;
+          font-variant-numeric: tabular-nums;
+          line-height: 1;
+        ">${label}</div>
+      `;
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        handleClusterClick(lat, lon);
+      });
+      return el;
+    },
+    [handleClusterClick],
+  );
+
+  useEffect(() => {
+    if (!map) return;
+    const live = markersRef.current;
+
+    if (!visible) {
+      for (const m of live.values()) m.remove();
+      live.clear();
+      return;
+    }
+
+    const seen = new Set<string>();
+    for (const c of clusters) {
+      const key = `${c.lat.toFixed(6)}:${c.lon.toFixed(6)}`;
+      seen.add(key);
+      const existing = live.get(key);
+      if (existing) {
+        // Total may have changed (different zoom or new data) — rebuild
+        // the element so the count reflects reality.
+        const newEl = renderClusterEl(c.total, c.lat, c.lon);
+        existing.getElement().replaceWith(newEl);
+        // maplibre's Marker keeps an internal _element ref — easiest to
+        // remove + re-add than try to swap it in place.
+        existing.remove();
+        const m = new maplibregl.Marker({ element: newEl, anchor: "center" })
+          .setLngLat([c.lon, c.lat])
+          .addTo(map);
+        live.set(key, m);
+        continue;
+      }
+      const el = renderClusterEl(c.total, c.lat, c.lon);
+      const m = new maplibregl.Marker({ element: el, anchor: "center" })
+        .setLngLat([c.lon, c.lat])
+        .addTo(map);
+      live.set(key, m);
+    }
+    for (const [key, m] of live) {
+      if (!seen.has(key)) {
+        m.remove();
+        live.delete(key);
+      }
+    }
+  }, [map, visible, clusters, renderClusterEl]);
+
+  useEffect(() => {
+    const live = markersRef.current;
+    return () => {
+      for (const m of live.values()) m.remove();
+      live.clear();
+    };
+  }, []);
 
   return null;
 }

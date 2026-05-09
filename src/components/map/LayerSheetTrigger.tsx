@@ -54,7 +54,7 @@ export function LayerSheetTrigger() {
         // MobileBottomSheet, defaults to 0 when no sheet is open).
         // Desktop: a fixed corner offset, set in app.css via media query.
         bottom:
-          "calc(var(--mobile-sheet-vh, 0) * 1vh + 0.75rem + env(safe-area-inset-bottom))",
+          "calc(var(--mobile-sheet-vh, 0) * 1vh + 0.25rem + env(safe-area-inset-bottom))",
       }}
     >
       <Layers className="h-5 w-5" />

@@ -362,7 +362,7 @@ export function MapLegends() {
             // Match the LayerSheetTrigger's bottom anchor exactly so
             // the legend's vertical baseline lines up with the button.
             bottom:
-              "calc(var(--mobile-sheet-vh, 0) * 1vh + 0.75rem + env(safe-area-inset-bottom))",
+              "calc(var(--mobile-sheet-vh, 0) * 1vh + 0.25rem + env(safe-area-inset-bottom))",
           }}
         >
           <LegendCard
