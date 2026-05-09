@@ -123,17 +123,33 @@ export function MobileBottomSheet({
   }, [dragging, baseTranslate]);
 
   // Publish the current visible height (vh) on the document so that
-  // floating UI elements anchored to the map (LayerSheetTrigger) can
-  // sit just above the sheet without polling — pure CSS read on their
-  // side. Cleared on unmount so the variable defaults back to 0 when
-  // no sheet is open.
+  // floating UI elements anchored to the map (LayerSheetTrigger,
+  // MapLegends) can sit just above the sheet without polling — pure
+  // CSS read on their side.
+  //
+  // CRITICAL: only set the variable on mobile. The component is
+  // `md:hidden` (display:none on desktop) but its effects still run,
+  // and an unconditional set leaked the mobile sheet's height onto
+  // desktop — pushing the legend pill 50 vh up the screen even though
+  // the sheet was invisible. Subscribe to the matchMedia change so
+  // resizes between mobile/desktop converge on the right value.
   useEffect(() => {
-    const vh = getVh();
-    const visibleVh = ((sheetPx() - translateY) / vh) * 100;
-    document.documentElement.style.setProperty(
-      "--mobile-sheet-vh",
-      visibleVh.toFixed(2),
-    );
+    const mq = window.matchMedia("(max-width: 767.98px)");
+    const apply = () => {
+      if (!mq.matches) {
+        document.documentElement.style.removeProperty("--mobile-sheet-vh");
+        return;
+      }
+      const vh = getVh();
+      const visibleVh = ((sheetPx() - translateY) / vh) * 100;
+      document.documentElement.style.setProperty(
+        "--mobile-sheet-vh",
+        visibleVh.toFixed(2),
+      );
+    };
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
   }, [translateY]);
   useEffect(() => {
     return () => {
