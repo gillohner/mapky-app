@@ -14,6 +14,7 @@ import type {
   ViewportLayer,
   MultiViewportResponse,
   PlaceFullResponse,
+  BtcViewportResponse,
 } from "@/types/mapky";
 
 /** Build the `activity` + `min_rating` query params for the place
@@ -120,25 +121,18 @@ export async function fetchViewportAll(
   return data;
 }
 
-/** Bitcoin-accepting POIs from BTCMap, plotted by the standalone BTC
- *  overlay layer. Independent of `placesFilters` — this overlay sits
- *  on top of the Places layer rather than narrowing it. */
-export interface BitcoinPoi {
-  osm_type: string;
-  osm_id: number;
-  lat: number;
-  lon: number;
-  name: string | null;
-  onchain: boolean;
-  lightning: boolean;
-  lightning_contactless: boolean;
-}
-
+/**
+ * Fetch the BTC overlay's viewport — same zoom-aware envelope as
+ * `/v0/mapky/viewport`. Below the cluster threshold the response
+ * carries `kind: "clusters"` (orange-themed cluster bubbles); at or
+ * above, individual `kind: "places"` POIs.
+ */
 export async function fetchBtcViewport(
   bounds: ViewportBounds,
+  zoom: number,
   limit = 500,
-): Promise<BitcoinPoi[]> {
-  const { data } = await nexusClient.get<BitcoinPoi[]>(
+): Promise<BtcViewportResponse> {
+  const { data } = await nexusClient.get<BtcViewportResponse>(
     "/v0/mapky/btc/viewport",
     {
       params: {
@@ -146,6 +140,7 @@ export async function fetchBtcViewport(
         min_lon: bounds.minLon,
         max_lat: bounds.maxLat,
         max_lon: bounds.maxLon,
+        zoom: Math.max(0, Math.min(22, Math.floor(zoom))),
         limit,
       },
     },

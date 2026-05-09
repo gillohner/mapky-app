@@ -167,9 +167,7 @@ export function PlaceAnnotationsLayer() {
       lat: c.lat,
       lon: c.lon,
       total: c.total,
-      btc: c.btc,
       reviewed: c.reviewed,
-      tagged: c.tagged,
     }));
   }, [clusters]);
 
@@ -336,7 +334,7 @@ export function PlaceAnnotationsLayer() {
         key: c.key,
         lat: c.lat,
         lon: c.lon,
-        cluster: { lat: c.lat, lon: c.lon, total: c.total, btc: c.btc, reviewed: c.reviewed, tagged: c.tagged },
+        cluster: { lat: c.lat, lon: c.lon, total: c.total, reviewed: c.reviewed },
       }));
     }
     return features.map((f) => ({

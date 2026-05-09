@@ -536,12 +536,22 @@ export function useCollectionsForPlace(osmType: string, osmId: number) {
 
 /** Bitcoin POI overlay — independent of the place layer. Fed by
  *  `/v0/mapky/btc/viewport`, queried only when the BTC overlay is on
- *  (caller passes `null` bounds when off to short-circuit). */
-export function useBtcViewport(bounds: ViewportBounds | null) {
+ *  (caller passes `null` bounds when off to short-circuit).
+ *
+ *  Zoom-aware: returns cluster bubbles below the threshold and
+ *  individual POIs above. Same envelope shape as `useMapViewport`'s
+ *  place slice, so the caller switches on `data.kind`. */
+export function useBtcViewport(
+  bounds: ViewportBounds | null,
+  zoom: number,
+) {
   const padded = useMemo(() => snapBoundsForCache(bounds), [bounds]);
+  // Snap zoom to the nearest integer so smooth wheel-tick zooms within
+  // ±0.5 share a queryKey — mirrors useViewportPlaces.
+  const snappedZoom = Math.round(zoom);
   return useQuery({
-    queryKey: ["mapky", "btc", "viewport", padded] as const,
-    queryFn: () => fetchBtcViewport(padded!),
+    queryKey: ["mapky", "btc", "viewport", padded, snappedZoom] as const,
+    queryFn: () => fetchBtcViewport(padded!, snappedZoom),
     enabled: !!padded,
     staleTime: 60_000,
     placeholderData: keepPreviousData,

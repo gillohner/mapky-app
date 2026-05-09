@@ -121,10 +121,17 @@ function LegendCard({
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   return (
-    <div className="pointer-events-auto rounded-lg border border-border bg-background/95 shadow-lg backdrop-blur-sm">
+    // Card chrome matches the LayerSheetTrigger so the two read as one
+    // floating control bar — same border, surface, shadow, blur,
+    // hover-accent. The collapsed pill is exactly h-11 (44 px) so when
+    // both sit side-by-side at the same `bottom` anchor their bottom
+    // AND top edges align across every viewport size. Wrapper uses
+    // rounded-2xl so the collapsed pill reads as a continuation of the
+    // round LayerSheetTrigger without clipping the expanded body.
+    <div className="pointer-events-auto rounded-2xl border border-border bg-background/95 shadow-lg backdrop-blur transition-colors hover:border-accent">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-t-lg px-2.5 py-1.5 text-left text-xs font-medium text-foreground transition-colors hover:bg-surface"
+        className="flex h-11 w-full items-center gap-2 rounded-2xl px-3 text-left text-xs font-medium text-foreground transition-colors"
         aria-expanded={expanded}
       >
         <span className="text-accent" aria-hidden>
@@ -244,6 +251,10 @@ export function MapLegends() {
   const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
   const btcOverlayVisible = useUiStore((s) => s.btcOverlayVisible);
   const selectedFeature = useUiStore((s) => s.selectedFeature);
+  // Same flag the LayerSheetTrigger reads — when a discover sidebar
+  // is open the trigger slides over to clear the panel; the legend
+  // follows so it stays anchored to the button.
+  const sidebarOpen = useUiStore((s) => s.sidebarOpen);
 
   // Mapky-data items, conditioned on each layer's visibility so the
   // card mirrors what's actually drawn. Each balloon sample reuses
@@ -333,21 +344,25 @@ export function MapLegends() {
         </div>
       )}
 
-      {/* Bottom-RIGHT — Mapky data legend. Defaults collapsed since
-          most users learn the symbols by seeing them once; the dot
-          stays available for newcomers and shared-link viewers.
-          Sits ABOVE MapLibre's NavigationControl + GeolocateControl
-          stack (4 buttons ≈ 150 px) so it doesn't cover zoom / rotate /
-          locate, and aligns at right-3 like the controls themselves. */}
+      {/* Mapky data legend — floats next to the Layers button (bottom-
+          left), one column to the right with a small gap. Mirrors the
+          trigger's position math so when the discover sidebar opens
+          and the trigger slides over, the legend follows in lockstep.
+          The left offset = trigger.left + trigger.width (44 px) + 8 px
+          gap. Defaults collapsed; users tap to learn the symbols and
+          collapse again. */}
       {mapkyItems.length > 0 && (
         <div
-          className="pointer-events-none absolute right-3 z-20 flex max-w-[16rem] flex-col gap-2"
+          className={`pointer-events-none fixed z-20 flex max-w-[16rem] flex-col gap-2 transition-[left] duration-300 ${
+            sidebarOpen
+              ? "left-16 md:left-[30.75rem]"
+              : "left-16 md:left-[6.75rem]"
+          }`}
           style={{
-            // 11rem ≈ 176 px — clears the four stacked maplibre controls
-            // plus their 10 px bottom margin. The safe-area inset adds
-            // bottom-padding on iOS where the home-indicator pushes
-            // controls up too.
-            bottom: "calc(11rem + env(safe-area-inset-bottom))",
+            // Match the LayerSheetTrigger's bottom anchor exactly so
+            // the legend's vertical baseline lines up with the button.
+            bottom:
+              "calc(var(--mobile-sheet-vh, 0) * 1vh + 0.75rem + env(safe-area-inset-bottom))",
           }}
         >
           <LegendCard

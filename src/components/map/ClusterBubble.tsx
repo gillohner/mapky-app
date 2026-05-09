@@ -1,40 +1,62 @@
 import { memo } from "react";
 
+export type ClusterVariant = "mapky" | "btc";
+
 interface Props {
   total: number;
   /** Reviewed-place sub-count drives the ring intensity — a cell with
    *  rated places gets a stronger accent ring so dense review areas
-   *  stand out. Optional; absent treats the cluster as plain. */
+   *  stand out. Optional; absent treats the cluster as plain. Only
+   *  meaningful for `variant: "mapky"` (the BTC overlay doesn't carry
+   *  sub-counts). */
   reviewed?: number;
+  /** Color theme. `mapky` = teal accent (Mapky-engaged places).
+   *  `btc` = orange (Bitcoin-accepting POIs). Both share the same
+   *  layout so a place that's both Mapky-engaged AND BTC produces
+   *  two stacked bubbles at the same lat/lon, conveying both signals. */
+  variant?: ClusterVariant;
 }
 
 /**
  * Cluster bubble for the low-zoom viewport.
  *
- * Pure count + accent ring. Bitcoin used to surface here as a corner
- * badge ("3 BTC of 12 places"), but the BTCMap-flooded merchants
- * dominated those counts and the place layer now narrows to Mapky-
- * engaged places by default — the BTC sub-count was a holdover from
- * before the BTC overlay split. Bitcoin merchants live in the
- * dedicated `/btc/viewport` overlay layer instead.
+ * Two color variants: `mapky` (teal) for the place layer, `btc`
+ * (orange) for the BTC overlay layer. Same shape, same sizing logic,
+ * different fills — visually consistent across layers but clearly
+ * distinguishable. When both layers cluster the same cell, the
+ * server-side cell-midpoint snapping gives them identical lat/lon, so
+ * the user sees them perfectly stacked at the same map point.
  *
  * Sized logarithmically (32-52 px) so a 5-place cluster and a
- * 5000-place cluster don't collapse into the same dot. Hover bumps
- * ring opacity to make clickability obvious.
+ * 5000-place cluster don't collapse into the same dot.
  */
-function ClusterBubbleImpl({ total, reviewed = 0 }: Props) {
+function ClusterBubbleImpl({ total, reviewed = 0, variant = "mapky" }: Props) {
   const diameter = Math.max(32, Math.min(52, 28 + Math.log10(total + 1) * 8));
   const hasReviews = reviewed > 0;
   // Font scales modestly with diameter so bigger bubbles get a
   // proportionally larger number — keeps density readable at a glance.
   const fontSize = diameter >= 46 ? 14 : diameter >= 38 ? 12 : 11;
 
+  // Variant-specific ring + text colors. Background stays themed
+  // (`bg-background/95`) so dark mode reads correctly; only the ring
+  // and number color change between Mapky/BTC.
+  const ringClass =
+    variant === "btc"
+      ? "ring-2 ring-[color:var(--btc-orange,#f7931a)] shadow-[color:var(--btc-orange,#f7931a)]/20"
+      : hasReviews
+        ? "ring-2 ring-accent shadow-accent/20"
+        : "ring-1 ring-accent/40";
+  const textClass =
+    variant === "btc" ? "text-[color:var(--btc-orange,#f7931a)]" : "text-foreground";
+
   return (
     <div
       className="relative"
       style={{ width: diameter, height: diameter }}
-      aria-label={`${total} places${
-        hasReviews ? `, ${reviewed} reviewed` : ""
+      aria-label={`${total} ${
+        variant === "btc" ? "Bitcoin POI" : "place"
+      }${total === 1 ? "" : "s"}${
+        variant === "mapky" && hasReviews ? `, ${reviewed} reviewed` : ""
       }`}
     >
       <div
@@ -42,17 +64,14 @@ function ClusterBubbleImpl({ total, reviewed = 0 }: Props) {
           "absolute inset-0 flex items-center justify-center rounded-full",
           "bg-background/95 backdrop-blur-sm shadow-md",
           "transition-all duration-150",
-          // Reviewed-cells get a stronger accent ring to stand out;
-          // un-reviewed Mapky clusters use the same accent at lower
-          // intensity so the visual language stays consistent.
-          hasReviews
-            ? "ring-2 ring-accent shadow-accent/20"
-            : "ring-1 ring-accent/40",
-          "hover:ring-accent",
+          ringClass,
+          variant === "btc"
+            ? "hover:ring-[color:var(--btc-orange,#f7931a)]"
+            : "hover:ring-accent",
         ].join(" ")}
       >
         <span
-          className="select-none font-semibold tabular-nums text-foreground"
+          className={`select-none font-semibold tabular-nums ${textClass}`}
           style={{ fontSize, lineHeight: 1 }}
         >
           {abbreviate(total)}
@@ -73,5 +92,8 @@ function abbreviate(n: number): string {
 
 export const ClusterBubble = memo(
   ClusterBubbleImpl,
-  (a, b) => a.total === b.total && a.reviewed === b.reviewed,
+  (a, b) =>
+    a.total === b.total &&
+    a.reviewed === b.reviewed &&
+    a.variant === b.variant,
 );
