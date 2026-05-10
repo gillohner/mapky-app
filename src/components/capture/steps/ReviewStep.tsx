@@ -164,7 +164,7 @@ export function ReviewStep() {
     isBatch ? handlePublishBatch() : handlePublishSingle();
 
   return (
-    <div className="flex h-full flex-col gap-4 p-4">
+    <div className="flex h-full flex-col gap-4">
       {/* Preview */}
       {active && (
         <div className="overflow-hidden rounded-xl border border-border bg-surface">

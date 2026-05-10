@@ -179,7 +179,7 @@ export function PickStep() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 p-4">
+    <div className="flex h-full flex-col gap-4">
       {/* Drop zone / gallery */}
       {items.length === 0 ? (
         <>

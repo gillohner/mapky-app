@@ -27,7 +27,7 @@ export function CaptionStep() {
 
   if (isBatch) {
     return (
-      <div className="flex h-full flex-col gap-4 p-4">
+      <div className="flex h-full flex-col gap-4">
         <div className="flex items-start gap-2 rounded-xl bg-sky-500/10 p-3 text-xs text-sky-700 dark:text-sky-300">
           <Layers className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>

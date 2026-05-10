@@ -1,6 +1,10 @@
 import { useEffect } from "react";
-import { ArrowLeft, X } from "lucide-react";
-import { useCaptureCreationStore, CAPTURE_STEPS, type CaptureStep } from "@/stores/capture-creation-store";
+import {
+  useCaptureCreationStore,
+  CAPTURE_STEPS,
+  type CaptureStep,
+} from "@/stores/capture-creation-store";
+import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
 import { PickStep } from "./steps/PickStep";
 import { PlaceStep } from "./steps/PlaceStep";
 import { CaptionStep } from "./steps/CaptionStep";
@@ -15,6 +19,22 @@ const STEP_TITLES: Record<CaptureStep, string> = {
   review: "Review & publish",
 };
 
+/**
+ * Capture creation wizard. Lives in the same shared shell every other
+ * action surface uses (`<DiscoverSidebar />`):
+ *
+ *   - **Desktop**: 380px left-anchored sidebar past the IconRail —
+ *     same slot as Places / Captures / Routes / Collections lists.
+ *   - **Mobile**: draggable bottom sheet (`<MobileBottomSheet />`)
+ *     with the standard 3 snap positions. The "place" step starts
+ *     COLLAPSED so the map is fully visible while the user is
+ *     placing the marker; other steps default to the middle snap.
+ *
+ * Wizard navigation maps cleanly onto DiscoverSidebar's slots: the
+ * step title becomes the panel title, the per-step "back" arrow uses
+ * `onBack` (only when `canGoBack`), the "X" closes the wizard, and
+ * the progress dots ride the `toolbar` slot.
+ */
 export function CaptureCreationPanel() {
   const isOpen = useCaptureCreationStore((s) => s.isOpen);
   const step = useCaptureCreationStore((s) => s.step);
@@ -36,72 +56,25 @@ export function CaptureCreationPanel() {
   const stepIdx = CAPTURE_STEPS.indexOf(step);
   const canGoBack = stepIdx > 0 && !isPublishing;
 
+  const onBack = canGoBack ? prev : undefined;
+  const onClose = () => {
+    if (!isPublishing) close();
+  };
+
   return (
-    <>
-      {/* Interactive place step needs the map visible — skip backdrop */}
-      {step !== "place" && (
+    <DiscoverSidebar
+      title={STEP_TITLES[step]}
+      onClose={onClose}
+      onBack={onBack}
+      // Place step needs the map visible — start the mobile sheet
+      // collapsed so the user can drop a marker without dragging the
+      // sheet out of the way first.
+      mobileCollapsible={step === "place"}
+      toolbar={
         <div
-          className="pointer-events-auto fixed inset-0 z-40 bg-black/30 backdrop-blur-sm md:hidden"
-          onClick={() => {
-            if (!isPublishing) close();
-          }}
-        />
-      )}
-
-      {/* Panel: bottom sheet on mobile, right sidebar on desktop.
-          Interactive map step renders a compact sheet so the map stays usable. */}
-      <div
-        className={`pointer-events-auto fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl border-t border-border bg-background shadow-2xl md:inset-y-0 md:right-0 md:left-auto md:w-[28rem] md:rounded-none md:rounded-l-2xl md:border-l md:border-t-0 ${
-          step === "place"
-            ? "max-h-[50dvh] md:max-h-none"
-            : "max-h-[90dvh] md:max-h-none"
-        }`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="capture-panel-title"
-      >
-        {/* Drag handle (mobile) */}
-        <div className="flex justify-center pt-2 md:hidden">
-          <div className="h-1 w-10 rounded-full bg-border" />
-        </div>
-
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2 min-w-0">
-            {canGoBack ? (
-              <button
-                type="button"
-                onClick={prev}
-                className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-foreground"
-                aria-label="Back"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-            ) : (
-              <div className="w-7" />
-            )}
-            <h2
-              id="capture-panel-title"
-              className="truncate text-base font-semibold text-foreground"
-            >
-              {STEP_TITLES[step]}
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (!isPublishing) close();
-            }}
-            disabled={isPublishing}
-            className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-foreground disabled:opacity-30"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Progress dots */}
-        <div className="flex items-center justify-center gap-1.5 border-b border-border px-4 py-2">
+          className="flex items-center justify-center gap-1.5"
+          aria-label={`Step ${stepIdx + 1} of ${CAPTURE_STEPS.length}`}
+        >
           {CAPTURE_STEPS.map((s, i) => (
             <div
               key={s}
@@ -115,16 +88,13 @@ export function CaptureCreationPanel() {
             />
           ))}
         </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto">
-          {step === "pick" && <PickStep />}
-          {step === "place" && <PlaceStep />}
-          {step === "caption" && <CaptionStep />}
-          {step === "tag" && <TagStep />}
-          {step === "review" && <ReviewStep />}
-        </div>
-      </div>
-    </>
+      }
+    >
+      {step === "pick" && <PickStep />}
+      {step === "place" && <PlaceStep />}
+      {step === "caption" && <CaptionStep />}
+      {step === "tag" && <TagStep />}
+      {step === "review" && <ReviewStep />}
+    </DiscoverSidebar>
   );
 }

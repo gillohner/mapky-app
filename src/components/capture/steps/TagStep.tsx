@@ -31,7 +31,7 @@ export function TagStep() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 p-4">
+    <div className="flex h-full flex-col gap-4">
       <div className="flex items-start gap-2 text-xs text-muted">
         <Tag className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
