@@ -26,8 +26,8 @@ Tracked items deferred from API/UX audits. Cross-repo items note which repo owns
 - ~~**OR-combined filter pills + min-rating dimension** (app + plugin)~~ — **shipped**.
   `PlaceFilters = { activities: PlaceActivity[]; minRating? }`. Plugin's `/v0/mapky/viewport` accepts comma-separated `?activity=tagged,reviewed,posted,collected` (OR) + `?min_rating=4`. Empty `activities` defaults to "any Mapky engagement" (OR of all four) so unengaged BTCMap merchants don't flood the place layer. `?include_unengaged=true` is the escape hatch. `<PlaceFilterControls />` mounts in both the LayerSheet's Mapky tab AND the Places sidebar.
 
-- **Tag filter on viewport** (app + plugin) — **open**.
-  Let users type a tag (e.g. "coffee") and narrow the place layer to that tag. Likely a `?tags=coffee,vegan` predicate on `/v0/mapky/viewport` (Cypher work in the plugin) plus an autocomplete UI on the frontend.
+- ~~**Tag filter on viewport** (app + plugin)~~ — **already covered by global search**.
+  `<SearchBar />` / `<SearchPanel />` already do tag-driven map filtering: typing a tag hits `/v0/mapky/search/tags?q=`, the search panel calls `useAutoFocusLayer(null, { hide: true })` to clear the regular Places layer, and `<SearchResultsOverlay />` renders the matching places as the same teardrop balloons. No separate viewport-level `?tags=` predicate needed.
 
 ## Plugin endpoints — defer cleanup
 
