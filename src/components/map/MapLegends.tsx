@@ -1,13 +1,5 @@
 import { useState } from "react";
-import {
-  Bike,
-  TrainFront,
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
-  MapPin,
-  Bitcoin,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, MapPin, Bitcoin } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { PlaceBalloon } from "./PlaceBalloon";
@@ -26,13 +18,13 @@ function lineSample(opts: {
   outline?: string;
 }) {
   return (
-    <svg width="28" height="10" viewBox="0 0 28 10" aria-hidden="true">
+    <svg width="22" height="8" viewBox="0 0 22 8" aria-hidden="true">
       {opts.outline && (
         <line
           x1="2"
-          y1="5"
-          x2="26"
-          y2="5"
+          y1="4"
+          x2="20"
+          y2="4"
           stroke={opts.outline}
           strokeWidth={(opts.width ?? 3) + 2}
           strokeLinecap="round"
@@ -40,9 +32,9 @@ function lineSample(opts: {
       )}
       <line
         x1="2"
-        y1="5"
-        x2="26"
-        y2="5"
+        y1="4"
+        x2="20"
+        y2="4"
         stroke={opts.color}
         strokeWidth={opts.width ?? 3}
         strokeLinecap="round"
@@ -101,33 +93,28 @@ const RAILWAY_ITEMS: LegendItem[] = [
   },
 ];
 
+interface LegendSection {
+  /** Optional sub-header rendered as a small uppercase muted line.
+   *  Omit on the first/Mapky section so the most-relevant items aren't
+   *  preceded by a heading. */
+  heading?: string;
+  items: LegendItem[];
+}
+
 function LegendCard({
   icon,
   title,
-  items,
-  footerHref,
-  defaultExpanded = true,
+  sections,
 }: {
   icon: React.ReactNode;
   title: string;
-  items: LegendItem[];
-  /** Optional external "Full legend" link. Omit for in-app legends
-   *  where every visible symbol is already documented in the card. */
-  footerHref?: string;
-  /** Default false for the Mapky data card (most users learn it by
-   *  seeing it once); default true for overlay-specific legends where
-   *  the user explicitly turned the overlay on and wants the key. */
-  defaultExpanded?: boolean;
+  sections: LegendSection[];
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [expanded, setExpanded] = useState(false);
+  // Defaults collapsed — most users learn the symbols by seeing them
+  // once. The pill stays available for newcomers and shared-link
+  // viewers who want a key.
   return (
-    // Card chrome matches the LayerSheetTrigger so the two read as one
-    // floating control bar — same border, surface, shadow, blur,
-    // hover-accent. The collapsed pill is exactly h-11 (44 px) so when
-    // both sit side-by-side at the same `bottom` anchor their bottom
-    // AND top edges align across every viewport size. Wrapper uses
-    // rounded-2xl so the collapsed pill reads as a continuation of the
-    // round LayerSheetTrigger without clipping the expanded body.
     <div className="pointer-events-auto rounded-2xl border border-border bg-background/95 shadow-lg backdrop-blur transition-colors hover:border-accent">
       <button
         onClick={() => setExpanded((v) => !v)}
@@ -145,57 +132,49 @@ function LegendCard({
         )}
       </button>
       {expanded && (
-        <div className="border-t border-border px-2.5 pb-2 pt-1.5">
-          <ul className="flex flex-col gap-1.5">
-            {items.map((item) => (
-              <li
-                key={item.label}
-                className="flex items-center gap-2 text-[11px] text-foreground"
-              >
-                <span className="flex h-8 w-7 items-center justify-center">
-                  {item.sample}
-                </span>
-                <span className="flex-1 truncate">{item.label}</span>
-              </li>
-            ))}
-          </ul>
-          {footerHref && (
-            <a
-              href={footerHref}
-              target="_blank"
-              rel="noopener"
-              className="mt-2 inline-flex items-center gap-1 text-[10px] text-muted hover:text-foreground"
-            >
-              Full legend
-              <ExternalLink className="h-2.5 w-2.5" aria-hidden />
-            </a>
-          )}
+        <div className="border-t border-border px-2.5 pb-1.5 pt-1">
+          {sections.map((section, i) => (
+            <div key={section.heading ?? i} className={i > 0 ? "mt-1.5" : ""}>
+              {section.heading && (
+                <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted">
+                  {section.heading}
+                </div>
+              )}
+              <ul className="flex flex-col">
+                {section.items.map((item) => (
+                  <li
+                    key={item.label}
+                    className="flex h-6 items-center gap-2 text-[11px] leading-none text-foreground"
+                  >
+                    <span className="flex h-6 w-6 items-center justify-center">
+                      {item.sample}
+                    </span>
+                    <span className="flex-1 truncate">{item.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-// ── Mapky data legend samples ──────────────────────────────────────
-//
-// The samples below render the *actual* PlaceBalloon component scaled
-// down inside a fixed-size slot, so what the user sees in the legend
-// is pixel-identical to what they see on the map. Earlier hand-drawn
-// SVGs drifted from the real markers as the balloon design evolved;
-// reusing the component keeps them in lockstep.
+// ── Sample helpers ─────────────────────────────────────────────────
 
 const BTC_ORANGE = "#f7931a";
 const BTC_ORANGE_DARK = "#cc7700";
-const CAPTURE_BLUE = "#0284c7"; // matches CaptureMarkersLayer light theme
+const CAPTURE_BLUE = "#0284c7";
 
 /** Wrap any node in a fixed-size slot, scaled to fit. The slot is
- *  20×32 px so the rated PlaceBalloon (which adds a star chip ABOVE
- *  the balloon body) fits inside the slot at scale 0.5 without
- *  bleeding into the legend row above it. The marker is anchored to
- *  the slot's bottom — matches how it sits on its anchor on the map. */
+ *  20×24 px; at scale 0.4 the rated PlaceBalloon (53 px tall in real
+ *  pixels, scaled to ~21 px) fits inside the row without overlapping
+ *  neighboring rows. The marker is anchored to the slot's bottom —
+ *  matches how it sits on its anchor on the map. */
 function MarkerSlot({
   children,
-  scale = 0.5,
+  scale = 0.4,
 }: {
   children: React.ReactNode;
   scale?: number;
@@ -203,7 +182,7 @@ function MarkerSlot({
   return (
     <span
       className="relative inline-block"
-      style={{ width: 20, height: 32 }}
+      style={{ width: 20, height: 24 }}
       aria-hidden
     >
       <span
@@ -221,7 +200,7 @@ function MarkerSlot({
 
 function dotSample({ color, stroke }: { color: string; stroke?: string }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+    <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden>
       <circle
         cx="7"
         cy="7"
@@ -235,15 +214,16 @@ function dotSample({ color, stroke }: { color: string; stroke?: string }) {
 }
 
 /**
- * Stacked legend column for active overlays/basemaps. Cards appear
- * on the bottom-LEFT of the map (overlay-tile legends — cycling,
- * rail/metro) only when their layer is actually on. The Mapky-data
- * legend lives on the bottom-RIGHT, in its own column, so the user
- * can cross-reference what's drawn on the map without obscuring the
- * tile legends.
+ * One unified legend card pinned next to the LayerSheetTrigger. Items
+ * are conditioned on what's actually visible on the map: places,
+ * captures, BTC overlay dots/clusters, the rail-overlay's tile
+ * legend, the cycling-basemap's tile legend, and the per-interaction
+ * selected pin.
  *
- * Cycling is now a basemap (read from map-store); rail/metro and
- * Mapky data layers come from ui-store.
+ * Earlier the cycling/rail tile legends sat in a separate column on
+ * the bottom-left. They've been folded in here so the user only has
+ * one legend to look at — the items appear or hide based on their
+ * own layer's visibility, same as everything else.
  */
 export function MapLegends() {
   const cycling = useMapStore((s) => s.basemap === "cycling");
@@ -253,22 +233,13 @@ export function MapLegends() {
   const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
   const btcOverlayVisible = useUiStore((s) => s.btcOverlayVisible);
   const selectedFeature = useUiStore((s) => s.selectedFeature);
-  // Same flag the LayerSheetTrigger reads — when a discover sidebar
-  // is open the trigger slides over to clear the panel; the legend
-  // follows so it stays anchored to the button.
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
 
-  // Mapky-data items, conditioned on each layer's visibility so the
-  // card mirrors what's actually drawn. Each balloon sample reuses
-  // the *real* PlaceBalloon component scaled down — exactly what
-  // the map renders, never a hand-drawn approximation.
+  // ─── Mapky section — places / BTC / captures / selection. ─────
   const mapkyItems: LegendItem[] = [];
   if (placesLayerVisible) {
     mapkyItems.push(
       {
-        // Mapky-engaged places use the accent variant (place-btc body)
-        // when accepts_bitcoin is true; the badge appears alongside.
-        // Either way the body is teal/accent — that's the signal.
         label: "Place with Mapky data",
         sample: (
           <MarkerSlot>
@@ -299,13 +270,10 @@ export function MapLegends() {
     });
   }
   if (selectedFeature) {
-    // The selected pin uses its own teardrop SVG (mapky-place-pin in
-    // SelectedPlaceMarker), tinted red. Sample it with a small inline
-    // copy of the same path to stay accurate.
     mapkyItems.push({
       label: "Selected place",
       sample: (
-        <svg width="20" height="22" viewBox="-2 -2 32 44" aria-hidden>
+        <svg width="14" height="16" viewBox="-2 -2 32 44" aria-hidden>
           <path
             d="M14 2 C7 2 2 7 2 14 C2 22 14 38 14 38 C14 38 26 22 26 14 C26 7 21 2 14 2 Z"
             fill="#dc2626"
@@ -317,71 +285,38 @@ export function MapLegends() {
     });
   }
 
-  if (!cycling && !metro && mapkyItems.length === 0) return null;
+  // Build the section list. Mapky comes first (the user's primary
+  // signal), then any active overlay-tile legends below it.
+  const sections: LegendSection[] = [];
+  if (mapkyItems.length > 0) sections.push({ items: mapkyItems });
+  if (cycling) sections.push({ heading: "Cycling", items: CYCLING_ITEMS });
+  if (metro) sections.push({ heading: "Rail & metro", items: RAILWAY_ITEMS });
+
+  if (sections.length === 0) return null;
 
   return (
-    <>
-      {/* Bottom-LEFT — overlay tile legends (cycling, rail/metro). */}
-      {(cycling || metro) && (
-        <div
-          className="pointer-events-none absolute bottom-20 left-14 z-20 flex max-w-[16rem] flex-col gap-2 sm:left-16"
-          style={{ paddingBottom: "max(0px, env(safe-area-inset-bottom))" }}
-        >
-          {cycling && (
-            <LegendCard
-              icon={<Bike className="h-3.5 w-3.5" />}
-              title="Cycling legend"
-              items={CYCLING_ITEMS}
-              footerHref="https://www.cyclosm.org/legend.html"
-            />
-          )}
-          {metro && (
-            <LegendCard
-              icon={<TrainFront className="h-3.5 w-3.5" />}
-              title="Rail & metro legend"
-              items={RAILWAY_ITEMS}
-              footerHref="https://wiki.openstreetmap.org/wiki/OpenRailwayMap/Manual"
-            />
-          )}
-        </div>
-      )}
-
-      {/* Mapky data legend — floats next to the Layers button (bottom-
-          left), one column to the right with a small gap. Mirrors the
-          trigger's position math so when the discover sidebar opens
-          and the trigger slides over, the legend follows in lockstep.
-          The left offset = trigger.left + trigger.width (44 px) + 8 px
-          gap. Defaults collapsed; users tap to learn the symbols and
-          collapse again. */}
-      {mapkyItems.length > 0 && (
-        <div
-          className={`pointer-events-none fixed z-20 flex max-w-[16rem] flex-col gap-2 transition-[left] duration-300 ${
-            sidebarOpen
-              ? "left-16 md:left-[30.75rem]"
-              : "left-16 md:left-[6.75rem]"
-          }`}
-          style={{
-            // Match the LayerSheetTrigger's bottom anchor exactly so
-            // the legend's vertical baseline lines up with the button.
-            bottom:
-              "calc(var(--mobile-sheet-vh, 0) * 1vh + 0.25rem + env(safe-area-inset-bottom))",
-          }}
-        >
-          <LegendCard
-            icon={<MapkyLegendIcon btc={btcOverlayVisible} />}
-            title="Map legend"
-            items={mapkyItems}
-            defaultExpanded={false}
-          />
-        </div>
-      )}
-    </>
+    <div
+      className={`pointer-events-none fixed z-20 flex max-w-[16rem] flex-col gap-2 transition-[left] duration-300 ${
+        sidebarOpen
+          ? "left-16 md:left-[30.75rem]"
+          : "left-16 md:left-[6.75rem]"
+      }`}
+      style={{
+        bottom:
+          "calc(var(--mobile-sheet-vh, 0) * 1vh + 0.25rem + env(safe-area-inset-bottom))",
+      }}
+    >
+      <LegendCard
+        icon={<MapkyLegendIcon btc={btcOverlayVisible} />}
+        title="Map legend"
+        sections={sections}
+      />
+    </div>
   );
 }
 
-/** Header icon for the Mapky data legend card. Picks the most
- *  visually-distinctive on-screen layer so the collapsed card hints
- *  at its content. */
+/** Header icon for the legend card. Picks the most visually-distinctive
+ *  on-screen layer so the collapsed pill hints at what's inside. */
 function MapkyLegendIcon({ btc }: { btc: boolean }) {
   if (btc) return <Bitcoin className="h-3.5 w-3.5" />;
   return <MapPin className="h-3.5 w-3.5" />;
