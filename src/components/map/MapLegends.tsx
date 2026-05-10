@@ -152,7 +152,7 @@ function LegendCard({
                 key={item.label}
                 className="flex items-center gap-2 text-[11px] text-foreground"
               >
-                <span className="flex h-4 w-7 items-center justify-center">
+                <span className="flex h-8 w-7 items-center justify-center">
                   {item.sample}
                 </span>
                 <span className="flex-1 truncate">{item.label}</span>
@@ -188,9 +188,11 @@ const BTC_ORANGE = "#f7931a";
 const BTC_ORANGE_DARK = "#cc7700";
 const CAPTURE_BLUE = "#0284c7"; // matches CaptureMarkersLayer light theme
 
-/** Wrap any node in a fixed-size slot, scaled to fit. The legend slot
- *  is 24×24 px; the marker is anchored to the bottom (matches how it
- *  sits on its anchor on the map). */
+/** Wrap any node in a fixed-size slot, scaled to fit. The slot is
+ *  20×32 px so the rated PlaceBalloon (which adds a star chip ABOVE
+ *  the balloon body) fits inside the slot at scale 0.5 without
+ *  bleeding into the legend row above it. The marker is anchored to
+ *  the slot's bottom — matches how it sits on its anchor on the map. */
 function MarkerSlot({
   children,
   scale = 0.5,
@@ -201,7 +203,7 @@ function MarkerSlot({
   return (
     <span
       className="relative inline-block"
-      style={{ width: 24, height: 24 }}
+      style={{ width: 20, height: 32 }}
       aria-hidden
     >
       <span
