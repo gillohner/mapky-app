@@ -54,9 +54,27 @@ const THEMES: Record<
 export interface TagStripProps {
   /** Tag list returned by the resource's tags endpoint. */
   tags: PostTagDetails[] | undefined;
-  /** TanStack Query key used by the calling hook — TagStrip patches it
-   *  optimistically and invalidates after server-side reconciliation. */
-  queryKey: QueryKey;
+  /**
+   * Cache integration. Provide ONE of:
+   *
+   *   - `queryKey` — simple per-endpoint cache that holds
+   *     `PostTagDetails[]` directly. TagStrip handles cancel +
+   *     setQueryData + invalidate against the key. Used by every
+   *     resource type whose `*Tags` component reads off a dedicated
+   *     `/tags` endpoint (post / review / collection / capture / route).
+   *   - `mutate` + `refresh` — composite-aware callbacks. The caller
+   *     owns where the tags slice lives (typically inside a larger
+   *     envelope like `PlaceFullResponse`) and runs the optimistic
+   *     patch + cache refresh in its own shape. Used by PlaceTags
+   *     against the `/place/{type}/{id}/full` composite cache.
+   */
+  queryKey?: QueryKey;
+  mutate?: (
+    updater: (
+      tags: PostTagDetails[] | undefined,
+    ) => PostTagDetails[] | undefined,
+  ) => Promise<void> | void;
+  refresh?: () => Promise<void> | void;
   /** Build the tag write — same input always produces the same hashId path. */
   buildTag: (publicKey: string, label: string) => { path: string; json: string };
   /** Visual color family. */
@@ -81,6 +99,8 @@ export interface TagStripProps {
 export function TagStrip({
   tags,
   queryKey,
+  mutate,
+  refresh,
   buildTag,
   theme = "accent",
   inputMode = "free",
@@ -108,9 +128,11 @@ export function TagStrip({
         await session.storage.putText(result.path as `/pub/${string}`, result.json);
       }
 
-      await queryClient.cancelQueries({ queryKey });
-
-      queryClient.setQueryData<PostTagDetails[]>(queryKey, (old) => {
+      // Pure mutation logic — applied through whichever cache integration
+      // the caller wired up.
+      const updater = (
+        old: PostTagDetails[] | undefined,
+      ): PostTagDetails[] | undefined => {
         if (removing) {
           if (!old) return old;
           return old
@@ -125,7 +147,8 @@ export function TagStrip({
             )
             .filter((tg) => tg.taggers_count > 0);
         }
-        if (!old) return [{ label: tagLabel, taggers: [publicKey], taggers_count: 1 }];
+        if (!old)
+          return [{ label: tagLabel, taggers: [publicKey], taggers_count: 1 }];
         const existing = old.find((tg) => tg.label === tagLabel);
         if (existing) {
           if (existing.taggers.includes(publicKey)) return old;
@@ -139,17 +162,39 @@ export function TagStrip({
               : tg,
           );
         }
-        return [...old, { label: tagLabel, taggers: [publicKey], taggers_count: 1 }];
-      });
+        return [
+          ...old,
+          { label: tagLabel, taggers: [publicKey], taggers_count: 1 },
+        ];
+      };
+
+      if (mutate) {
+        await mutate(updater);
+      } else if (queryKey) {
+        await queryClient.cancelQueries({ queryKey });
+        queryClient.setQueryData<PostTagDetails[]>(queryKey, updater);
+      }
 
       onCountDelta?.(removing ? -1 : 1);
 
-      toast.success(removing ? `Removed "${tagLabel}" tag` : `Tagged with "${tagLabel}"`);
+      toast.success(
+        removing ? `Removed "${tagLabel}" tag` : `Tagged with "${tagLabel}"`,
+      );
       setLabel("");
       setShowInput(false);
 
+      // Reconcile after nexus has had a moment to index the
+      // homeserver write. The 5s delay is tuned to typical watcher
+      // latency; user-visible state is already correct via the
+      // optimistic patch above.
       ingestUserIntoNexus(publicKey).then(() =>
-        setTimeout(() => queryClient.invalidateQueries({ queryKey }), 5000),
+        setTimeout(() => {
+          if (refresh) {
+            refresh();
+          } else if (queryKey) {
+            queryClient.invalidateQueries({ queryKey });
+          }
+        }, 5000),
       );
     } catch {
       toast.error(removing ? "Failed to remove tag" : "Failed to add tag");

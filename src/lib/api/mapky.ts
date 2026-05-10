@@ -123,6 +123,28 @@ export async function fetchViewportAll(
 }
 
 /**
+ * Batch-fetch captures across many sequences in one round-trip.
+ * Replaces the per-sequence fan-out for viewport-driven coverage:
+ * one POST regardless of how many sequences are surfaced. Each
+ * capture in the response carries its own `sequence_uri` so the
+ * caller can re-group locally if needed.
+ */
+export async function fetchSequencesCapturesByIds(
+  refs: ReadonlyArray<{ authorId: string; sequenceId: string }>,
+  limit = 1000,
+): Promise<GeoCaptureDetails[]> {
+  if (refs.length === 0) return [];
+  const uris = refs.map(
+    (r) => `pubky://${r.authorId}/pub/mapky.app/sequences/${r.sequenceId}`,
+  );
+  const { data } = await nexusClient.post<GeoCaptureDetails[]>(
+    "/v0/mapky/sequences/captures/by_ids",
+    { uris, limit },
+  );
+  return data;
+}
+
+/**
  * Fetch the BTC overlay's viewport — same zoom-aware envelope as
  * `/v0/mapky/viewport`. Below the cluster threshold the response
  * carries `kind: "clusters"` (orange-themed cluster bubbles); at or

@@ -1,5 +1,4 @@
 import {
-  useQueries,
   useQuery,
   useQueryClient,
   keepPreviousData,
@@ -28,6 +27,7 @@ import {
   fetchGeoCaptureDetail,
   fetchGeoCaptureTags,
   fetchSequenceCaptures,
+  fetchSequencesCapturesByIds,
   fetchUserGeoCaptures,
   fetchViewportRoutes,
   fetchRouteDetails,
@@ -605,15 +605,23 @@ export function useSequenceCaptures(
 }
 
 /**
- * For every sequence URI surfaced in the viewport, fetch ALL of that
- * sequence's captures and return the merged set. Lets the capture
- * layers draw the full polyline + every dot a sequence touches even
- * when most of its members sit outside the current bbox.
+ * For every sequence URI surfaced in the viewport, fetch ALL of those
+ * sequences' captures via ONE batched request and return the merged
+ * set. Lets the capture layers draw the full polyline + every dot a
+ * sequence touches even when most of its members sit outside the
+ * current bbox.
  *
- * Each per-sequence fetch is a TanStack query keyed on the same
- * `["mapky", "sequence", author, id, "captures"]` tuple
- * `useSequenceCaptures` uses, so opening a capture detail panel after
- * passing through the viewport is a free cache hit (and vice-versa).
+ * Was a useQueries-fan-out — one /captures request per visible
+ * sequence. With dense capture viewports that produced 5+ parallel
+ * round-trips per pan. Backend now exposes
+ * `POST /sequences/captures/by_ids` (mirrors pubky-nexus' /by_ids
+ * pattern), and we switch to a single query keyed on the (sorted)
+ * sequence-id set.
+ *
+ * Side effect: seed the per-sequence cache (`["mapky", "sequence",
+ * author, id, "captures"]`) so a subsequent
+ * `useSequenceCaptures(author, id)` (e.g. capture detail panel
+ * after passing through the viewport) is a free cache hit.
  *
  * Returns: `{ extras }` — the captures from the fetched sequences
  * MINUS whatever is already in `viewport`, ready to be unioned.
@@ -621,6 +629,7 @@ export function useSequenceCaptures(
 export function useSequenceMembersFanOut(
   viewport: GeoCaptureDetails[] | undefined,
 ): { extras: GeoCaptureDetails[] } {
+  const qc = useQueryClient();
   const seqRefs = useMemo(() => {
     if (!viewport) return [];
     const seen = new Set<string>();
@@ -636,40 +645,59 @@ export function useSequenceMembersFanOut(
     return out;
   }, [viewport]);
 
-  const queries = useQueries({
-    queries: seqRefs.map((ref) => ({
-      queryKey: [
-        "mapky",
-        "sequence",
-        ref.authorId,
-        ref.sequenceId,
-        "captures",
-      ] as const,
-      queryFn: () => fetchSequenceCaptures(ref.authorId, ref.sequenceId),
-      // Sequence membership is stable enough that a 5-min stale window
-      // covers a typical browse session without going stale on long
-      // walks through the same author's captures.
-      staleTime: 5 * 60_000,
-      retry: false,
-    })),
+  // Sorted set as the cache key — order-independent so two
+  // permutations of the same refs share a cache entry.
+  const stableKey = useMemo(
+    () =>
+      seqRefs
+        .map((r) => `${r.authorId}:${r.sequenceId}`)
+        .sort()
+        .join(","),
+    [seqRefs],
+  );
+
+  const { data: batch } = useQuery({
+    queryKey: ["mapky", "sequences", "captures-batch", stableKey] as const,
+    queryFn: () => fetchSequencesCapturesByIds(seqRefs),
+    enabled: seqRefs.length > 0,
+    // Sequence membership is stable enough that a 5-min stale window
+    // covers a typical browse session.
+    staleTime: 5 * 60_000,
+    retry: false,
   });
+
+  // Seed the per-sequence cache so capture-detail panels for any of
+  // these sequences resolve instantly.
+  useEffect(() => {
+    if (!batch) return;
+    const bySeq = new Map<string, GeoCaptureDetails[]>();
+    for (const c of batch) {
+      if (!c.sequence_uri) continue;
+      const arr = bySeq.get(c.sequence_uri) ?? [];
+      arr.push(c);
+      bySeq.set(c.sequence_uri, arr);
+    }
+    for (const ref of seqRefs) {
+      const uri = `pubky://${ref.authorId}/pub/mapky.app/sequences/${ref.sequenceId}`;
+      qc.setQueryData(
+        ["mapky", "sequence", ref.authorId, ref.sequenceId, "captures"],
+        bySeq.get(uri) ?? [],
+      );
+    }
+  }, [batch, seqRefs, qc]);
 
   const extras = useMemo(() => {
     const seen = new Set<string>();
     for (const c of viewport ?? []) seen.add(c.id);
+    if (!batch) return [];
     const out: GeoCaptureDetails[] = [];
-    for (const q of queries) {
-      const data = q.data;
-      if (!data) continue;
-      for (const c of data) {
-        if (seen.has(c.id)) continue;
-        seen.add(c.id);
-        out.push(c);
-      }
+    for (const c of batch) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      out.push(c);
     }
     return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewport, queries.map((q) => q.dataUpdatedAt).join(",")]);
+  }, [viewport, batch]);
 
   return { extras };
 }
