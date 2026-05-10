@@ -29,13 +29,33 @@ Tracked items deferred from API/UX audits. Cross-repo items note which repo owns
 - ~~**Tag filter on viewport** (app + plugin)~~ — **already covered by global search**.
   `<SearchBar />` / `<SearchPanel />` already do tag-driven map filtering: typing a tag hits `/v0/mapky/search/tags?q=`, the search panel calls `useAutoFocusLayer(null, { hide: true })` to clear the regular Places layer, and `<SearchResultsOverlay />` renders the matching places as the same teardrop balloons. No separate viewport-level `?tags=` predicate needed.
 
+## Geocaptures + sequences
+
+- ~~**Sequence display on map** (plugin + app)~~ — **shipped** (mapky-nexus-plugin#3 + mapky-app#16).
+  `<SequenceMarkersLayer />` renders one violet pill marker per sequence at the bbox centroid. Polyline lifted 0.35→0.55. Backend: `/v0/mapky/sequences/viewport` (bbox-overlap query) + `/v0/mapky/sequences/{a}/{id}/full` composite.
+
+- ~~**Sequence detail + tag/post on sequences as a whole** (plugin + app)~~ — **shipped**.
+  `/sequence/$author/$id` route + `<SequenceDetailPanel />` (header, description, capture grid, tags, reply thread). Composite cache → 1 round-trip per panel open. `<SequenceTags />` reuses TagStrip's composite-cache callbacks. `ResourceDiscussion` already supported `resourceType: "sequences"` — backend was ready, just wired the UI.
+
+- ~~**Sequence discovery sidebar + search navigation** (app)~~ — **shipped**.
+  `/sequences` route with Mine + In-this-area tabs. IconRail entry. SearchPanel: sequence rows clickable + post-parent resolution.
+
+- ~~**Capture upload UX polish** (app)~~ — **shipped**.
+  Drag-drop on empty PickStep zone. EXIF GPS-coverage banner when picked set has a mix.
+
+- **Capture markers in `<SearchResultsOverlay />`** (app, deferred)
+  Captures and sequences don't currently render as map balloons during search (only places, routes, collections, reviews). Search list nav covers most of the UX, but adding map balloons would close the gap. Low-priority polish.
+
+- **Sequence rename / delete** (app)
+  Owner-only edit affordances on the SequenceDetailPanel. Deferred.
+
+- **Reorder captures within a published sequence** (app + plugin)
+  Currently `sequence_index` is fixed at upload. UI for re-sorting members is a larger refactor — deferred.
+
 ## Plugin endpoints — defer cleanup
 
 - **Incidents endpoints** (`/incidents/viewport`, `/incidents/{author}/{id}`, `/incidents/user/{id}`)
   Currently unused by the frontend. Per user direction, leave defined and improve later. Don't delete.
-
-- **Sequences endpoints** (`/sequences/{a}/{s}`, `/sequences/{a}/{s}/tags`, `/sequences/user/{id}`)
-  `/sequences/{a}/{s}/captures` and the new `/sequences/captures/by_ids` are consumed; the others stay defined for future use.
 
 - **BTC endpoints** (`/btc/viewport`, `/btc/status`)
   `/btc/viewport` is the BTC overlay layer's data source. `/btc/status` exposes BTCMap sync state — still unused but cheap to keep.
