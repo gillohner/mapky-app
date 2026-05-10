@@ -310,14 +310,26 @@ export function BtcOverlayLayer() {
         // maplibre's Marker keeps an internal _element ref — easiest to
         // remove + re-add than try to swap it in place.
         existing.remove();
-        const m = new maplibregl.Marker({ element: newEl, anchor: "center" })
+        // Offset pushes BTC clusters slightly NE so a Mapky cluster
+        // (teal) and a BTC cluster (orange) at the same centroid
+        // don't stack. The Mapky layer stays at the natural
+        // centroid; only this overlay shifts.
+        const m = new maplibregl.Marker({
+          element: newEl,
+          anchor: "center",
+          offset: [22, -22],
+        })
           .setLngLat([c.lon, c.lat])
           .addTo(map);
         live.set(key, m);
         continue;
       }
       const el = renderClusterEl(c.total, c.lat, c.lon);
-      const m = new maplibregl.Marker({ element: el, anchor: "center" })
+      const m = new maplibregl.Marker({
+        element: el,
+        anchor: "center",
+        offset: [22, -22],
+      })
         .setLngLat([c.lon, c.lat])
         .addTo(map);
       live.set(key, m);
