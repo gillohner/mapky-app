@@ -22,8 +22,38 @@ export function CaptionStep() {
   const next = useCaptureCreationStore((s) => s.next);
   const isBatch = useIsBatch();
 
+  const targetSequence = useCaptureCreationStore((s) => s.targetSequence);
   const captionRemaining = MAX_CAPTION - caption.length;
   const tooLong = captionRemaining < 0;
+
+  // Append mode: the sequence already exists with its own name +
+  // description. Show a context banner instead of the new-sequence
+  // form so the user knows the inputs they'd otherwise see don't
+  // apply, and skip straight to Continue.
+  if (targetSequence) {
+    return (
+      <div className="flex h-full flex-col gap-4">
+        <div className="flex items-start gap-2 rounded-xl bg-sky-500/10 p-3 text-xs text-sky-700 dark:text-sky-300">
+          <Layers className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Adding <strong>{items.length}</strong> capture
+            {items.length === 1 ? "" : "s"} to{" "}
+            <strong>
+              {targetSequence.current.name?.trim() || "this sequence"}
+            </strong>
+            . The sequence's name and description stay as they are.
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={next}
+          className="mt-auto w-full rounded-xl bg-sky-500 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-sky-600"
+        >
+          Continue
+        </button>
+      </div>
+    );
+  }
 
   if (isBatch) {
     return (

@@ -5,7 +5,9 @@ import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { useBackOr } from "@/hooks/use-back-or";
+import { useShareLink } from "@/lib/hooks/use-share-link";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
+import { PanelHeaderActions } from "@/components/shared/PanelHeaderActions";
 import {
   encodeFeatureId,
   sourceLayersForType,
@@ -136,12 +138,16 @@ export function PlacePanel({
         ? "My Posts"
         : "Places";
 
+  const share = useShareLink({ kind: "place", osmType, osmId });
+  const headerActions = <PanelHeaderActions share={{ onClick: share }} />;
+
   return (
     <DiscoverSidebar
       title="Place"
       onClose={close}
       onBack={back}
       backLabel={backLabel}
+      rightHeaderSlot={headerActions}
       mobileCollapsible
     >
       <div className="space-y-4">

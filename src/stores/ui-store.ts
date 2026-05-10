@@ -156,6 +156,12 @@ interface UiStore {
   visibleCaptureIds: Set<string> | null;
   setVisibleCaptureIds: (s: Set<string> | null) => void;
 
+  /** Compound ids of sequences the sidebar's filter is keeping visible.
+   *  Used by SequenceMarkersLayer so the violet pins on the map match
+   *  the captures-list filtered set (kind, tags, text). */
+  visibleSequenceIds: Set<string> | null;
+  setVisibleSequenceIds: (s: Set<string> | null) => void;
+
   visibleCollectionIds: Set<string> | null;
   setVisibleCollectionIds: (s: Set<string> | null) => void;
 
@@ -300,6 +306,9 @@ export const useUiStore = create<UiStore>()(
 
       visibleCaptureIds: null,
       setVisibleCaptureIds: (s) => set({ visibleCaptureIds: s }),
+
+      visibleSequenceIds: null,
+      setVisibleSequenceIds: (s) => set({ visibleSequenceIds: s }),
 
       visibleCollectionIds: null,
       setVisibleCollectionIds: (s) => set({ visibleCollectionIds: s }),

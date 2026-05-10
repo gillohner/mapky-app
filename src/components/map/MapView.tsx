@@ -111,9 +111,19 @@ export function MapView() {
       style: createMapStyle(theme, basemap, { satelliteLabels }),
       center: center,
       zoom: zoom,
+      // Default attribution is expanded and competes with the
+      // capture/mini-map at bottom-right — render a compact "i" toggle
+      // instead so it stays out of the way until tapped.
+      attributionControl: false,
     });
 
+    map.addControl(
+      new maplibregl.AttributionControl({ compact: true }),
+      "bottom-right",
+    );
+
     map.addControl(new maplibregl.NavigationControl(), "bottom-right");
+
 
     map.addControl(
       new maplibregl.GeolocateControl({
@@ -135,6 +145,13 @@ export function MapView() {
     map.on("load", () => {
       initializedRef.current = true;
       expandPoiFilter(map, theme);
+      // MapLibre's compact AttributionControl mounts with
+      // `maplibregl-compact-show` toggled ON (expanded). Strip it so
+      // the user just sees the "i" icon and can opt-in to the long
+      // attribution text.
+      containerRef.current
+        ?.querySelector(".maplibregl-ctrl-attrib")
+        ?.classList.remove("maplibregl-compact-show");
     });
 
     map.on("moveend", () => {
@@ -307,7 +324,7 @@ export function MapView() {
       ref={wrapperRef}
       className={
         isMiniMap
-          ? "pointer-events-auto absolute bottom-20 right-4 z-[10] h-[140px] w-[200px] overflow-hidden rounded-2xl shadow-2xl ring-2 ring-white/20 md:h-[200px] md:w-[280px]"
+          ? "pointer-events-auto absolute bottom-4 left-4 z-[50] h-[180px] w-[240px] overflow-hidden rounded-2xl shadow-2xl ring-2 ring-white/20 md:bottom-4 md:left-auto md:right-4 md:z-[10] md:h-[280px] md:w-[400px]"
           : "absolute inset-0"
       }
     >
@@ -319,7 +336,7 @@ export function MapView() {
         <button
           type="button"
           onClick={toggleStreetViewExpanded}
-          className="absolute right-2 top-2 z-10 rounded-lg bg-black/50 p-1.5 text-white/80 backdrop-blur transition-colors hover:bg-black/70 hover:text-white"
+          className="absolute left-2 top-2 z-10 rounded-lg bg-black/50 p-1.5 text-white/80 backdrop-blur transition-colors hover:bg-black/70 hover:text-white"
           aria-label={isMiniMap ? "Expand map" : "Expand street view"}
         >
           <Maximize2 className="h-4 w-4" />

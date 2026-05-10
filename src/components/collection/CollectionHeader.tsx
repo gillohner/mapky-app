@@ -7,26 +7,24 @@ interface CollectionHeaderProps {
   authorId: string;
 }
 
+/**
+ * Visible title block for a collection — name (h2) + author + place
+ * count. The chrome `title` slot in DiscoverSidebar gets replaced by
+ * the back button on detail panels, so the visible title lives here
+ * (same pattern as RouteDetailPanel + the unified sequence/capture
+ * panels). Description is rendered in the panel body, not here, so the
+ * panel can hide it while the edit form is open.
+ */
 export function CollectionHeader({ collection, authorId }: CollectionHeaderProps) {
   return (
-    <div>
-      <h2 className="pr-16 text-lg font-semibold text-foreground">
+    <div className="space-y-2">
+      <h2 className="truncate text-base font-semibold text-foreground">
         {collection?.name ?? (
           <span className="inline-block h-5 w-40 animate-pulse rounded bg-border" />
         )}
       </h2>
-
-      {collection?.description && (
-        <p className="mt-1 text-sm text-muted line-clamp-3">
-          {collection.description}
-        </p>
-      )}
-
-      <div className="mt-2">
-        <CreatorBadge authorId={authorId} size="sm" />
-      </div>
-
-      <div className="mt-2 flex items-center gap-2 text-xs text-muted">
+      <CreatorBadge authorId={authorId} size="sm" />
+      <div className="flex items-center gap-2 text-xs text-muted">
         <MapPin className="h-3 w-3" />
         <span>{collection?.items.length ?? 0} places</span>
       </div>

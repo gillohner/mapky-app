@@ -1,23 +1,17 @@
 import { useState } from "react";
-import { Tag, X, Plus } from "lucide-react";
-import { useCaptureCreationStore } from "@/stores/capture-creation-store";
-
-const SUGGESTED_TAGS = [
-  "streetview",
-  "landmark",
-  "hidden-gem",
-  "nature",
-  "architecture",
-  "graffiti",
-  "skyline",
-  "sunset",
-  "needs-review",
-];
+import { Tag, X, Plus, Layers, Image as ImageIcon } from "lucide-react";
+import {
+  useCaptureCreationStore,
+  useIsBatch,
+} from "@/stores/capture-creation-store";
 
 export function TagStep() {
   const pendingTags = useCaptureCreationStore((s) => s.pendingTags);
   const addTag = useCaptureCreationStore((s) => s.addTag);
   const removeTag = useCaptureCreationStore((s) => s.removeTag);
+  const targetSequence = useCaptureCreationStore((s) => s.targetSequence);
+  const items = useCaptureCreationStore((s) => s.items);
+  const isBatch = useIsBatch();
   const next = useCaptureCreationStore((s) => s.next);
 
   const [label, setLabel] = useState("");
@@ -30,17 +24,42 @@ export function TagStep() {
     setLabel("");
   };
 
+  // Three distinct targets:
+  //   - new single capture → tag rides the capture URI
+  //   - new batch (sequence) → tag rides the sequence URI
+  //   - append-to-existing-sequence → tag rides each NEW capture URI
+  //     (the sequence's own tags belong to the sequence detail panel)
+  const targetCopy = targetSequence
+    ? {
+        icon: ImageIcon,
+        title: `Tagging ${items.length} new capture${items.length === 1 ? "" : "s"}`,
+        body: `These tags ride only the capture${items.length === 1 ? "" : "s"} you're adding. The sequence's own tags stay as they are.`,
+      }
+    : isBatch
+      ? {
+          icon: Layers,
+          title: "Tagging the sequence",
+          body: "Tags target the sequence as a whole — discovery by tag will surface this whole sequence, not individual members.",
+        }
+      : {
+          icon: Tag,
+          title: "Tagging this capture",
+          body: "Tags help others discover your capture. They publish as separate records after the capture itself.",
+        };
+  const Icon = targetCopy.icon;
+
   return (
     <div className="flex h-full flex-col gap-4">
-      <div className="flex items-start gap-2 text-xs text-muted">
-        <Tag className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>
-          Tags help others discover your capture. Add up to a handful — they'll
-          be published as separate events after the capture.
-        </span>
+      <div className="flex items-start gap-2 rounded-xl bg-sky-500/10 p-3 text-xs text-sky-700 dark:text-sky-300">
+        <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <div>
+          <div className="font-medium">{targetCopy.title}</div>
+          <div className="mt-0.5 text-sky-700/80 dark:text-sky-300/80">
+            {targetCopy.body}
+          </div>
+        </div>
       </div>
 
-      {/* Selected tags */}
       {pendingTags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {pendingTags.map((t) => (
@@ -62,7 +81,6 @@ export function TagStep() {
         </div>
       )}
 
-      {/* Input */}
       <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/20">
         <input
           value={label}
@@ -86,25 +104,6 @@ export function TagStep() {
         >
           <Plus className="h-4 w-4" />
         </button>
-      </div>
-
-      {/* Suggestions */}
-      <div>
-        <div className="mb-2 text-[10px] uppercase tracking-wide text-muted">
-          Suggestions
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {SUGGESTED_TAGS.filter((t) => !pendingTags.includes(t)).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => commit(t)}
-              className="rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted transition-all hover:border-sky-500/60 hover:bg-sky-500/5 hover:text-sky-700 dark:hover:text-sky-300"
-            >
-              + {t}
-            </button>
-          ))}
-        </div>
       </div>
 
       <button

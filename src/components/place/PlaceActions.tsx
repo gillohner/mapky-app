@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { MessageSquarePlus, Star, TagIcon, FolderHeart } from "lucide-react";
+import { MessageSquarePlus, Star, FolderHeart } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { makeOsmUrl } from "@/lib/mapky-specs";
 import type { MapkyPostDetails } from "@/types/mapky";
 import { ReviewForm } from "./ReviewForm";
 import { CommentForm } from "./CommentForm";
-import { TagForm } from "./TagForm";
 import { CollectionPicker } from "@/components/collection/CollectionPicker";
 
 interface PlaceActionsProps {
@@ -14,11 +13,17 @@ interface PlaceActionsProps {
   osmId: number;
 }
 
+/**
+ * Workflow triggers on a place panel. Tagging used to live here too,
+ * but it's now handled by the inline `<PlaceTags />` strip's `+` button
+ * directly — one tag UI, app-wide. Edit/Delete don't apply since
+ * places are public OSM data, and Share lives in the panel header.
+ */
 export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
   const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
   const [formMode, setFormMode] =
-    useState<"review" | "post" | "tag" | "collect" | null>(null);
+    useState<"review" | "post" | "collect" | null>(null);
 
   if (formMode === "review") {
     return (
@@ -31,8 +36,6 @@ export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
   }
 
   if (formMode === "post") {
-    // Place-level post: anchor it to the OSM URL so the plugin creates a
-    // (:MapkyAppPost)-[:ABOUT]->(:Place) edge — symmetric with reviews.
     const osmUrl = makeOsmUrl(osmType, osmId);
     return (
       <CommentForm
@@ -49,16 +52,6 @@ export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
     );
   }
 
-  if (formMode === "tag") {
-    return (
-      <TagForm
-        osmType={osmType}
-        osmId={osmId}
-        onClose={() => setFormMode(null)}
-      />
-    );
-  }
-
   if (formMode === "collect") {
     return (
       <CollectionPicker
@@ -70,7 +63,7 @@ export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
   }
 
   const btnClass =
-    "flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-2 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-background disabled:text-muted disabled:opacity-50";
+    "flex flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-accent disabled:text-muted disabled:opacity-50";
 
   return (
     <div className="flex gap-2">
@@ -80,7 +73,7 @@ export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
         className={btnClass}
         title={isAuthenticated ? "Write a review" : "Sign in to review"}
       >
-        <Star className="h-4 w-4" />
+        <Star className="h-3.5 w-3.5" />
         Review
       </button>
       <button
@@ -89,17 +82,8 @@ export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
         className={btnClass}
         title={isAuthenticated ? "Write a post" : "Sign in to post"}
       >
-        <MessageSquarePlus className="h-4 w-4" />
+        <MessageSquarePlus className="h-3.5 w-3.5" />
         Post
-      </button>
-      <button
-        onClick={() => setFormMode("tag")}
-        disabled={!isAuthenticated}
-        className={btnClass}
-        title={isAuthenticated ? "Tag this place" : "Sign in to tag"}
-      >
-        <TagIcon className="h-4 w-4" />
-        Tag
       </button>
       <button
         onClick={() => setFormMode("collect")}
@@ -107,7 +91,7 @@ export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
         className={btnClass}
         title={isAuthenticated ? "Add to collection" : "Sign in to collect"}
       >
-        <FolderHeart className="h-4 w-4" />
+        <FolderHeart className="h-3.5 w-3.5" />
         Collect
       </button>
     </div>

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import {
   useCaptureCreationStore,
+  useIsBatch,
   CAPTURE_STEPS,
   type CaptureStep,
 } from "@/stores/capture-creation-store";
@@ -11,12 +12,28 @@ import { CaptionStep } from "./steps/CaptionStep";
 import { TagStep } from "./steps/TagStep";
 import { ReviewStep } from "./steps/ReviewStep";
 
-const STEP_TITLES: Record<CaptureStep, string> = {
+const SINGLE_STEP_TITLES: Record<CaptureStep, string> = {
   pick: "Pick your capture",
   place: "Place & aim on the map",
   caption: "Add a caption",
   tag: "Tag this capture",
   review: "Review & publish",
+};
+
+const NEW_SEQUENCE_STEP_TITLES: Record<CaptureStep, string> = {
+  pick: "Pick your captures",
+  place: "Place & aim each capture",
+  caption: "Name the sequence",
+  tag: "Tag the sequence",
+  review: "Review & publish",
+};
+
+const APPEND_STEP_TITLES: Record<CaptureStep, string> = {
+  pick: "Pick captures to add",
+  place: "Place & aim each capture",
+  caption: "Sequence details",
+  tag: "Tag the new captures",
+  review: "Review & add",
 };
 
 /**
@@ -41,6 +58,8 @@ export function CaptureCreationPanel() {
   const close = useCaptureCreationStore((s) => s.close);
   const prev = useCaptureCreationStore((s) => s.prev);
   const isPublishing = useCaptureCreationStore((s) => s.isPublishing);
+  const targetSequence = useCaptureCreationStore((s) => s.targetSequence);
+  const isBatch = useIsBatch();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -61,9 +80,15 @@ export function CaptureCreationPanel() {
     if (!isPublishing) close();
   };
 
+  const titles = targetSequence
+    ? APPEND_STEP_TITLES
+    : isBatch
+      ? NEW_SEQUENCE_STEP_TITLES
+      : SINGLE_STEP_TITLES;
+
   return (
     <DiscoverSidebar
-      title={STEP_TITLES[step]}
+      title={titles[step]}
       onClose={onClose}
       onBack={onBack}
       // Place step needs the map visible — start the mobile sheet

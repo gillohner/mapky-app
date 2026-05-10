@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Download, Loader2, MapPin, Pencil, Trash2 } from "lucide-react";
+import { Download, Loader2, MapPin, Navigation2, Trash2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useMapStore } from "@/stores/map-store";
 import { useRouteBody, useRouteDetails } from "@/lib/api/hooks";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { useBackOr } from "@/hooks/use-back-or";
+import { useShareLink } from "@/lib/hooks/use-share-link";
 import { decodePolyline } from "@/lib/routing/polyline";
 import { emitGpx, gpxFilename } from "@/lib/gpx/emit";
 import type { LngLat } from "@/lib/routing/types";
@@ -16,6 +17,7 @@ import type { RouteDetails } from "@/types/mapky";
 import { RoutePolylineLayer } from "@/components/map/RoutePolylineLayer";
 import { RouteWaypointPins } from "@/components/map/RouteWaypointPins";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
+import { PanelHeaderActions } from "@/components/shared/PanelHeaderActions";
 import { RouteStats } from "./RouteStats";
 import { RouteTags } from "./RouteTags";
 import { ResourceDiscussion } from "@/components/posts/ResourceDiscussion";
@@ -109,6 +111,9 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
   // to a direct /routes navigate.
   const back = useBackOr(() => navigate({ to: "/routes" }));
 
+  const isOwner = publicKey === authorId;
+  const share = useShareLink({ kind: "route", authorId, resourceId: routeId });
+
   if (isLoading) {
     return (
       <DiscoverSidebar title="Route" onClose={close} onBack={back} backLabel="Routes" mobileCollapsible>
@@ -128,8 +133,6 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
       </DiscoverSidebar>
     );
   }
-
-  const isOwner = publicKey === authorId;
 
   const handleExport = () => {
     if (!body.data) {
@@ -175,6 +178,32 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
     }
   };
 
+  const headerActions = (
+    <PanelHeaderActions
+      share={{ onClick: share }}
+      edit={
+        isOwner
+          ? {
+              onClick: () => {
+                openDirections();
+                navigate({ to: "/directions" });
+              },
+              title: "Edit route",
+            }
+          : undefined
+      }
+      remove={
+        isOwner
+          ? {
+              onClick: () => setConfirmDelete(true),
+              loading: deleting,
+              title: "Delete route",
+            }
+          : undefined
+      }
+    />
+  );
+
   return (
     <>
       <RoutePolylineLayer coords={decoded} dashed={!body.data?.geometry} />
@@ -182,7 +211,14 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
         <RouteWaypointPins waypoints={body.data.waypoints} />
       )}
 
-      <DiscoverSidebar title="Route" onClose={close} onBack={back} backLabel="Routes" mobileCollapsible>
+      <DiscoverSidebar
+        title="Route"
+        onClose={close}
+        onBack={back}
+        backLabel="Routes"
+        rightHeaderSlot={headerActions}
+        mobileCollapsible
+      >
         <div className="space-y-3">
           <div>
             <h2 className="truncate text-base font-semibold text-foreground">
@@ -205,16 +241,18 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
           />
 
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => {
-                openDirections();
-                navigate({ to: "/directions" });
-              }}
-              className="flex items-center gap-1.5 rounded-md bg-accent px-2 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              {isOwner ? "Edit" : "Open in directions"}
-            </button>
+            {!isOwner && (
+              <button
+                onClick={() => {
+                  openDirections();
+                  navigate({ to: "/directions" });
+                }}
+                className="flex items-center gap-1.5 rounded-md bg-accent px-2 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
+              >
+                <Navigation2 className="h-3.5 w-3.5" />
+                Open in directions
+              </button>
+            )}
             <button
               onClick={handleExport}
               className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-foreground hover:border-accent"
@@ -222,15 +260,6 @@ export function RouteDetailPanel({ authorId, routeId }: RouteDetailPanelProps) {
               <Download className="h-3.5 w-3.5" />
               GPX
             </button>
-            {isOwner && (
-              <button
-                onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs text-foreground hover:border-red-400"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </button>
-            )}
           </div>
 
           {confirmDelete && isOwner && (

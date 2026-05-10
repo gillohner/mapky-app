@@ -61,6 +61,12 @@ export function SequenceMarkersLayer() {
   }, [map, enabled, update]);
 
   const { data: sequences } = useViewportSequences(enabled ? bounds : null);
+  // When a sidebar (CaptureList) is filtering the captures feed, it
+  // pushes the sequence ids that survived the filter. Honor that here
+  // so the violet pins match the list — otherwise applying a kind/tag
+  // filter leaves the map covered in pins for sequences that no
+  // longer exist in the user's filtered view.
+  const visibleSequenceIds = useUiStore((s) => s.visibleSequenceIds);
 
   // Stable centroid + author/id so the marker key doesn't churn on
   // metadata-only changes (e.g. renamed sequence keeps same dot).
@@ -70,6 +76,9 @@ export function SequenceMarkersLayer() {
       .filter(
         (s) =>
           s.min_lat != null && s.min_lon != null && s.max_lat != null && s.max_lon != null,
+      )
+      .filter(
+        (s) => !visibleSequenceIds || visibleSequenceIds.has(s.id),
       )
       .map((s) => {
         const [author, id] = s.id.split(":");
@@ -83,7 +92,7 @@ export function SequenceMarkersLayer() {
           name: s.name,
         };
       });
-  }, [sequences]);
+  }, [sequences, visibleSequenceIds]);
 
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
 

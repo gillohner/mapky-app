@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Route as CapturesRoute } from "@/routes/captures";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -13,13 +13,17 @@ import {
 import { useCaptureCreationStore } from "@/stores/capture-creation-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useFrozenWhile } from "@/hooks/use-frozen-while";
+import { parseSequenceUri } from "@/lib/map/sequence-uri";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import {
   pointsToBounds,
   useFilterViewport,
 } from "@/hooks/use-filter-viewport";
 import { useUiStore } from "@/stores/ui-store";
-import { fetchGeoCaptureTags } from "@/lib/api/mapky";
+import {
+  fetchGeoCaptureTags,
+  fetchSequencesCapturesByIds,
+} from "@/lib/api/mapky";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
 import { DiscoverNewButton } from "@/components/discover/NewButton";
 import {
@@ -231,6 +235,59 @@ export function CaptureList() {
     });
   }, [feed, filter, activeTags, activeKind, tagsByCapture]);
 
+  // Sequence preview-thumbnails: one batched fetch covers every
+  // sequence in the visible feed so each `<SequenceCard />` can render
+  // a small collage instead of a single cover or icon.
+  const sequenceRefs = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ authorId: string; sequenceId: string }> = [];
+    for (const s of sequenceList.data ?? []) {
+      const [authorId, sequenceId] = splitCompound(s.id, s.author_id);
+      const k = `${authorId}:${sequenceId}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push({ authorId, sequenceId });
+    }
+    return out;
+  }, [sequenceList.data]);
+  const sequenceRefsKey = useMemo(
+    () =>
+      sequenceRefs
+        .map((r) => `${r.authorId}:${r.sequenceId}`)
+        .sort()
+        .join(","),
+    [sequenceRefs],
+  );
+  const { data: sequencesCaptures } = useQuery({
+    queryKey: [
+      "mapky",
+      "sequences",
+      "captures-batch",
+      sequenceRefsKey,
+    ] as const,
+    queryFn: () => fetchSequencesCapturesByIds(sequenceRefs, 200),
+    enabled: sequenceRefs.length > 0,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const previewByUri = useMemo(() => {
+    const groups = new Map<string, GeoCaptureDetails[]>();
+    for (const c of sequencesCaptures ?? []) {
+      if (!c.sequence_uri) continue;
+      const arr = groups.get(c.sequence_uri) ?? [];
+      arr.push(c);
+      groups.set(c.sequence_uri, arr);
+    }
+    // Pick the first 4 by sequence_index (lowest first) so the preview
+    // is stable + chronological-ish.
+    const out = new Map<string, GeoCaptureDetails[]>();
+    for (const [uri, list] of groups) {
+      list.sort((a, b) => (a.sequence_index ?? 0) - (b.sequence_index ?? 0));
+      out.set(uri, list.slice(0, 4));
+    }
+    return out;
+  }, [sequencesCaptures]);
+
   // Frozen-bbox fitBounds — captures use their own coords; sequences
   // contribute their bbox centroid.
   const filterPoints = useMemo(() => {
@@ -259,19 +316,51 @@ export function CaptureList() {
   // capture markers + sequence pills stand alone.
   useAutoFocusLayer("captures", { hide: true });
 
-  // Project the filtered capture set onto the map. Sequences are
-  // already projected via SequenceMarkersLayer (which queries the
-  // viewport endpoint independently); we don't filter that here.
+  // Project the filtered capture set onto the map. Standalone captures
+  // get pinned so they're drawn even when the user is zoomed far out
+  // and the map's own viewport endpoint hasn't returned them. Sequence
+  // members also get pinned (using the batched sequencesCaptures result
+  // computed above for the collage previews) so the dots + polylines
+  // between members stay rendered globally.
+  //
+  // visibleCaptureIds is also set so the layer narrows the viewport
+  // slice to the sidebar's filtered set when the user types in the
+  // search box — pinned then re-adds the off-viewport ones.
   useEffect(() => {
-    const ids = new Set<string>();
+    const captureIds = new Set<string>();
+    const sequenceIds = new Set<string>();
+    const captures: GeoCaptureDetails[] = [];
     for (const item of filtered) {
-      if (item.kind === "capture") ids.add(item.capture.id);
+      if (item.kind === "capture") {
+        captureIds.add(item.capture.id);
+        captures.push(item.capture);
+      } else {
+        sequenceIds.add(item.sequence.id);
+      }
     }
-    useUiStore.getState().setVisibleCaptureIds(ids);
-  }, [filtered]);
+    // Add sequence members from the batched fetch so the polyline
+    // anchors render even at world zoom — but only for sequences that
+    // survived the sidebar's filter (so a kind filter, say, doesn't
+    // leave the map covered with dots from filtered-out sequences).
+    for (const c of sequencesCaptures ?? []) {
+      const seq = parseSequenceUri(c.sequence_uri ?? null);
+      if (!seq) continue;
+      const seqCompoundId = `${seq.authorId}:${seq.sequenceId}`;
+      if (!sequenceIds.has(seqCompoundId)) continue;
+      if (!captureIds.has(c.id)) {
+        captureIds.add(c.id);
+        captures.push(c);
+      }
+    }
+    useUiStore.getState().setVisibleCaptureIds(captureIds);
+    useUiStore.getState().setVisibleSequenceIds(sequenceIds);
+    useUiStore.getState().setPinnedCaptures(captures);
+  }, [filtered, sequencesCaptures]);
   useEffect(() => {
     return () => {
       useUiStore.getState().setVisibleCaptureIds(null);
+      useUiStore.getState().setVisibleSequenceIds(null);
+      useUiStore.getState().setPinnedCaptures(null);
     };
   }, []);
 
@@ -335,7 +424,13 @@ export function CaptureList() {
               tags={tagsByCapture.get(item.capture.id) ?? []}
             />
           ) : (
-            <SequenceCard key={item.id} sequence={item.sequence} />
+            <SequenceCard
+              key={item.id}
+              sequence={item.sequence}
+              preview={previewByUri.get(
+                `pubky://${splitCompound(item.sequence.id, item.sequence.author_id)[0]}/pub/mapky.app/sequences/${splitCompound(item.sequence.id, item.sequence.author_id)[1]}`,
+              )}
+            />
           ),
         )}
       </div>
