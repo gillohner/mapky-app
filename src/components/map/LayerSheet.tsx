@@ -118,7 +118,7 @@ export function LayerSheet() {
       {open && (
         <div className="flex flex-1 flex-col overflow-hidden border-t border-border px-3 pb-2 pt-2">
           <TabBar active={activeTab} onChange={setActiveTab} />
-          <div className="-mx-1 mt-2 flex-1 overflow-y-auto px-1 pb-1">
+          <div className="scrollbar-none -mx-1 mt-2 flex-1 overflow-y-auto px-1 pb-1">
             {activeTab === "mapky" && <MapkyTab />}
             {activeTab === "basemap" && <BasemapTab />}
             {activeTab === "overlays" && <OverlaysTab />}

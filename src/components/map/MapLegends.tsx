@@ -275,7 +275,7 @@ export function MapLegends() {
       </button>
       {expanded && (
         <div className="flex flex-1 flex-col overflow-hidden border-t border-border px-2.5 pb-1.5 pt-1">
-          <div className="-mx-1 flex-1 overflow-y-auto px-1">
+          <div className="scrollbar-none -mx-1 flex-1 overflow-y-auto px-1">
             {sections.map((section, i) => (
               <div key={section.heading ?? i} className={i > 0 ? "mt-1.5" : ""}>
                 {section.heading && (

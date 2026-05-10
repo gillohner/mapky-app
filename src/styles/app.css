@@ -2,6 +2,18 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Visually hide the scrollbar while keeping the element scrollable.
+ * Used inside the LayerSheet + MapLegends bodies so the brief width
+ * animation on open doesn't flash a scrollbar before the content
+ * settles to its final width. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /*
  * Color scheme system.
  * Raw values in --raw-* variables, Tailwind tokens reference them via @theme.
