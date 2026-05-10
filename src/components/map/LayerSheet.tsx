@@ -1,5 +1,4 @@
-import { useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import { useEffect } from "react";
 import {
   X,
   Camera,
@@ -11,6 +10,7 @@ import {
   Mountain,
   Building2,
   Bitcoin,
+  Layers,
 } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
@@ -18,16 +18,18 @@ import { PlaceFilterControls } from "@/components/place/PlaceFilterControls";
 import type { LayerSheetTab } from "@/stores/ui-store";
 
 /**
- * Layers sheet — Mapky data toggles + basemap + raster/extrusion
- * overlays organized into 3 tabs (Mapky data, Basemap, Overlays). Only
- * one tab's content renders at a time so the sheet stays compact on
- * portrait/short viewports. The tab bar pins to the top; the body
- * scrolls if a tab's content does run long.
+ * Layers panel — bottom-left, behaves the same as MapLegends:
  *
- * The Places/Captures toggles act on the bare home map; once the user
- * opens any sidebar (places / collections / routes / captures / search
- * / detail), `useAutoFocusLayer` overrides them via the `hiddenLayers`
- * set so the focused resource owns the map.
+ *   - Collapsed: round icon-only button (h-11 w-11 round). Click to
+ *     expand the card in place. No portal, no fullscreen modal, no
+ *     mobile backdrop blur.
+ *   - Expanded: card grows upward from the bottom-anchored wrapper
+ *     to fit the tab bar + active-tab content. Click the icon (or
+ *     the close X) to collapse back to the round button.
+ *
+ * Three tabs share the body region: Mapky data, Basemap, Overlays —
+ * only one tab's content renders at a time. Last-viewed tab persists
+ * via `layerSheetActiveTab` so re-opening lands where the user left.
  */
 export function LayerSheet() {
   const open = useUiStore((s) => s.layerSheetOpen);
@@ -35,6 +37,27 @@ export function LayerSheet() {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const activeTab = useUiStore((s) => s.layerSheetActiveTab);
   const setActiveTab = useUiStore((s) => s.setLayerSheetActiveTab);
+
+  // Active-dot indicator when any toggle is off its default — same
+  // signal LayerSheetTrigger used to carry, now lives on the merged
+  // header button.
+  const metro = useUiStore((s) => s.metroOverlayVisible);
+  const btcOverlay = useUiStore((s) => s.btcOverlayVisible);
+  const filters = useUiStore((s) => s.placesFilters);
+  const buildings = useUiStore((s) => s.buildings3DVisible);
+  const places = useUiStore((s) => s.placesLayerVisible);
+  const captures = useUiStore((s) => s.capturesLayerVisible);
+  const basemap = useMapStore((s) => s.basemap);
+  const filtersActive =
+    filters.activities.length > 0 || (filters.minRating ?? 0) > 0;
+  const nonDefault =
+    metro ||
+    btcOverlay ||
+    filtersActive ||
+    buildings ||
+    !places ||
+    !captures ||
+    basemap !== "default";
 
   useEffect(() => {
     if (!open) return;
@@ -45,82 +68,58 @@ export function LayerSheet() {
     return () => document.removeEventListener("keydown", onKey);
   }, [open, setOpen]);
 
-  // Close on outside click. Listen at the document level on the
-  // `mousedown` event:
-  //
-  //   - `click` doesn't work because POI markers (HTML balloons) call
-  //     `e.stopPropagation()` in their click handlers — clicks on a
-  //     marker would never reach this listener and the sheet would
-  //     refuse to close. `mousedown` fires earlier and isn't affected.
-  //   - We still skip clicks inside the sheet itself (sheetRef) and on
-  //     the trigger button (data-attr) so the trigger's own toggle
-  //     handles the close cleanly.
-  const sheetRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as Element | null;
-      if (!target) return;
-      if (sheetRef.current && sheetRef.current.contains(target)) return;
-      if (target.closest?.("[data-mapky-layer-trigger]")) return;
-      setOpen(false);
-    };
-    const t = setTimeout(() => {
-      document.addEventListener("mousedown", onDown);
-    }, 0);
-    return () => {
-      clearTimeout(t);
-      document.removeEventListener("mousedown", onDown);
-    };
-  }, [open, setOpen]);
-
-  if (!open) return null;
-
-  return createPortal(
+  return (
     <div
-      className="fixed inset-0 z-40 flex items-end justify-start pointer-events-none"
-      onClick={() => setOpen(false)}
+      // Same anchor + sidebar-tracking math as LayerSheetTrigger had,
+      // and same as MapLegends so the two cards line up at the same
+      // baseline. Width grows when expanded so the body has room for
+      // the tab content.
+      className={`pointer-events-auto fixed z-30 flex max-w-md flex-col overflow-hidden rounded-2xl border border-border bg-background/95 shadow-lg backdrop-blur transition-[left,width] duration-300 hover:border-accent ${
+        sidebarOpen ? "left-3 md:left-[440px]" : "left-3 md:left-14"
+      } ${open ? "w-[calc(100%-1.5rem)] sm:w-80" : "w-11"}`}
+      data-mapky-layer-trigger
+      style={{
+        bottom:
+          "calc(var(--mobile-sheet-vh, 0) * 1vh + 0.25rem + env(safe-area-inset-bottom))",
+        // Cap height so portrait/short viewports get an internal
+        // scroll instead of overflowing past the top of the page.
+        // Only applied when expanded — collapsed pill is just h-11.
+        maxHeight: open ? "calc(100dvh - 6rem)" : undefined,
+      }}
     >
-      {/* Backdrop captures clicks to dismiss; visible only on mobile. */}
-      <div className="pointer-events-auto absolute inset-0 bg-black/30 backdrop-blur-[1px] sm:hidden" />
-
-      {/* Sheet — anchored bottom-left so it pops up above the
-          LayerSheetTrigger button. `flex-col` + `max-h` + inner
-          `overflow-y-auto` keep the tab bar pinned and the body
-          scrollable on short viewports. `100dvh` (dynamic viewport
-          height) tracks iOS browser-chrome changes correctly. */}
-      <div
-        ref={sheetRef}
-        className={`pointer-events-auto relative mx-2 flex w-[calc(100%-1rem)] max-w-md flex-col overflow-hidden rounded-2xl border border-border bg-background/95 p-4 shadow-xl backdrop-blur transition-[margin] duration-300 sm:w-80 ${
-          sidebarOpen ? "sm:ml-16 md:ml-[440px]" : "sm:ml-16"
-        }`}
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          marginBottom: "calc(5rem + env(safe-area-inset-bottom))",
-          maxHeight: "calc(100dvh - 6rem)",
-        }}
+      <button
+        onClick={() => setOpen(!open)}
+        aria-label={open ? "Close layers" : "Open layers"}
+        aria-expanded={open}
+        className={`relative flex h-11 w-full flex-shrink-0 items-center transition-colors ${
+          open
+            ? "justify-between gap-2 px-3 text-xs font-medium"
+            : "justify-center"
+        } text-foreground`}
       >
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">Layers</h2>
-          <button
-            onClick={() => setOpen(false)}
-            aria-label="Close"
-            className="rounded p-1 text-muted hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
+        <Layers className="h-5 w-5" />
+        {open && <span className="flex-1 text-left">Layers</span>}
+        {open && (
+          <X className="h-4 w-4 text-muted" aria-hidden />
+        )}
+        {!open && nonDefault && (
+          <span
+            className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent"
+            aria-hidden
+          />
+        )}
+      </button>
+      {open && (
+        <div className="flex flex-1 flex-col overflow-hidden border-t border-border px-3 pb-2 pt-2">
+          <TabBar active={activeTab} onChange={setActiveTab} />
+          <div className="-mx-1 mt-2 flex-1 overflow-y-auto px-1 pb-1">
+            {activeTab === "mapky" && <MapkyTab />}
+            {activeTab === "basemap" && <BasemapTab />}
+            {activeTab === "overlays" && <OverlaysTab />}
+          </div>
         </div>
-
-        <TabBar active={activeTab} onChange={setActiveTab} />
-
-        <div className="-mx-1 mt-3 flex-1 overflow-y-auto px-1 pb-1">
-          {activeTab === "mapky" && <MapkyTab />}
-          {activeTab === "basemap" && <BasemapTab />}
-          {activeTab === "overlays" && <OverlaysTab />}
-        </div>
-      </div>
-    </div>,
-    document.body,
+      )}
+    </div>
   );
 }
 
