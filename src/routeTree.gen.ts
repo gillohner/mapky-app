@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SequencesRouteImport } from './routes/sequences'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as PlacesRouteImport } from './routes/places'
 import { Route as MyPostsRouteImport } from './routes/my-posts'
@@ -24,6 +25,11 @@ import { Route as PlaceOsmTypeOsmIdRouteImport } from './routes/place/$osmType.$
 import { Route as CollectionAuthorIdCollectionIdRouteImport } from './routes/collection/$authorId.$collectionId'
 import { Route as CaptureAuthorIdCaptureIdRouteImport } from './routes/capture/$authorId.$captureId'
 
+const SequencesRoute = SequencesRouteImport.update({
+  id: '/sequences',
+  path: '/sequences',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SearchRoute = SearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/my-posts': typeof MyPostsRoute
   '/places': typeof PlacesRoute
   '/search': typeof SearchRoute
+  '/sequences': typeof SequencesRoute
   '/routes/': typeof RoutesIndexRoute
   '/capture/$authorId/$captureId': typeof CaptureAuthorIdCaptureIdRoute
   '/collection/$authorId/$collectionId': typeof CollectionAuthorIdCollectionIdRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/my-posts': typeof MyPostsRoute
   '/places': typeof PlacesRoute
   '/search': typeof SearchRoute
+  '/sequences': typeof SequencesRoute
   '/routes': typeof RoutesIndexRoute
   '/capture/$authorId/$captureId': typeof CaptureAuthorIdCaptureIdRoute
   '/collection/$authorId/$collectionId': typeof CollectionAuthorIdCollectionIdRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/my-posts': typeof MyPostsRoute
   '/places': typeof PlacesRoute
   '/search': typeof SearchRoute
+  '/sequences': typeof SequencesRoute
   '/routes/': typeof RoutesIndexRoute
   '/capture/$authorId/$captureId': typeof CaptureAuthorIdCaptureIdRoute
   '/collection/$authorId/$collectionId': typeof CollectionAuthorIdCollectionIdRoute
@@ -158,6 +167,7 @@ export interface FileRouteTypes {
     | '/my-posts'
     | '/places'
     | '/search'
+    | '/sequences'
     | '/routes/'
     | '/capture/$authorId/$captureId'
     | '/collection/$authorId/$collectionId'
@@ -174,6 +184,7 @@ export interface FileRouteTypes {
     | '/my-posts'
     | '/places'
     | '/search'
+    | '/sequences'
     | '/routes'
     | '/capture/$authorId/$captureId'
     | '/collection/$authorId/$collectionId'
@@ -190,6 +201,7 @@ export interface FileRouteTypes {
     | '/my-posts'
     | '/places'
     | '/search'
+    | '/sequences'
     | '/routes/'
     | '/capture/$authorId/$captureId'
     | '/collection/$authorId/$collectionId'
@@ -207,6 +219,7 @@ export interface RootRouteChildren {
   MyPostsRoute: typeof MyPostsRoute
   PlacesRoute: typeof PlacesRoute
   SearchRoute: typeof SearchRoute
+  SequencesRoute: typeof SequencesRoute
   RoutesIndexRoute: typeof RoutesIndexRoute
   CaptureAuthorIdCaptureIdRoute: typeof CaptureAuthorIdCaptureIdRoute
   CollectionAuthorIdCollectionIdRoute: typeof CollectionAuthorIdCollectionIdRoute
@@ -217,6 +230,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sequences': {
+      id: '/sequences'
+      path: '/sequences'
+      fullPath: '/sequences'
+      preLoaderRoute: typeof SequencesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/search': {
       id: '/search'
       path: '/search'
@@ -327,6 +347,7 @@ const rootRouteChildren: RootRouteChildren = {
   MyPostsRoute: MyPostsRoute,
   PlacesRoute: PlacesRoute,
   SearchRoute: SearchRoute,
+  SequencesRoute: SequencesRoute,
   RoutesIndexRoute: RoutesIndexRoute,
   CaptureAuthorIdCaptureIdRoute: CaptureAuthorIdCaptureIdRoute,
   CollectionAuthorIdCollectionIdRoute: CollectionAuthorIdCollectionIdRoute,

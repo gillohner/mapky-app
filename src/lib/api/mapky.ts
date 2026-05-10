@@ -16,6 +16,7 @@ import type {
   PlaceFullResponse,
   BtcViewportResponse,
   BitcoinPoi,
+  SequenceDetails,
   SequenceViewportItem,
   SequenceFullResponse,
 } from "@/types/mapky";
@@ -451,6 +452,19 @@ export async function fetchSequenceCaptures(
 ): Promise<GeoCaptureDetails[]> {
   const { data } = await nexusClient.get<GeoCaptureDetails[]>(
     `/v0/mapky/sequences/${authorId}/${sequenceId}/captures`,
+  );
+  return data;
+}
+
+/** A user's sequences, most-recent first. Backed by
+ *  `/v0/mapky/sequences/user/{user_id}`. */
+export async function fetchUserSequences(
+  userId: string,
+  limit = 100,
+): Promise<SequenceDetails[]> {
+  const { data } = await nexusClient.get<SequenceDetails[]>(
+    `/v0/mapky/sequences/user/${userId}`,
+    { params: { limit } },
   );
   return data;
 }

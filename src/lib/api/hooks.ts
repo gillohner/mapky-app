@@ -23,6 +23,7 @@ import {
   fetchUserPosts,
   fetchUserReviews,
   fetchViewportCaptures,
+  fetchUserSequences,
   fetchViewportSequences,
   fetchSequenceDetailFull,
   fetchBtcViewport,
@@ -620,6 +621,16 @@ export function useSequenceCaptures(
     queryKey: ["mapky", "sequence", authorId, sequenceId, "captures"],
     queryFn: () => fetchSequenceCaptures(authorId!, sequenceId!),
     enabled: !!authorId && !!sequenceId,
+  });
+}
+
+/** A user's sequences, most-recent first. Backs the "Mine" tab on
+ *  the sequences discover sidebar. */
+export function useUserSequences(userId: string | null) {
+  return useQuery({
+    queryKey: ["mapky", "sequences", "user", userId],
+    queryFn: () => fetchUserSequences(userId!),
+    enabled: !!userId,
   });
 }
 
