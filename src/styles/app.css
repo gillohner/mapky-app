@@ -104,16 +104,6 @@ html, body, #root {
   display: none;
 }
 
-/* LayerSheetTrigger — mobile rides above the bottom sheet via the
-   --mobile-sheet-vh variable; desktop pins to a fixed corner offset
-   regardless of whatever any sheet writes to the variable, since on
-   md+ panels are full-height sidebars and don't share the bottom. */
-@media (min-width: 768px) {
-  .mapky-layer-trigger {
-    bottom: calc(1.5rem + env(safe-area-inset-bottom)) !important;
-  }
-}
-
 /* Selected-place balloon pin (used when no polygon/line area is
    available). Pin tip sits on the lat/lng; label hangs to the right
    beside the pin head. */
