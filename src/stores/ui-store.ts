@@ -168,9 +168,18 @@ interface UiStore {
   pinnedCaptures: GeoCaptureDetails[] | null;
   setPinnedCaptures: (c: GeoCaptureDetails[] | null) => void;
 
+  /**
+   * Layers card and Map-legend card are mutually exclusive — both
+   * expand into the same bottom-left slot, so opening one auto-
+   * collapses the other. The setters below enforce that invariant.
+   */
   layerSheetOpen: boolean;
   setLayerSheetOpen: (open: boolean) => void;
   toggleLayerSheet: () => void;
+
+  legendExpanded: boolean;
+  setLegendExpanded: (open: boolean) => void;
+  toggleLegend: () => void;
 
   /** Last-viewed tab inside the LayerSheet — persisted so the sheet
    *  re-opens to where the user left off. */
@@ -309,8 +318,30 @@ export const useUiStore = create<UiStore>()(
       clearDimmed: () => set({ dimmedLayers: new Set() }),
 
       layerSheetOpen: false,
-      setLayerSheetOpen: (open) => set({ layerSheetOpen: open }),
-      toggleLayerSheet: () => set((s) => ({ layerSheetOpen: !s.layerSheetOpen })),
+      setLayerSheetOpen: (open) =>
+        // Opening Layers auto-collapses the legend; closing leaves
+        // legend's state alone.
+        set((s) => ({
+          layerSheetOpen: open,
+          legendExpanded: open ? false : s.legendExpanded,
+        })),
+      toggleLayerSheet: () =>
+        set((s) => ({
+          layerSheetOpen: !s.layerSheetOpen,
+          legendExpanded: !s.layerSheetOpen ? false : s.legendExpanded,
+        })),
+
+      legendExpanded: false,
+      setLegendExpanded: (open) =>
+        set((s) => ({
+          legendExpanded: open,
+          layerSheetOpen: open ? false : s.layerSheetOpen,
+        })),
+      toggleLegend: () =>
+        set((s) => ({
+          legendExpanded: !s.legendExpanded,
+          layerSheetOpen: !s.legendExpanded ? false : s.layerSheetOpen,
+        })),
 
       layerSheetActiveTab: "mapky",
       setLayerSheetActiveTab: (tab) => set({ layerSheetActiveTab: tab }),

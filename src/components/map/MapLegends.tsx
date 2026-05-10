@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { ChevronDown, ChevronUp, MapPin, Bitcoin } from "lucide-react";
+import { Info } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { PlaceBalloon } from "./PlaceBalloon";
@@ -94,71 +93,8 @@ const RAILWAY_ITEMS: LegendItem[] = [
 ];
 
 interface LegendSection {
-  /** Optional sub-header rendered as a small uppercase muted line.
-   *  Omit on the first/Mapky section so the most-relevant items aren't
-   *  preceded by a heading. */
   heading?: string;
   items: LegendItem[];
-}
-
-function LegendCard({
-  icon,
-  title,
-  sections,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  sections: LegendSection[];
-}) {
-  const [expanded, setExpanded] = useState(false);
-  // Defaults collapsed — most users learn the symbols by seeing them
-  // once. The pill stays available for newcomers and shared-link
-  // viewers who want a key.
-  return (
-    <div className="pointer-events-auto rounded-2xl border border-border bg-background/95 shadow-lg backdrop-blur transition-colors hover:border-accent">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="flex h-11 w-full items-center gap-2 rounded-2xl px-3 text-left text-xs font-medium text-foreground transition-colors"
-        aria-expanded={expanded}
-      >
-        <span className="text-accent" aria-hidden>
-          {icon}
-        </span>
-        <span className="flex-1">{title}</span>
-        {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 text-muted" aria-hidden />
-        ) : (
-          <ChevronUp className="h-3.5 w-3.5 text-muted" aria-hidden />
-        )}
-      </button>
-      {expanded && (
-        <div className="border-t border-border px-2.5 pb-1.5 pt-1">
-          {sections.map((section, i) => (
-            <div key={section.heading ?? i} className={i > 0 ? "mt-1.5" : ""}>
-              {section.heading && (
-                <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted">
-                  {section.heading}
-                </div>
-              )}
-              <ul className="flex flex-col">
-                {section.items.map((item) => (
-                  <li
-                    key={item.label}
-                    className="flex h-6 items-center gap-2 text-[11px] leading-none text-foreground"
-                  >
-                    <span className="flex h-6 w-6 items-center justify-center">
-                      {item.sample}
-                    </span>
-                    <span className="flex-1 truncate">{item.label}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ── Sample helpers ─────────────────────────────────────────────────
@@ -167,11 +103,6 @@ const BTC_ORANGE = "#f7931a";
 const BTC_ORANGE_DARK = "#cc7700";
 const CAPTURE_BLUE = "#0284c7";
 
-/** Wrap any node in a fixed-size slot, scaled to fit. The slot is
- *  20×24 px; at scale 0.4 the rated PlaceBalloon (53 px tall in real
- *  pixels, scaled to ~21 px) fits inside the row without overlapping
- *  neighboring rows. The marker is anchored to the slot's bottom —
- *  matches how it sits on its anchor on the map. */
 function MarkerSlot({
   children,
   scale = 0.4,
@@ -214,16 +145,20 @@ function dotSample({ color, stroke }: { color: string; stroke?: string }) {
 }
 
 /**
- * One unified legend card pinned next to the LayerSheetTrigger. Items
- * are conditioned on what's actually visible on the map: places,
- * captures, BTC overlay dots/clusters, the rail-overlay's tile
- * legend, the cycling-basemap's tile legend, and the per-interaction
- * selected pin.
+ * Map-legend card — sibling of LayerSheet. Both share the same expand-
+ * in-place behavior:
  *
- * Earlier the cycling/rail tile legends sat in a separate column on
- * the bottom-left. They've been folded in here so the user only has
- * one legend to look at — the items appear or hide based on their
- * own layer's visibility, same as everything else.
+ *   - **Collapsed**: round h-11 w-11 icon button (Info glyph). Sits
+ *     just to the right of the Layers button when both are collapsed.
+ *   - **Expanded**: card grows leftward to the Layers button's anchor
+ *     and outward to a normal panel width — covering the Layers
+ *     button's slot. The two are mutually exclusive (opening the
+ *     legend auto-collapses Layers, and vice versa) so they share
+ *     this single bottom-left slot.
+ *
+ * Items are conditioned on what's actually visible on the map: places,
+ * captures, BTC overlay, the rail-overlay's tile legend, the cycling-
+ * basemap's tile legend, and the per-interaction selected pin.
  */
 export function MapLegends() {
   const cycling = useMapStore((s) => s.basemap === "cycling");
@@ -234,6 +169,8 @@ export function MapLegends() {
   const btcOverlayVisible = useUiStore((s) => s.btcOverlayVisible);
   const selectedFeature = useUiStore((s) => s.selectedFeature);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
+  const expanded = useUiStore((s) => s.legendExpanded);
+  const setExpanded = useUiStore((s) => s.setLegendExpanded);
 
   // ─── Mapky section — places / BTC / captures / selection. ─────
   const mapkyItems: LegendItem[] = [];
@@ -285,8 +222,6 @@ export function MapLegends() {
     });
   }
 
-  // Build the section list. Mapky comes first (the user's primary
-  // signal), then any active overlay-tile legends below it.
   const sections: LegendSection[] = [];
   if (mapkyItems.length > 0) sections.push({ items: mapkyItems });
   if (cycling) sections.push({ heading: "Cycling", items: CYCLING_ITEMS });
@@ -294,30 +229,66 @@ export function MapLegends() {
 
   if (sections.length === 0) return null;
 
+  // Position math: collapsed sits next to the Layers button (left-16
+  // mobile / md:left-[6.75rem] desktop). Expanded shifts to the same
+  // anchor as the Layers button (left-3 / md:left-14) so the expanded
+  // card visually covers the (now collapsed via mutual exclusion)
+  // Layers slot — both panels share this same bottom-left slot when
+  // either is open.
+  const left = expanded
+    ? sidebarOpen
+      ? "left-3 md:left-[440px]"
+      : "left-3 md:left-14"
+    : sidebarOpen
+      ? "left-16 md:left-[30.75rem]"
+      : "left-16 md:left-[6.75rem]";
+  const width = expanded ? "w-[calc(100%-1.5rem)] sm:w-80" : "w-11";
+
   return (
     <div
-      className={`pointer-events-none fixed z-20 flex max-w-[16rem] flex-col gap-2 transition-[left] duration-300 ${
-        sidebarOpen
-          ? "left-16 md:left-[30.75rem]"
-          : "left-16 md:left-[6.75rem]"
-      }`}
+      className={`pointer-events-auto fixed z-30 flex max-w-md flex-col overflow-hidden rounded-2xl border border-border bg-background/95 shadow-lg backdrop-blur transition-[left,width] duration-300 hover:border-accent ${left} ${width}`}
       style={{
         bottom:
           "calc(var(--mobile-sheet-vh, 0) * 1vh + 0.25rem + env(safe-area-inset-bottom))",
+        maxHeight: expanded ? "calc(100dvh - 6rem)" : undefined,
       }}
     >
-      <LegendCard
-        icon={<MapkyLegendIcon btc={btcOverlayVisible} />}
-        title="Map legend"
-        sections={sections}
-      />
+      <button
+        onClick={() => setExpanded(!expanded)}
+        aria-label={expanded ? "Close map legend" : "Open map legend"}
+        aria-expanded={expanded}
+        className="flex h-11 w-full flex-shrink-0 items-center justify-center text-foreground transition-colors"
+      >
+        <Info className="h-5 w-5 text-accent" />
+      </button>
+      {expanded && (
+        <div className="flex flex-1 flex-col overflow-hidden border-t border-border px-2.5 pb-1.5 pt-1">
+          <div className="-mx-1 flex-1 overflow-y-auto px-1">
+            {sections.map((section, i) => (
+              <div key={section.heading ?? i} className={i > 0 ? "mt-1.5" : ""}>
+                {section.heading && (
+                  <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted">
+                    {section.heading}
+                  </div>
+                )}
+                <ul className="flex flex-col">
+                  {section.items.map((item) => (
+                    <li
+                      key={item.label}
+                      className="flex h-6 items-center gap-2 text-[11px] leading-none text-foreground"
+                    >
+                      <span className="flex h-6 w-6 items-center justify-center">
+                        {item.sample}
+                      </span>
+                      <span className="flex-1 truncate">{item.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
-}
-
-/** Header icon for the legend card. Picks the most visually-distinctive
- *  on-screen layer so the collapsed pill hints at what's inside. */
-function MapkyLegendIcon({ btc }: { btc: boolean }) {
-  if (btc) return <Bitcoin className="h-3.5 w-3.5" />;
-  return <MapPin className="h-3.5 w-3.5" />;
 }
