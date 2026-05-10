@@ -16,6 +16,9 @@ import type {
   PlaceFullResponse,
   BtcViewportResponse,
   BitcoinPoi,
+  SequenceDetails,
+  SequenceViewportItem,
+  SequenceFullResponse,
 } from "@/types/mapky";
 
 /** Build the `activity` + `min_rating` query params for the place
@@ -449,6 +452,54 @@ export async function fetchSequenceCaptures(
 ): Promise<GeoCaptureDetails[]> {
   const { data } = await nexusClient.get<GeoCaptureDetails[]>(
     `/v0/mapky/sequences/${authorId}/${sequenceId}/captures`,
+  );
+  return data;
+}
+
+/** A user's sequences, most-recent first. Backed by
+ *  `/v0/mapky/sequences/user/{user_id}`. */
+export async function fetchUserSequences(
+  userId: string,
+  limit = 100,
+): Promise<SequenceDetails[]> {
+  const { data } = await nexusClient.get<SequenceDetails[]>(
+    `/v0/mapky/sequences/user/${userId}`,
+    { params: { limit } },
+  );
+  return data;
+}
+
+/** Sequences whose stored bbox overlaps the viewport. Spatial
+ *  discovery surface for the map's sequence markers layer. */
+export async function fetchViewportSequences(
+  bounds: ViewportBounds,
+  limit = 200,
+): Promise<SequenceViewportItem[]> {
+  const { data } = await nexusClient.get<SequenceViewportItem[]>(
+    "/v0/mapky/sequences/viewport",
+    {
+      params: {
+        min_lat: bounds.minLat,
+        min_lon: bounds.minLon,
+        max_lat: bounds.maxLat,
+        max_lon: bounds.maxLon,
+        limit,
+      },
+    },
+  );
+  return data;
+}
+
+/** Composite sequence-detail fetch — detail + captures + tags in one
+ *  round-trip. Backed by `/sequences/{author}/{id}/full`. */
+export async function fetchSequenceDetailFull(
+  authorId: string,
+  sequenceId: string,
+  capturesLimit = 100,
+): Promise<SequenceFullResponse> {
+  const { data } = await nexusClient.get<SequenceFullResponse>(
+    `/v0/mapky/sequences/${authorId}/${sequenceId}/full`,
+    { params: { captures_limit: capturesLimit } },
   );
   return data;
 }

@@ -413,6 +413,25 @@ export function createGeoCaptureTag(
   return { path, json };
 }
 
+export function createSequenceTag(
+  pubkyId: string,
+  authorId: string,
+  sequenceId: string,
+  label: string,
+): CreateTagResult {
+  const builder = new MapkySpecsBuilder(pubkyId);
+  const sequenceUri = `pubky://${authorId}/pub/mapky.app/sequences/${sequenceId}`;
+
+  const result = builder.createPlaceTag(sequenceUri, label);
+  const json = JSON.stringify(result.tag.toJson());
+  const path = result.meta.path;
+
+  result.free();
+  builder.free();
+
+  return { path, json };
+}
+
 export type RouteActivityKey =
   | "hiking"
   | "cycling"

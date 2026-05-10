@@ -23,6 +23,9 @@ import {
   fetchUserPosts,
   fetchUserReviews,
   fetchViewportCaptures,
+  fetchUserSequences,
+  fetchViewportSequences,
+  fetchSequenceDetailFull,
   fetchBtcViewport,
   fetchGeoCaptureDetail,
   fetchGeoCaptureTags,
@@ -58,6 +61,7 @@ import type {
   PlaceFullResponse,
   RouteFull,
   RouteFullJson,
+  SequenceFullResponse,
   ViewportBounds,
   ViewportResponse,
   ViewportLayer,
@@ -618,6 +622,69 @@ export function useSequenceCaptures(
     queryFn: () => fetchSequenceCaptures(authorId!, sequenceId!),
     enabled: !!authorId && !!sequenceId,
   });
+}
+
+/** A user's sequences, most-recent first. Backs the "Mine" tab on
+ *  the sequences discover sidebar. */
+export function useUserSequences(userId: string | null) {
+  return useQuery({
+    queryKey: ["mapky", "sequences", "user", userId],
+    queryFn: () => fetchUserSequences(userId!),
+    enabled: !!userId,
+  });
+}
+
+/**
+ * Sequence-viewport hook — sequences whose stored bbox overlaps the
+ * current map viewport. Drives the sequence markers layer. Same
+ * `snapBoundsForCache` + `staleTime` pattern as `useViewportCaptures`.
+ */
+export function useViewportSequences(bounds: ViewportBounds | null) {
+  const padded = useMemo(() => snapBoundsForCache(bounds), [bounds]);
+  return useQuery({
+    queryKey: ["mapky", "sequences", "viewport", padded] as const,
+    queryFn: () => fetchViewportSequences(padded!),
+    enabled: !!padded,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
+// ── Sequence composite-detail slice hooks ─────────────────────────────
+//
+// Mirrors `usePlaceFullSlice` — one composite fetch backs every
+// SequenceDetailPanel sub-component, so opening the panel fires a
+// single network round-trip total instead of one per slice.
+
+function sequenceFullKey(authorId: string, sequenceId: string) {
+  return ["mapky", "sequence-full", authorId, sequenceId] as const;
+}
+
+const SEQUENCE_FULL_STALE_MS = 60_000;
+
+function useSequenceFullSlice<T>(
+  authorId: string,
+  sequenceId: string,
+  select: (data: SequenceFullResponse) => T,
+) {
+  return useQuery({
+    queryKey: sequenceFullKey(authorId, sequenceId),
+    queryFn: () => fetchSequenceDetailFull(authorId, sequenceId),
+    enabled: !!authorId && !!sequenceId,
+    staleTime: SEQUENCE_FULL_STALE_MS,
+    retry: noRetryOn404,
+    select,
+  });
+}
+
+export function useSequenceFullDetail(authorId: string, sequenceId: string) {
+  return useSequenceFullSlice(authorId, sequenceId, (d) => d.detail);
+}
+export function useSequenceFullCaptures(authorId: string, sequenceId: string) {
+  return useSequenceFullSlice(authorId, sequenceId, (d) => d.captures);
+}
+export function useSequenceFullTags(authorId: string, sequenceId: string) {
+  return useSequenceFullSlice(authorId, sequenceId, (d) => d.tags);
 }
 
 /**

@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SequencesRouteImport } from './routes/sequences'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as PlacesRouteImport } from './routes/places'
 import { Route as MyPostsRouteImport } from './routes/my-posts'
@@ -18,11 +19,17 @@ import { Route as CollectionsRouteImport } from './routes/collections'
 import { Route as CapturesRouteImport } from './routes/captures'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RoutesIndexRouteImport } from './routes/routes/index'
+import { Route as SequenceAuthorIdSequenceIdRouteImport } from './routes/sequence/$authorId.$sequenceId'
 import { Route as RouteAuthorIdRouteIdRouteImport } from './routes/route/$authorId.$routeId'
 import { Route as PlaceOsmTypeOsmIdRouteImport } from './routes/place/$osmType.$osmId'
 import { Route as CollectionAuthorIdCollectionIdRouteImport } from './routes/collection/$authorId.$collectionId'
 import { Route as CaptureAuthorIdCaptureIdRouteImport } from './routes/capture/$authorId.$captureId'
 
+const SequencesRoute = SequencesRouteImport.update({
+  id: '/sequences',
+  path: '/sequences',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SearchRoute = SearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -68,6 +75,12 @@ const RoutesIndexRoute = RoutesIndexRouteImport.update({
   path: '/routes/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SequenceAuthorIdSequenceIdRoute =
+  SequenceAuthorIdSequenceIdRouteImport.update({
+    id: '/sequence/$authorId/$sequenceId',
+    path: '/sequence/$authorId/$sequenceId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const RouteAuthorIdRouteIdRoute = RouteAuthorIdRouteIdRouteImport.update({
   id: '/route/$authorId/$routeId',
   path: '/route/$authorId/$routeId',
@@ -100,11 +113,13 @@ export interface FileRoutesByFullPath {
   '/my-posts': typeof MyPostsRoute
   '/places': typeof PlacesRoute
   '/search': typeof SearchRoute
+  '/sequences': typeof SequencesRoute
   '/routes/': typeof RoutesIndexRoute
   '/capture/$authorId/$captureId': typeof CaptureAuthorIdCaptureIdRoute
   '/collection/$authorId/$collectionId': typeof CollectionAuthorIdCollectionIdRoute
   '/place/$osmType/$osmId': typeof PlaceOsmTypeOsmIdRoute
   '/route/$authorId/$routeId': typeof RouteAuthorIdRouteIdRoute
+  '/sequence/$authorId/$sequenceId': typeof SequenceAuthorIdSequenceIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -115,11 +130,13 @@ export interface FileRoutesByTo {
   '/my-posts': typeof MyPostsRoute
   '/places': typeof PlacesRoute
   '/search': typeof SearchRoute
+  '/sequences': typeof SequencesRoute
   '/routes': typeof RoutesIndexRoute
   '/capture/$authorId/$captureId': typeof CaptureAuthorIdCaptureIdRoute
   '/collection/$authorId/$collectionId': typeof CollectionAuthorIdCollectionIdRoute
   '/place/$osmType/$osmId': typeof PlaceOsmTypeOsmIdRoute
   '/route/$authorId/$routeId': typeof RouteAuthorIdRouteIdRoute
+  '/sequence/$authorId/$sequenceId': typeof SequenceAuthorIdSequenceIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -131,11 +148,13 @@ export interface FileRoutesById {
   '/my-posts': typeof MyPostsRoute
   '/places': typeof PlacesRoute
   '/search': typeof SearchRoute
+  '/sequences': typeof SequencesRoute
   '/routes/': typeof RoutesIndexRoute
   '/capture/$authorId/$captureId': typeof CaptureAuthorIdCaptureIdRoute
   '/collection/$authorId/$collectionId': typeof CollectionAuthorIdCollectionIdRoute
   '/place/$osmType/$osmId': typeof PlaceOsmTypeOsmIdRoute
   '/route/$authorId/$routeId': typeof RouteAuthorIdRouteIdRoute
+  '/sequence/$authorId/$sequenceId': typeof SequenceAuthorIdSequenceIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -148,11 +167,13 @@ export interface FileRouteTypes {
     | '/my-posts'
     | '/places'
     | '/search'
+    | '/sequences'
     | '/routes/'
     | '/capture/$authorId/$captureId'
     | '/collection/$authorId/$collectionId'
     | '/place/$osmType/$osmId'
     | '/route/$authorId/$routeId'
+    | '/sequence/$authorId/$sequenceId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -163,11 +184,13 @@ export interface FileRouteTypes {
     | '/my-posts'
     | '/places'
     | '/search'
+    | '/sequences'
     | '/routes'
     | '/capture/$authorId/$captureId'
     | '/collection/$authorId/$collectionId'
     | '/place/$osmType/$osmId'
     | '/route/$authorId/$routeId'
+    | '/sequence/$authorId/$sequenceId'
   id:
     | '__root__'
     | '/'
@@ -178,11 +201,13 @@ export interface FileRouteTypes {
     | '/my-posts'
     | '/places'
     | '/search'
+    | '/sequences'
     | '/routes/'
     | '/capture/$authorId/$captureId'
     | '/collection/$authorId/$collectionId'
     | '/place/$osmType/$osmId'
     | '/route/$authorId/$routeId'
+    | '/sequence/$authorId/$sequenceId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -194,15 +219,24 @@ export interface RootRouteChildren {
   MyPostsRoute: typeof MyPostsRoute
   PlacesRoute: typeof PlacesRoute
   SearchRoute: typeof SearchRoute
+  SequencesRoute: typeof SequencesRoute
   RoutesIndexRoute: typeof RoutesIndexRoute
   CaptureAuthorIdCaptureIdRoute: typeof CaptureAuthorIdCaptureIdRoute
   CollectionAuthorIdCollectionIdRoute: typeof CollectionAuthorIdCollectionIdRoute
   PlaceOsmTypeOsmIdRoute: typeof PlaceOsmTypeOsmIdRoute
   RouteAuthorIdRouteIdRoute: typeof RouteAuthorIdRouteIdRoute
+  SequenceAuthorIdSequenceIdRoute: typeof SequenceAuthorIdSequenceIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sequences': {
+      id: '/sequences'
+      path: '/sequences'
+      fullPath: '/sequences'
+      preLoaderRoute: typeof SequencesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/search': {
       id: '/search'
       path: '/search'
@@ -266,6 +300,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RoutesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sequence/$authorId/$sequenceId': {
+      id: '/sequence/$authorId/$sequenceId'
+      path: '/sequence/$authorId/$sequenceId'
+      fullPath: '/sequence/$authorId/$sequenceId'
+      preLoaderRoute: typeof SequenceAuthorIdSequenceIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/route/$authorId/$routeId': {
       id: '/route/$authorId/$routeId'
       path: '/route/$authorId/$routeId'
@@ -306,11 +347,13 @@ const rootRouteChildren: RootRouteChildren = {
   MyPostsRoute: MyPostsRoute,
   PlacesRoute: PlacesRoute,
   SearchRoute: SearchRoute,
+  SequencesRoute: SequencesRoute,
   RoutesIndexRoute: RoutesIndexRoute,
   CaptureAuthorIdCaptureIdRoute: CaptureAuthorIdCaptureIdRoute,
   CollectionAuthorIdCollectionIdRoute: CollectionAuthorIdCollectionIdRoute,
   PlaceOsmTypeOsmIdRoute: PlaceOsmTypeOsmIdRoute,
   RouteAuthorIdRouteIdRoute: RouteAuthorIdRouteIdRoute,
+  SequenceAuthorIdSequenceIdRoute: SequenceAuthorIdSequenceIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

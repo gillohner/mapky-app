@@ -409,7 +409,14 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
         );
         continue;
       }
-      // sequences / incidents — no detail route yet.
+      if (parentType === "sequences") {
+        navigate({
+          to: "/sequence/$authorId/$sequenceId",
+          params: { authorId: parentAuthor, sequenceId: parentId },
+        });
+        return;
+      }
+      // incidents — no detail route yet.
       return;
     }
   };
@@ -667,22 +674,34 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
               <div className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
                 Sequences
               </div>
-              {tagResults.sequences.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-surface"
-                >
-                  <Layers className="h-4 w-4 flex-shrink-0 text-accent" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {s.name || "Untitled sequence"}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {s.capture_count} captures
-                    </p>
-                  </div>
-                </div>
-              ))}
+              {tagResults.sequences.map((s) => {
+                const compoundId = s.id.includes(":")
+                  ? s.id
+                  : `${s.author_id}:${s.id}`;
+                const [authorId, sequenceId] = compoundId.split(":");
+                return (
+                  <button
+                    key={compoundId}
+                    onClick={() =>
+                      navigate({
+                        to: "/sequence/$authorId/$sequenceId",
+                        params: { authorId, sequenceId },
+                      })
+                    }
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-surface"
+                  >
+                    <Layers className="h-4 w-4 flex-shrink-0 text-accent" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {s.name || "Untitled sequence"}
+                      </p>
+                      <p className="text-xs text-muted">
+                        {s.capture_count} captures
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
 

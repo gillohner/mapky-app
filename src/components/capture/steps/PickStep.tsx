@@ -114,12 +114,15 @@ export function PickStep() {
   const addInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
-  const handlePick = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  const handlePick = async (files: FileList | File[] | null) => {
+    if (!files) return;
+    const list = files instanceof FileList ? Array.from(files) : files;
+    if (list.length === 0) return;
     setError(null);
 
-    for (const f of Array.from(files)) {
+    for (const f of list) {
       if (isHeic(f)) {
         setError("HEIC files aren't supported yet — please export as JPEG.");
         return;
@@ -128,7 +131,7 @@ export function PickStep() {
 
     setBusy(true);
     try {
-      const drafts = await Promise.all(Array.from(files).map(fileToDraftItem));
+      const drafts = await Promise.all(list.map(fileToDraftItem));
       setItems(drafts);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not read file");
@@ -136,6 +139,16 @@ export function PickStep() {
       setBusy(false);
     }
   };
+
+  // EXIF GPS-coverage summary across the picked set. Drives the
+  // mix-banner ("4 of 5 have GPS coords"); rendered only when there's
+  // an actual mix so the banner stays informative rather than noisy.
+  const gpsStats = (() => {
+    if (items.length <= 1) return null;
+    const withGps = items.filter((i) => i.lat != null && i.lon != null).length;
+    if (withGps === 0 || withGps === items.length) return null;
+    return { withGps, total: items.length };
+  })();
 
   const handleAddMore = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -174,18 +187,47 @@ export function PickStep() {
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={busy}
-            className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-surface/40 text-muted transition-all hover:border-sky-500/60 hover:bg-sky-500/5 hover:text-sky-600 disabled:opacity-50"
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setDragActive(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragActive(false);
+              const dropped = Array.from(e.dataTransfer.files).filter(
+                (f) =>
+                  f.type.startsWith("image/") || f.type.startsWith("video/"),
+              );
+              if (dropped.length > 0) handlePick(dropped);
+            }}
+            className={`flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed text-muted transition-all disabled:opacity-50 ${
+              dragActive
+                ? "border-sky-500 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+                : "border-border bg-surface/40 hover:border-sky-500/60 hover:bg-sky-500/5 hover:text-sky-600"
+            }`}
           >
             <Upload className="h-8 w-8" />
             <div className="text-sm font-medium">
-              {busy ? "Reading files…" : "Tap to pick one or more files"}
+              {busy
+                ? "Reading files…"
+                : dragActive
+                  ? "Release to add"
+                  : "Drag photos here or click to pick files"}
             </div>
             <div className="text-xs">
               Pick multiple to build a Street View-style sequence
             </div>
           </button>
           <div className="text-center text-[10px] text-muted">
-            JPEG · PNG · WebP · MP4 · WebM · MOV
+            JPEG · PNG · WebP · MP4 · WebM · MOV · EXIF GPS auto-detected
           </div>
         </>
       ) : (
@@ -196,6 +238,22 @@ export function PickStep() {
               <Layers className="h-3.5 w-3.5" />
               <span>
                 Sequence · <strong>{items.length}</strong> captures
+              </span>
+            </div>
+          )}
+
+          {/* GPS coverage banner — only when picked set is mixed
+              (some have EXIF coords, some don't). Sets expectations
+              about which items will need manual placement on the
+              next step. */}
+          {gpsStats && (
+            <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+              <MapPin className="h-3.5 w-3.5 shrink-0 translate-y-0.5" />
+              <span>
+                <strong>{gpsStats.withGps} of {gpsStats.total}</strong> files
+                carry GPS coords from EXIF. The remaining{" "}
+                {gpsStats.total - gpsStats.withGps} will need manual placement
+                on the next step.
               </span>
             </div>
           )}

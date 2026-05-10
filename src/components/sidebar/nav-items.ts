@@ -1,5 +1,6 @@
 import {
   Camera,
+  Film,
   FolderHeart,
   MapPin,
   MessageSquare,
@@ -18,6 +19,7 @@ export type NavTarget =
   | "/collections"
   | "/routes"
   | "/captures"
+  | "/sequences"
   | "/my-posts";
 
 export interface NavItem {
@@ -33,6 +35,7 @@ export const MAIN_NAV: NavItem[] = [
   { to: "/collections", label: "Collections", icon: FolderHeart },
   { to: "/routes", label: "Routes", icon: RouteIcon },
   { to: "/captures", label: "Captures", icon: Camera },
+  { to: "/sequences", label: "Sequences", icon: Film },
   { to: "/my-posts", label: "My Posts", icon: MessageSquare, requiresAuth: true },
 ];
 
@@ -50,6 +53,8 @@ export function navMatch(to: NavTarget): string {
       return "/route"; // matches /routes, /route/...
     case "/captures":
       return "/capture"; // matches /captures, /capture/...
+    case "/sequences":
+      return "/sequence"; // matches /sequences, /sequence/...
     case "/my-posts":
       return "/my-posts";
   }

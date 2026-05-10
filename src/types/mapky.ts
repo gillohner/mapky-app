@@ -222,6 +222,24 @@ export interface SequenceDetails {
   max_lon: number | null;
   device: string | null;
   indexed_at: number;
+  /** Optional tags slice — populated by `/sequences/{a}/{s}` and the
+   *  composite endpoint, omitted on viewport-list responses. */
+  tags?: PostTagDetails[];
+}
+
+/** One row from `/v0/mapky/sequences/viewport`. SequenceDetails plus a
+ *  cover-thumbnail file_uri picked from the lowest-index member
+ *  capture (used as the marker / list cover image). */
+export interface SequenceViewportItem extends SequenceDetails {
+  cover_uri: string | null;
+}
+
+/** Composite envelope from `/v0/mapky/sequences/{author}/{id}/full`.
+ *  Detail + member captures + tags in one round-trip. */
+export interface SequenceFullResponse {
+  detail: SequenceDetails;
+  captures: GeoCaptureDetails[];
+  tags: PostTagDetails[];
 }
 
 export interface TagSearchResult {
