@@ -16,7 +16,7 @@ import {
   truncatePublicKey,
 } from "@/lib/api/user";
 import { useUserProfile } from "@/lib/api/hooks";
-import { MAIN_NAV, navMatch, type NavTarget } from "./nav-items";
+import { MAIN_NAV, isNavActive, type NavTarget } from "./nav-items";
 
 function RailButton({
   onClick,
@@ -65,11 +65,10 @@ export function IconRail() {
   // tabbed apps. Sub-paths count as active too so /place/$id stays
   // bound to the Places nav, etc.
   const navTo = (to: NavTarget) => {
-    const matchPrefix = navMatch(to);
-    if (pathname.startsWith(matchPrefix)) navigate({ to: "/" });
+    if (isNavActive(pathname, to)) navigate({ to: "/" });
     else navigate({ to });
   };
-  const isActive = (to: NavTarget) => pathname.startsWith(navMatch(to));
+  const isActive = (to: NavTarget) => isNavActive(pathname, to);
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
