@@ -47,8 +47,13 @@ function RootLayout() {
           <MobileNavDrawer />
           <SearchBar />
           <DirectionsLayer />
-          <CaptureCreationPanel />
           <Outlet />
+          {/* CaptureCreationPanel renders AFTER <Outlet /> so when the
+              user is on /captures and clicks "New capture", the wizard
+              paints OVER the captures sidebar (both share the same
+              left-anchored DiscoverSidebar slot at z-10; later in DOM
+              wins). Closing the wizard reveals whatever was beneath. */}
+          <CaptureCreationPanel />
           <LayerSheet />
           <MapLegends />
         </div>
