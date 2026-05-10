@@ -23,14 +23,16 @@ export interface PlaceDetails {
   btc_lightning_contactless?: boolean;
 }
 
-/** One row from `/v0/mapky/viewport` cluster mode. */
+/** One row from `/v0/mapky/viewport` cluster mode. Position is the
+ *  cell midpoint, not the centroid — guarantees clusters in the same
+ *  cell across the place + BTC overlay layers align at the same lat/lon. */
 export interface PlaceCluster {
   lat: number;
   lon: number;
   total: number;
-  btc: number;
+  /** Sub-count of cells with at least one reviewed place. Drives the
+   *  cluster bubble's accent ring intensity (stronger ring when > 0). */
   reviewed: number;
-  tagged: number;
 }
 
 /** Discriminated envelope returned by `/v0/mapky/viewport`. The frontend
@@ -40,12 +42,60 @@ export type ViewportResponse =
   | { kind: "clusters"; clusters: PlaceCluster[]; cell: number }
   | { kind: "places"; places: PlaceDetails[] };
 
-/** Filter pills layered on the place viewport. All-`false` (the default)
- * means "show every place"; flipping a flag narrows the result. */
+/** One row from the BTC overlay's cluster aggregation. Position is the
+ *  cell midpoint (matches the place layer's clusters at the same cell). */
+export interface BitcoinCluster {
+  lat: number;
+  lon: number;
+  total: number;
+}
+
+/** Discriminated envelope returned by `/v0/mapky/btc/viewport`. Mirrors
+ *  `ViewportResponse` so the BTC overlay layer renders cluster bubbles
+ *  (orange-themed) at low zoom and individual orange dots above the
+ *  threshold. */
+export type BtcViewportResponse =
+  | { kind: "clusters"; clusters: BitcoinCluster[]; cell: number }
+  | { kind: "places"; places: BitcoinPoi[] };
+
+export interface BitcoinPoi {
+  osm_type: string;
+  osm_id: number;
+  lat: number;
+  lon: number;
+  name: string | null;
+  onchain: boolean;
+  lightning: boolean;
+  lightning_contactless: boolean;
+}
+
+/** Multi-select activity dimensions used by the place viewport filter.
+ * `tagged|reviewed|posted|collected` — combined with OR semantics so a
+ * place needs only one of the selected activities to match. */
+export type PlaceActivity = "tagged" | "reviewed" | "posted" | "collected";
+
+export const PLACE_ACTIVITIES: readonly PlaceActivity[] = [
+  "tagged",
+  "reviewed",
+  "posted",
+  "collected",
+] as const;
+
+/** Filter dimensions layered on the place viewport.
+ *
+ * `activities` — multi-select OR (any of: tagged, reviewed, posted,
+ * collected). Empty array = "no activity narrowing".
+ *
+ * `minRating` — optional 0–5 floor on the place's average rating.
+ *
+ * Bitcoin merchants used to live here as a third boolean ANDed with
+ * the rest; that hit an impossible-intersection trap whenever a user
+ * wanted "BTC OR reviewed" rather than "BTC AND reviewed". BTC has
+ * since moved to its own overlay layer (`btcOverlayVisible` on
+ * `ui-store`), independent of these filters. */
 export interface PlaceFilters {
-  bitcoin: boolean;
-  reviewed: boolean;
-  tagged: boolean;
+  activities: PlaceActivity[];
+  minRating?: number;
 }
 
 /** Layer selector for the composite `/v0/mapky/viewport/all` endpoint.

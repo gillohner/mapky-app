@@ -14,7 +14,24 @@ import type {
   ViewportLayer,
   MultiViewportResponse,
   PlaceFullResponse,
+  BtcViewportResponse,
+  BitcoinPoi,
 } from "@/types/mapky";
+
+/** Build the `activity` + `min_rating` query params for the place
+ *  viewport endpoints. Sorted activity tokens keep the cache key stable
+ *  regardless of selection order; both fields are omitted when empty so
+ *  the no-filter case sends the smallest possible URL. */
+function placeFilterParams(filters: PlaceFilters): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (filters.activities.length > 0) {
+    out.activity = [...filters.activities].sort().join(",");
+  }
+  if (filters.minRating !== undefined && filters.minRating > 0) {
+    out.min_rating = filters.minRating.toString();
+  }
+  return out;
+}
 
 /** Resource segments that can host a `:MapkyAppPost` reply thread. */
 export type MapkyResourceType =
@@ -58,11 +75,7 @@ export async function fetchViewport(
         max_lon: bounds.maxLon,
         zoom: Math.max(0, Math.min(22, Math.floor(zoom))),
         limit,
-        // Send only flags that are on so the cache key stays compact
-        // when no filters are active (the default case).
-        ...(filters.bitcoin ? { bitcoin: true } : null),
-        ...(filters.reviewed ? { reviewed: true } : null),
-        ...(filters.tagged ? { tagged: true } : null),
+        ...placeFilterParams(filters),
       },
     },
   );
@@ -102,12 +115,71 @@ export async function fetchViewportAll(
         zoom: Math.max(0, Math.min(22, Math.floor(zoom))),
         limit,
         include: include.join(","),
-        ...(filters.bitcoin ? { bitcoin: true } : null),
-        ...(filters.reviewed ? { reviewed: true } : null),
-        ...(filters.tagged ? { tagged: true } : null),
+        ...placeFilterParams(filters),
       },
     },
   );
+  return data;
+}
+
+/**
+ * Batch-fetch captures across many sequences in one round-trip.
+ * Replaces the per-sequence fan-out for viewport-driven coverage:
+ * one POST regardless of how many sequences are surfaced. Each
+ * capture in the response carries its own `sequence_uri` so the
+ * caller can re-group locally if needed.
+ */
+export async function fetchSequencesCapturesByIds(
+  refs: ReadonlyArray<{ authorId: string; sequenceId: string }>,
+  limit = 1000,
+): Promise<GeoCaptureDetails[]> {
+  if (refs.length === 0) return [];
+  const uris = refs.map(
+    (r) => `pubky://${r.authorId}/pub/mapky.app/sequences/${r.sequenceId}`,
+  );
+  const { data } = await nexusClient.post<GeoCaptureDetails[]>(
+    "/v0/mapky/sequences/captures/by_ids",
+    { uris, limit },
+  );
+  return data;
+}
+
+/**
+ * Fetch the BTC overlay's viewport — same zoom-aware envelope as
+ * `/v0/mapky/viewport`. Below the cluster threshold the response
+ * carries `kind: "clusters"` (orange-themed cluster bubbles); at or
+ * above, individual `kind: "places"` POIs.
+ *
+ * Back-compat shim: older nexusd builds (pre-BTC-clustering) return
+ * a flat `BitcoinPoi[]` for this endpoint regardless of zoom. Wrap
+ * those into the new `{kind:"places"}` envelope so the BtcOverlayLayer
+ * keeps rendering individual POIs while the user rolls forward to
+ * the new plugin.
+ */
+export async function fetchBtcViewport(
+  bounds: ViewportBounds,
+  zoom: number,
+  limit = 500,
+): Promise<BtcViewportResponse> {
+  const { data } = await nexusClient.get<BtcViewportResponse | unknown[]>(
+    "/v0/mapky/btc/viewport",
+    {
+      params: {
+        min_lat: bounds.minLat,
+        min_lon: bounds.minLon,
+        max_lat: bounds.maxLat,
+        max_lon: bounds.maxLon,
+        zoom: Math.max(0, Math.min(22, Math.floor(zoom))),
+        limit,
+      },
+    },
+  );
+  if (Array.isArray(data)) {
+    // Legacy nexusd: flat array of BitcoinPoi. Treat as the new
+    // envelope's `places` branch so the rest of the pipeline keeps
+    // working without conditional logic at the call site.
+    return { kind: "places", places: data as BitcoinPoi[] };
+  }
   return data;
 }
 

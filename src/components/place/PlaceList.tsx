@@ -26,6 +26,7 @@ import {
   type TagMode,
 } from "@/components/discover/Filter";
 import { resolvePlaceName } from "@/lib/places/place-name";
+import { PlaceFilterControls } from "@/components/place/PlaceFilterControls";
 import type { PlaceDetails, PostTagDetails } from "@/types/mapky";
 
 /**
@@ -218,6 +219,15 @@ export function PlaceList() {
 
   return (
     <DiscoverSidebar title="Places" onClose={close}>
+      {/* Server-side filters applied to /v0/mapky/viewport. Mirror of
+          the controls in the Layer sheet — same Zustand state behind
+          both, so flipping a pill here also adjusts the map's place
+          dots. Sits above DiscoverFilter (client-side text/tag filter)
+          so users see the funnel: server narrows the data, then the
+          client narrows the displayed list. */}
+      <div className="mb-2 rounded-lg border border-border/60 bg-surface px-2.5 py-2">
+        <PlaceFilterControls variant="compact" />
+      </div>
       <DiscoverFilter
         value={query}
         onChange={setQuery}

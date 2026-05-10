@@ -6,6 +6,7 @@ import {
   useResourceReplies,
   useUserProfile,
 } from "@/lib/api/hooks";
+import { useEnsureIngested } from "@/lib/nexus/use-ensure-ingested";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { truncatePublicKey } from "@/lib/api/user";
 import type { MapkyPostDetails } from "@/types/mapky";
@@ -33,6 +34,7 @@ function CommentCard({ post }: { post: MapkyPostDetails }) {
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [repliesOpen, setRepliesOpen] = useState(false);
+  useEnsureIngested(post.author_id);
   const { data: authorProfile } = useUserProfile(post.author_id);
   const authorName = authorProfile?.name?.trim() || null;
   const isOwner = publicKey === post.author_id;

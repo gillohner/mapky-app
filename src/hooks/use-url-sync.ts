@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
+import { PLACE_ACTIVITIES, type PlaceActivity } from "@/types/mapky";
 
 /**
  * Bidirectional sync between layer/view state and URL search params,
@@ -20,7 +21,9 @@ import { useMapStore } from "@/stores/map-store";
  *   pl  places layer       (0 to hide; default visible)
  *   ca  captures layer     (0 to hide; default visible)
  *   mt  metro overlay      (1 to show)
- *   pf  places filters     (csv of `btc|reviewed|tagged`; absent = no narrowing)
+ *   bo  BTC overlay        (1 to show — BTCMap merchants, sibling overlay)
+ *   pa  place activity OR  (csv of `tagged|reviewed|posted|collected`)
+ *   pr  min rating floor   (0.5–5.0)
  *   b3  3D buildings       (1 to show)
  *   z   zoom level
  *   c   center as "lat,lon"
@@ -50,17 +53,45 @@ function hydrateFromUrl() {
   if (params.get("sl") === "0") m.setSatelliteLabels(false);
 
   if (params.get("mt") === "1") ui.setMetroOverlayVisible(true);
+  if (params.get("bo") === "1") ui.setBtcOverlayVisible(true);
   if (params.get("b3") === "1") ui.setBuildings3DVisible(true);
 
-  // Places filter pills — comma-separated. Tokens beyond the known
-  // set are ignored so a stale shared link from a future-version
-  // schema can't crash hydration.
-  const pf = params.get("pf");
-  if (pf) {
-    const tokens = new Set(pf.split(",").map((t) => t.trim()));
-    if (tokens.has("btc")) ui.setPlacesFilter("bitcoin", true);
-    if (tokens.has("reviewed")) ui.setPlacesFilter("reviewed", true);
-    if (tokens.has("tagged")) ui.setPlacesFilter("tagged", true);
+  // Place activity OR set — comma-separated tokens; unknown tokens
+  // are ignored so a stale shared link from a future schema doesn't
+  // crash hydration.
+  //
+  // This is a *replace* not a *toggle* — hydrate runs at module load
+  // *after* Zustand persist has rehydrated from localStorage, so a URL
+  // matching the persisted state would otherwise toggle the bit OFF.
+  // We compose the URL set + persisted set explicitly via toggle so
+  // hydration converges on `pa` regardless of what was persisted.
+  const pa = params.get("pa");
+  if (pa) {
+    const known = new Set<PlaceActivity>(PLACE_ACTIVITIES);
+    const fromUrl = new Set<PlaceActivity>();
+    for (const tok of pa.split(",").map((t) => t.trim())) {
+      if (known.has(tok as PlaceActivity)) {
+        fromUrl.add(tok as PlaceActivity);
+      }
+    }
+    const current = new Set(ui.placesFilters.activities);
+    // Toggle on anything URL has that store doesn't, off anything store has that URL doesn't.
+    for (const a of fromUrl) {
+      if (!current.has(a)) ui.togglePlaceActivity(a);
+    }
+    for (const a of current) {
+      if (!fromUrl.has(a)) ui.togglePlaceActivity(a);
+    }
+  }
+
+  // Min-rating floor. Only override persisted state when the URL
+  // explicitly carries a `pr` value — absence is "user opened app
+  // normally", presence is "shared link wants this rating".
+  const prRaw = params.get("pr");
+  if (prRaw !== null) {
+    const pr = parseFloat(prRaw);
+    if (Number.isFinite(pr) && pr > 0) ui.setMinRating(pr);
+    else ui.setMinRating(undefined);
   }
 
   const z = parseFloat(params.get("z") ?? "");
@@ -105,6 +136,7 @@ function applyUrlViewportSmoothly() {
 
 export function useUrlSync() {
   const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
+  const btcOverlayVisible = useUiStore((s) => s.btcOverlayVisible);
   const placesFilters = useUiStore((s) => s.placesFilters);
   const buildings3DVisible = useUiStore((s) => s.buildings3DVisible);
 
@@ -139,18 +171,23 @@ export function useUrlSync() {
     );
 
     setOrDelete(params, "mt", metroOverlayVisible ? "1" : null);
-    // Places filter pills — emit a comma-separated list when any are
-    // active; absent param means "no narrowing", matching the default
-    // store state.
-    const filterTokens = [
-      placesFilters.bitcoin ? "btc" : null,
-      placesFilters.reviewed ? "reviewed" : null,
-      placesFilters.tagged ? "tagged" : null,
-    ].filter((t): t is string => t !== null);
+    setOrDelete(params, "bo", btcOverlayVisible ? "1" : null);
+    // Place activities — emit a sorted comma-separated list when any
+    // are active; absent param means "no narrowing".
     setOrDelete(
       params,
-      "pf",
-      filterTokens.length > 0 ? filterTokens.join(",") : null,
+      "pa",
+      placesFilters.activities.length > 0
+        ? [...placesFilters.activities].sort().join(",")
+        : null,
+    );
+    // Min rating — emit only when above zero.
+    setOrDelete(
+      params,
+      "pr",
+      placesFilters.minRating && placesFilters.minRating > 0
+        ? placesFilters.minRating.toString()
+        : null,
     );
     setOrDelete(params, "b3", buildings3DVisible ? "1" : null);
 
@@ -174,6 +211,7 @@ export function useUrlSync() {
     }
   }, [
     metroOverlayVisible,
+    btcOverlayVisible,
     placesFilters,
     buildings3DVisible,
     theme,

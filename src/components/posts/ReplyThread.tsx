@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { MessageSquare, Reply, Pencil } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useResourceReplies, useUserProfile } from "@/lib/api/hooks";
+import { useEnsureIngested } from "@/lib/nexus/use-ensure-ingested";
 import type { MapkyResourceType } from "@/lib/api/mapky";
 import { truncatePublicKey } from "@/lib/api/user";
 import type { MapkyPostDetails } from "@/types/mapky";
@@ -60,6 +61,7 @@ function PostNode({
   const queryClient = useQueryClient();
   const [replyOpen, setReplyOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  useEnsureIngested(post.author_id);
   const { data: authorProfile } = useUserProfile(post.author_id);
   const authorName = authorProfile?.name?.trim() || null;
   const isOwner = publicKey === post.author_id;
