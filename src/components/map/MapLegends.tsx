@@ -1,4 +1,4 @@
-import { Info } from "lucide-react";
+import { Info, X } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { PlaceBalloon } from "./PlaceBalloon";
@@ -171,6 +171,11 @@ export function MapLegends() {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const expanded = useUiStore((s) => s.legendExpanded);
   const setExpanded = useUiStore((s) => s.setLegendExpanded);
+  // Hide the legend pill entirely while Layers is expanded — both
+  // share the same bottom-left slot, and rendering the collapsed
+  // pill underneath the expanded Layers card lets the smaller
+  // shape peek through at the visible edges.
+  const layersOpen = useUiStore((s) => s.layerSheetOpen);
 
   // ─── Mapky section — places / BTC / captures / selection. ─────
   const mapkyItems: LegendItem[] = [];
@@ -228,6 +233,7 @@ export function MapLegends() {
   if (metro) sections.push({ heading: "Rail & metro", items: RAILWAY_ITEMS });
 
   if (sections.length === 0) return null;
+  if (layersOpen && !expanded) return null;
 
   // Position math: collapsed sits next to the Layers button (left-16
   // mobile / md:left-[6.75rem] desktop). Expanded shifts to the same
@@ -257,9 +263,15 @@ export function MapLegends() {
         onClick={() => setExpanded(!expanded)}
         aria-label={expanded ? "Close map legend" : "Open map legend"}
         aria-expanded={expanded}
-        className="flex h-11 w-full flex-shrink-0 items-center justify-center text-foreground transition-colors"
+        className={`relative flex h-11 w-full flex-shrink-0 items-center text-foreground transition-colors ${
+          expanded
+            ? "justify-between gap-2 px-3 text-xs font-medium"
+            : "justify-center"
+        }`}
       >
         <Info className="h-5 w-5 text-accent" />
+        {expanded && <span className="flex-1 text-left">Map legend</span>}
+        {expanded && <X className="h-4 w-4 text-muted" aria-hidden />}
       </button>
       {expanded && (
         <div className="flex flex-1 flex-col overflow-hidden border-t border-border px-2.5 pb-1.5 pt-1">

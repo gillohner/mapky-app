@@ -37,6 +37,10 @@ export function LayerSheet() {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const activeTab = useUiStore((s) => s.layerSheetActiveTab);
   const setActiveTab = useUiStore((s) => s.setLayerSheetActiveTab);
+  // Hide Layers entirely while the legend is expanded — both share
+  // the same bottom-left slot, and the collapsed Layers pill
+  // would otherwise peek through the legend card's edges.
+  const legendOpen = useUiStore((s) => s.legendExpanded);
 
   // Active-dot indicator when any toggle is off its default — same
   // signal LayerSheetTrigger used to carry, now lives on the merged
@@ -67,6 +71,8 @@ export function LayerSheet() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, setOpen]);
+
+  if (legendOpen && !open) return null;
 
   return (
     <div
