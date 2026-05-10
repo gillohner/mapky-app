@@ -31,6 +31,8 @@ export function ReviewStep() {
   const setSequenceDescription = useCaptureCreationStore(
     (s) => s.setSequenceDescription,
   );
+  const setActiveIndex = useCaptureCreationStore((s) => s.setActiveIndex);
+  const activeIndex = useCaptureCreationStore((s) => s.activeIndex);
 
   const [progress, setProgress] = useState<string | null>(null);
 
@@ -195,29 +197,40 @@ export function ReviewStep() {
             </span>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {draft.items.map((it, idx) => (
-              <div
-                key={it.id}
-                className="relative h-14 w-18 shrink-0 overflow-hidden rounded-lg border border-border bg-surface"
-              >
-                {it.file.type.startsWith("video/") ? (
-                  <video
-                    src={it.previewUrl}
-                    className="h-full w-full object-cover"
-                    muted
-                  />
-                ) : (
-                  <img
-                    src={it.previewUrl}
-                    alt={`Item ${idx + 1}`}
-                    className="h-full w-full object-cover"
-                  />
-                )}
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1 text-[10px] text-white">
-                  {idx + 1}
-                </div>
-              </div>
-            ))}
+            {draft.items.map((it, idx) => {
+              const isActive = idx === activeIndex;
+              return (
+                <button
+                  key={it.id}
+                  type="button"
+                  onClick={() => setActiveIndex(idx)}
+                  aria-pressed={isActive}
+                  aria-label={`Show capture ${idx + 1}`}
+                  className={`relative h-14 w-18 shrink-0 overflow-hidden rounded-lg border bg-surface transition-all ${
+                    isActive
+                      ? "border-sky-500 ring-2 ring-sky-500/40"
+                      : "border-border hover:border-sky-500/60"
+                  }`}
+                >
+                  {it.file.type.startsWith("video/") ? (
+                    <video
+                      src={it.previewUrl}
+                      className="h-full w-full object-cover"
+                      muted
+                    />
+                  ) : (
+                    <img
+                      src={it.previewUrl}
+                      alt={`Item ${idx + 1}`}
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1 text-[10px] text-white">
+                    {idx + 1}
+                  </div>
+                </button>
+              );
+            })}
           </div>
           <input
             type="text"
