@@ -77,11 +77,12 @@ function ensureLayers(map: maplibregl.Map, theme: "light" | "dark") {
             16,
             5,
           ],
-          // Kept light so the line reads as connective tissue between
-          // dots rather than a primary feature — at 0.6 it competed
-          // with the basemap's road network and made the dots harder
-          // to pick out.
-          "line-opacity": 0.35,
+          // Slightly bolder than the original 0.35 — sequences are
+          // first-class now (their own marker layer + detail page),
+          // and the polyline is the spatial signal that ties a
+          // sequence's member dots together. Still subtle enough to
+          // not compete with the basemap's road network.
+          "line-opacity": 0.55,
         },
         layout: {
           "line-cap": "round",

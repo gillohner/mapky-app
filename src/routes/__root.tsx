@@ -5,6 +5,7 @@ import { MapView } from "@/components/map/MapView";
 import { PlaceAnnotationsLayer } from "@/components/map/PlaceAnnotationsLayer";
 import { CaptureMarkersLayer } from "@/components/map/CaptureMarkersLayer";
 import { SequenceCoverageLayer } from "@/components/map/SequenceCoverageLayer";
+import { SequenceMarkersLayer } from "@/components/map/SequenceMarkersLayer";
 import { PoiClickHandler } from "@/components/map/PoiClickHandler";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
 import { RailOverlayLayer } from "@/components/map/RailOverlayLayer";
@@ -35,6 +36,7 @@ function RootLayout() {
           <PlaceAnnotationsLayer />
           <CaptureMarkersLayer />
           <SequenceCoverageLayer />
+          <SequenceMarkersLayer />
           <MainMapCaptureOverlay />
           <RailOverlayLayer />
           <BtcOverlayLayer />
