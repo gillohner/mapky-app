@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
+import { registerPending } from "@/lib/api/optimistic-overlay";
 import type { PostTagDetails } from "@/types/mapky";
 
 /**
@@ -173,6 +174,23 @@ export function TagStrip({
       } else if (queryKey) {
         await queryClient.cancelQueries({ queryKey });
         queryClient.setQueryData<PostTagDetails[]>(queryKey, updater);
+        // Register a pending overlay so a stale refetch from a fast
+        // sibling write can't drop this change before nexus indexes
+        // it (issue #7). Composite-cache callers (mutate path) skip
+        // this — their PlaceFullResponse cache shape isn't covered
+        // by the list-only overlay registry; the composite's
+        // staleTime + invalidate cycle covers them instead.
+        const opId = `tag:${publicKey}:${tagLabel}`;
+        registerPending<PostTagDetails[] | undefined>(queryKey, {
+          id: opId,
+          apply: updater,
+          isConfirmed: (old) => {
+            if (!old) return removing;
+            const existing = old.find((tg) => tg.label === tagLabel);
+            const hasUser = existing?.taggers.includes(publicKey) ?? false;
+            return removing ? !hasUser : hasUser;
+          },
+        });
       }
 
       onCountDelta?.(removing ? -1 : 1);

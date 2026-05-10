@@ -19,9 +19,17 @@ import {
   makeOsmUrl,
 } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
+import {
+  pendingEntityFieldPatch,
+  pendingSingleFieldPatch,
+  registerPending,
+} from "@/lib/api/optimistic-overlay";
 import { searchPlaces } from "@/lib/api/nominatim";
 import { toast } from "sonner";
 import type { CollectionDetails, PostTagDetails } from "@/types/mapky";
+
+const sameItems = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((v, i) => v === b[i]);
 
 interface CollectionActionsProps {
   authorId: string;
@@ -242,24 +250,38 @@ function TagInline({
       // Cancel in-flight fetches so they don't overwrite optimistic data
       await queryClient.cancelQueries({ queryKey: ["mapky", "collection", authorId, collectionId, "tags"] });
 
-      // Optimistic cache update
-      queryClient.setQueryData<PostTagDetails[]>(
-        ["mapky", "collection", authorId, collectionId, "tags"],
-        (old) => {
-          const entry = { label: normalized, taggers: [publicKey], taggers_count: 1 };
-          if (!old) return [entry];
-          const existing = old.find((t) => t.label === normalized);
-          if (existing) {
-            if (existing.taggers.includes(publicKey)) return old;
-            return old.map((t) =>
-              t.label === normalized
-                ? { ...t, taggers: [...t.taggers, publicKey], taggers_count: t.taggers_count + 1 }
-                : t,
-            );
-          }
-          return [...old, entry];
-        },
-      );
+      // Optimistic cache update + matching overlay so the tag survives
+      // a stale refetch from a faster sibling write.
+      const applyAdd = (
+        old: PostTagDetails[] | undefined,
+      ): PostTagDetails[] => {
+        const entry = { label: normalized, taggers: [publicKey], taggers_count: 1 };
+        if (!old) return [entry];
+        const existing = old.find((t) => t.label === normalized);
+        if (existing) {
+          if (existing.taggers.includes(publicKey)) return old;
+          return old.map((t) =>
+            t.label === normalized
+              ? { ...t, taggers: [...t.taggers, publicKey], taggers_count: t.taggers_count + 1 }
+              : t,
+          );
+        }
+        return [...old, entry];
+      };
+      const tagsKey = [
+        "mapky",
+        "collection",
+        authorId,
+        collectionId,
+        "tags",
+      ] as const;
+      queryClient.setQueryData<PostTagDetails[]>(tagsKey, applyAdd);
+      registerPending<PostTagDetails[] | undefined>(tagsKey, {
+        id: `tag:${publicKey}:${normalized}`,
+        apply: applyAdd,
+        isConfirmed: (old) =>
+          !!old?.find((t) => t.label === normalized)?.taggers.includes(publicKey),
+      });
 
       toast.success(`Tagged with "${normalized}"`);
       onClose();
@@ -525,6 +547,26 @@ function AddPlaceInline({
           return id === collectionId ? { ...c, items: newItems } : c;
         }),
       );
+
+      // Overlay so a fast second add doesn't lose the first when the
+      // delayed refetch races nexus indexing (issue #7).
+      const patchOpId = `coll-items:${collectionId}`;
+      pendingSingleFieldPatch<CollectionDetails, string[]>({
+        queryKey: ["mapky", "collection", publicKey, collectionId],
+        opId: patchOpId,
+        field: "items",
+        value: newItems,
+        matches: sameItems,
+      });
+      pendingEntityFieldPatch<CollectionDetails, string[]>({
+        queryKey: ["mapky", "collections", "user", publicKey],
+        opId: patchOpId,
+        entityId: collection.id,
+        getEntityId: (c) => c.id,
+        field: "items",
+        value: newItems,
+        matches: sameItems,
+      });
 
       toast.success("Place added");
       onClose();
