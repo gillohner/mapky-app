@@ -5,6 +5,7 @@ import {
   useResourceReplies,
   useUserProfile,
 } from "@/lib/api/hooks";
+import { useEnsureIngested } from "@/lib/nexus/use-ensure-ingested";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { truncatePublicKey, resolveFileUrl } from "@/lib/api/user";
 import type { ReviewDetails } from "@/types/mapky";
@@ -142,6 +143,7 @@ function ReviewCard({
   const { publicKey } = useAuth();
   const [editOpen, setEditOpen] = useState(false);
   const [repliesOpen, setRepliesOpen] = useState(false);
+  useEnsureIngested(review.author_id);
   const { data: authorProfile } = useUserProfile(review.author_id);
   const authorName = authorProfile?.name?.trim() || null;
   const isOwner = publicKey === review.author_id;

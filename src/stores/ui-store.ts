@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { GeoCaptureDetails, PlaceFilters } from "@/types/mapky";
+import type {
+  GeoCaptureDetails,
+  PlaceActivity,
+  PlaceFilters,
+} from "@/types/mapky";
 
 export interface PendingPoiClick {
   lng: number;
@@ -60,6 +64,8 @@ export interface SelectedFeature {
 
 export type DimmableLayer = "places" | "captures";
 
+export type LayerSheetTab = "mapky" | "basemap" | "overlays";
+
 interface UiStore {
   /**
    * User toggles for the always-on Mapky data layers. These act when
@@ -81,15 +87,29 @@ interface UiStore {
   toggleMetroOverlay: () => void;
 
   /**
-   * Filter pills for the Places layer. Each one when `true` narrows
-   * the result set; all-`false` (the default) means "show every
-   * place". Sent as query params to `/v0/mapky/viewport` so the
-   * server applies the filter in the same Cypher pass — no client-
-   * side post-filtering, no second query.
+   * Filter dimensions for the Places layer. Sent as query params to
+   * `/v0/mapky/viewport` so the server applies the filter in the same
+   * Cypher pass — no client-side post-filtering, no second query.
+   *
+   * `activities` is multi-select OR; `minRating` is a 0-5 floor.
+   * Default is the empty filter ("show every place").
    */
   placesFilters: PlaceFilters;
-  setPlacesFilter: (key: keyof PlaceFilters, on: boolean) => void;
-  togglePlacesFilter: (key: keyof PlaceFilters) => void;
+  togglePlaceActivity: (activity: PlaceActivity) => void;
+  setMinRating: (rating: number | undefined) => void;
+  resetPlacesFilters: () => void;
+
+  /**
+   * Independent BTC overlay layer (Bitcoin-accepting POIs from
+   * BTCMap). Sibling to the cycling/rail/terrain overlays — fed by
+   * `/v0/mapky/btc/viewport`, NOT by the Places layer's filter. The
+   * overlay overlays orange BTC dots on top of whatever the Places
+   * layer already renders, so users can see "Bitcoin places" without
+   * losing other Mapky data on the map.
+   */
+  btcOverlayVisible: boolean;
+  setBtcOverlayVisible: (visible: boolean) => void;
+  toggleBtcOverlay: () => void;
 
   /** Extrude buildings using the height field from Protomaps tiles. */
   buildings3DVisible: boolean;
@@ -148,9 +168,23 @@ interface UiStore {
   pinnedCaptures: GeoCaptureDetails[] | null;
   setPinnedCaptures: (c: GeoCaptureDetails[] | null) => void;
 
+  /**
+   * Layers card and Map-legend card are mutually exclusive — both
+   * expand into the same bottom-left slot, so opening one auto-
+   * collapses the other. The setters below enforce that invariant.
+   */
   layerSheetOpen: boolean;
   setLayerSheetOpen: (open: boolean) => void;
   toggleLayerSheet: () => void;
+
+  legendExpanded: boolean;
+  setLegendExpanded: (open: boolean) => void;
+  toggleLegend: () => void;
+
+  /** Last-viewed tab inside the LayerSheet — persisted so the sheet
+   *  re-opens to where the user left off. */
+  layerSheetActiveTab: LayerSheetTab;
+  setLayerSheetActiveTab: (tab: LayerSheetTab) => void;
 
   pendingPoiClick: PendingPoiClick | null;
   setPendingPoiClick: (click: PendingPoiClick) => void;
@@ -218,15 +252,32 @@ export const useUiStore = create<UiStore>()(
       toggleMetroOverlay: () =>
         set((s) => ({ metroOverlayVisible: !s.metroOverlayVisible })),
 
-      placesFilters: { bitcoin: false, reviewed: false, tagged: false },
-      setPlacesFilter: (key, on) =>
+      placesFilters: { activities: [], minRating: undefined },
+      togglePlaceActivity: (activity) =>
+        set((s) => {
+          const has = s.placesFilters.activities.includes(activity);
+          const next = has
+            ? s.placesFilters.activities.filter((a) => a !== activity)
+            : [...s.placesFilters.activities, activity];
+          return {
+            placesFilters: { ...s.placesFilters, activities: next },
+          };
+        }),
+      setMinRating: (rating) =>
         set((s) => ({
-          placesFilters: { ...s.placesFilters, [key]: on },
+          placesFilters: {
+            ...s.placesFilters,
+            minRating:
+              rating === undefined || rating <= 0 ? undefined : rating,
+          },
         })),
-      togglePlacesFilter: (key) =>
-        set((s) => ({
-          placesFilters: { ...s.placesFilters, [key]: !s.placesFilters[key] },
-        })),
+      resetPlacesFilters: () =>
+        set({ placesFilters: { activities: [], minRating: undefined } }),
+
+      btcOverlayVisible: false,
+      setBtcOverlayVisible: (visible) => set({ btcOverlayVisible: visible }),
+      toggleBtcOverlay: () =>
+        set((s) => ({ btcOverlayVisible: !s.btcOverlayVisible })),
 
       buildings3DVisible: false,
       setBuildings3DVisible: (visible) =>
@@ -267,8 +318,33 @@ export const useUiStore = create<UiStore>()(
       clearDimmed: () => set({ dimmedLayers: new Set() }),
 
       layerSheetOpen: false,
-      setLayerSheetOpen: (open) => set({ layerSheetOpen: open }),
-      toggleLayerSheet: () => set((s) => ({ layerSheetOpen: !s.layerSheetOpen })),
+      setLayerSheetOpen: (open) =>
+        // Opening Layers auto-collapses the legend; closing leaves
+        // legend's state alone.
+        set((s) => ({
+          layerSheetOpen: open,
+          legendExpanded: open ? false : s.legendExpanded,
+        })),
+      toggleLayerSheet: () =>
+        set((s) => ({
+          layerSheetOpen: !s.layerSheetOpen,
+          legendExpanded: !s.layerSheetOpen ? false : s.legendExpanded,
+        })),
+
+      legendExpanded: false,
+      setLegendExpanded: (open) =>
+        set((s) => ({
+          legendExpanded: open,
+          layerSheetOpen: open ? false : s.layerSheetOpen,
+        })),
+      toggleLegend: () =>
+        set((s) => ({
+          legendExpanded: !s.legendExpanded,
+          layerSheetOpen: !s.legendExpanded ? false : s.layerSheetOpen,
+        })),
+
+      layerSheetActiveTab: "mapky",
+      setLayerSheetActiveTab: (tab) => set({ layerSheetActiveTab: tab }),
 
       pendingPoiClick: null,
       setPendingPoiClick: (click) => set({ pendingPoiClick: click }),
@@ -351,7 +427,38 @@ export const useUiStore = create<UiStore>()(
       //     add placesFilters. The standalone BTC overlay collapsed into
       //     a narrowing filter on the Places layer once BTCMap data was
       //     ingested into Neo4j as :Place nodes.
-      version: 7,
+      // v8: replace placesFilters {bitcoin, reviewed, tagged} with
+      //     {activities[], minRating}. BTC moves OUT of placesFilters
+      //     into its own btcOverlayVisible toggle (back to a sibling
+      //     overlay; the v7 collapse hit an impossible-AND trap when
+      //     all three pills were on with non-overlapping data).
+      // v9: add layerSheetActiveTab so the tabbed LayerSheet re-opens
+      //     where the user left off. Default "mapky".
+      version: 9,
+      migrate: (persisted: unknown, version: number) => {
+        if (!persisted || typeof persisted !== "object") return persisted;
+        const state = persisted as Record<string, unknown>;
+        // v7 → v8: rebuild placesFilters and surface BTC as its own toggle.
+        if (version < 8) {
+          const old = (state.placesFilters as
+            | { bitcoin?: boolean; reviewed?: boolean; tagged?: boolean }
+            | undefined) ?? {};
+          const activities: PlaceActivity[] = [];
+          if (old.reviewed) activities.push("reviewed");
+          if (old.tagged) activities.push("tagged");
+          state.placesFilters = { activities, minRating: undefined };
+          state.btcOverlayVisible = !!old.bitcoin;
+        }
+        if (version < 9) {
+          // No-op for prior data — just adopt the v9 default if the
+          // persisted state somehow carries an unrecognized value.
+          const t = state.layerSheetActiveTab;
+          if (t !== "mapky" && t !== "basemap" && t !== "overlays") {
+            state.layerSheetActiveTab = "mapky";
+          }
+        }
+        return state;
+      },
       // Persist user-controlled toggles only. Theme/basemap lives in
       // map-store; dimmedLayers / hiddenLayers / sheet open-state /
       // sidebar / streetview / POI-click context are all ephemeral
@@ -361,7 +468,9 @@ export const useUiStore = create<UiStore>()(
         capturesLayerVisible: state.capturesLayerVisible,
         metroOverlayVisible: state.metroOverlayVisible,
         placesFilters: state.placesFilters,
+        btcOverlayVisible: state.btcOverlayVisible,
         buildings3DVisible: state.buildings3DVisible,
+        layerSheetActiveTab: state.layerSheetActiveTab,
       }),
     },
   ),
