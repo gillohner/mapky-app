@@ -15,42 +15,26 @@ import {
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { PlaceFilterControls } from "@/components/place/PlaceFilterControls";
+import type { LayerSheetTab } from "@/stores/ui-store";
 
 /**
  * Layers sheet — Mapky data toggles + basemap + raster/extrusion
- * overlays. The Places/Captures toggles act on the bare home map;
- * once the user opens any sidebar (places / collections / routes /
- * captures / search / detail), `useAutoFocusLayer` overrides them
- * via the `hiddenLayers` set so the focused resource owns the map.
+ * overlays organized into 3 tabs (Mapky data, Basemap, Overlays). Only
+ * one tab's content renders at a time so the sheet stays compact on
+ * portrait/short viewports. The tab bar pins to the top; the body
+ * scrolls if a tab's content does run long.
+ *
+ * The Places/Captures toggles act on the bare home map; once the user
+ * opens any sidebar (places / collections / routes / captures / search
+ * / detail), `useAutoFocusLayer` overrides them via the `hiddenLayers`
+ * set so the focused resource owns the map.
  */
 export function LayerSheet() {
   const open = useUiStore((s) => s.layerSheetOpen);
   const setOpen = useUiStore((s) => s.setLayerSheetOpen);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
-
-  const placesLayerVisible = useUiStore((s) => s.placesLayerVisible);
-  const togglePlacesLayer = useUiStore((s) => s.togglePlacesLayer);
-  const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
-  const toggleCapturesLayer = useUiStore((s) => s.toggleCapturesLayer);
-
-  const btcOverlayVisible = useUiStore((s) => s.btcOverlayVisible);
-  const toggleBtcOverlay = useUiStore((s) => s.toggleBtcOverlay);
-
-  const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
-  const toggleMetroOverlay = useUiStore((s) => s.toggleMetroOverlay);
-
-  const buildings3DVisible = useUiStore((s) => s.buildings3DVisible);
-  const toggleBuildings3D = useUiStore((s) => s.toggleBuildings3D);
-
-  const activeCollections = useUiStore((s) => s.activeCollectionOverlays);
-  const clearAllCollectionOverlays = useUiStore(
-    (s) => s.clearAllCollectionOverlays,
-  );
-
-  const basemap = useMapStore((s) => s.basemap);
-  const setBasemap = useMapStore((s) => s.setBasemap);
-  const satelliteLabels = useMapStore((s) => s.satelliteLabels);
-  const toggleSatelliteLabels = useMapStore((s) => s.toggleSatelliteLabels);
+  const activeTab = useUiStore((s) => s.layerSheetActiveTab);
+  const setActiveTab = useUiStore((s) => s.setLayerSheetActiveTab);
 
   useEffect(() => {
     if (!open) return;
@@ -64,11 +48,10 @@ export function LayerSheet() {
   // Close on outside click. Listen at the document level on the
   // `mousedown` event:
   //
-  //   - `click` doesn't work for our case because POI markers
-  //     (HTML balloons) call `e.stopPropagation()` in their click
-  //     handlers — clicks on a marker would never reach this listener
-  //     and the sheet would refuse to close. `mousedown` fires earlier
-  //     and isn't affected by their click-level stopPropagation.
+  //   - `click` doesn't work because POI markers (HTML balloons) call
+  //     `e.stopPropagation()` in their click handlers — clicks on a
+  //     marker would never reach this listener and the sheet would
+  //     refuse to close. `mousedown` fires earlier and isn't affected.
   //   - We still skip clicks inside the sheet itself (sheetRef) and on
   //     the trigger button (data-attr) so the trigger's own toggle
   //     handles the close cleanly.
@@ -82,8 +65,6 @@ export function LayerSheet() {
       if (target.closest?.("[data-mapky-layer-trigger]")) return;
       setOpen(false);
     };
-    // Defer so the mousedown that opened the sheet doesn't immediately
-    // close it again. Same pattern most outside-click hooks use.
     const t = setTimeout(() => {
       document.addEventListener("mousedown", onDown);
     }, 0);
@@ -104,15 +85,20 @@ export function LayerSheet() {
       <div className="pointer-events-auto absolute inset-0 bg-black/30 backdrop-blur-[1px] sm:hidden" />
 
       {/* Sheet — anchored bottom-left so it pops up above the
-          LayerSheetTrigger button. Mobile: full-width above the
-          trigger row; desktop: 320px panel offset past the rail. */}
+          LayerSheetTrigger button. `flex-col` + `max-h` + inner
+          `overflow-y-auto` keep the tab bar pinned and the body
+          scrollable on short viewports. `100dvh` (dynamic viewport
+          height) tracks iOS browser-chrome changes correctly. */}
       <div
         ref={sheetRef}
-        className={`pointer-events-auto relative mx-2 w-[calc(100%-1rem)] max-w-md rounded-2xl border border-border bg-background/95 p-4 shadow-xl backdrop-blur transition-[margin] duration-300 sm:w-80 ${
+        className={`pointer-events-auto relative mx-2 flex w-[calc(100%-1rem)] max-w-md flex-col overflow-hidden rounded-2xl border border-border bg-background/95 p-4 shadow-xl backdrop-blur transition-[margin] duration-300 sm:w-80 ${
           sidebarOpen ? "sm:ml-16 md:ml-[440px]" : "sm:ml-16"
         }`}
         onClick={(e) => e.stopPropagation()}
-        style={{ marginBottom: "calc(5rem + env(safe-area-inset-bottom))" }}
+        style={{
+          marginBottom: "calc(5rem + env(safe-area-inset-bottom))",
+          maxHeight: "calc(100dvh - 6rem)",
+        }}
       >
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground">Layers</h2>
@@ -125,163 +111,199 @@ export function LayerSheet() {
           </button>
         </div>
 
-        {/* Mapky data — always-on toggles for the home map. Sidebars
-            override these via useAutoFocusLayer's hiddenLayers set.
+        <TabBar active={activeTab} onChange={setActiveTab} />
 
-            The Places section also carries the per-layer filter pills
-            (BTC accepted / Reviewed / Tagged). These narrow what the
-            Places layer shows — they're only active when the master
-            Places toggle is on, and disabled (opacity-50) otherwise. */}
-        <Section title="Mapky data">
-          <Toggle
-            icon={<MapPin className="h-4 w-4" />}
-            label="Places"
-            description="OSM places with reviews, tags, posts, or collections"
-            on={placesLayerVisible}
-            onChange={togglePlacesLayer}
-          />
-          <PlaceFilterControls disabled={!placesLayerVisible} />
-          <Toggle
-            icon={<Camera className="h-4 w-4" />}
-            label="Captures"
-            description="Photos, panoramas, and tracks at lat/lon"
-            on={capturesLayerVisible}
-            onChange={toggleCapturesLayer}
-          />
-        </Section>
-
-        {/* Pinned collections — only renders when something is active. */}
-        {activeCollections.size > 0 && (
-          <Section title="Pinned collections">
-            <button
-              onClick={clearAllCollectionOverlays}
-              className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-left text-xs text-muted hover:border-accent hover:text-foreground"
-            >
-              Hide all {activeCollections.size} pinned collection
-              {activeCollections.size === 1 ? "" : "s"}
-            </button>
-          </Section>
-        )}
-
-        {/* Basemap — mutually exclusive, OSM convention. Each option
-            is a complete styled map: pick one. */}
-        <Section title="Basemap">
-          <div className="grid grid-cols-2 gap-1.5">
-            <BasemapTile
-              icon={<MapIcon className="h-4 w-4" />}
-              label="Map"
-              active={basemap === "default"}
-              onClick={() => setBasemap("default")}
-            />
-            <BasemapTile
-              icon={<Mountain className="h-4 w-4" />}
-              label="Terrain"
-              active={basemap === "terrain"}
-              onClick={() => setBasemap("terrain")}
-            />
-            <BasemapTile
-              icon={<Bike className="h-4 w-4" />}
-              label="Cycling"
-              active={basemap === "cycling"}
-              onClick={() => setBasemap("cycling")}
-            />
-            <BasemapTile
-              icon={<Satellite className="h-4 w-4" />}
-              label="Satellite"
-              active={basemap === "satellite"}
-              onClick={() => setBasemap("satellite")}
-            />
-          </div>
-          {basemap === "satellite" && (
-            <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-surface">
-              <input
-                type="checkbox"
-                checked={satelliteLabels}
-                onChange={toggleSatelliteLabels}
-                className="h-3.5 w-3.5 accent-accent"
-              />
-              <span className="flex-1">Show place &amp; road labels</span>
-            </label>
-          )}
-        </Section>
-
-        {/* Overlays */}
-        <Section title="Overlays" lastSection>
-          <Toggle
-            icon={<Bitcoin className="h-4 w-4" />}
-            label="Bitcoin POIs"
-            description="BTCMap merchants — independent of Mapky place filters"
-            on={btcOverlayVisible}
-            onChange={toggleBtcOverlay}
-          />
-          <Toggle
-            icon={<TrainFront className="h-4 w-4" />}
-            label="Rail & metro"
-            description="OpenRailwayMap — lines, stations, signals"
-            on={metroOverlayVisible}
-            onChange={toggleMetroOverlay}
-          />
-          <Toggle
-            icon={<Building2 className="h-4 w-4" />}
-            label="3D buildings"
-            description="Tilt the map to see extruded volumes"
-            on={buildings3DVisible}
-            onChange={toggleBuildings3D}
-          />
-        </Section>
+        <div className="-mx-1 mt-3 flex-1 overflow-y-auto px-1 pb-1">
+          {activeTab === "mapky" && <MapkyTab />}
+          {activeTab === "basemap" && <BasemapTab />}
+          {activeTab === "overlays" && <OverlaysTab />}
+        </div>
       </div>
     </div>,
     document.body,
   );
 }
 
-function Section({
-  title,
-  children,
-  lastSection,
+// ── Tab bar ────────────────────────────────────────────────────────
+
+const TABS: ReadonlyArray<{ id: LayerSheetTab; label: string }> = [
+  { id: "mapky", label: "Mapky data" },
+  { id: "basemap", label: "Basemap" },
+  { id: "overlays", label: "Overlays" },
+];
+
+function TabBar({
+  active,
+  onChange,
 }: {
-  title: string;
-  children: React.ReactNode;
-  lastSection?: boolean;
+  active: LayerSheetTab;
+  onChange: (t: LayerSheetTab) => void;
 }) {
   return (
-    <div className={lastSection ? "" : "mb-3 border-b border-border/60 pb-3"}>
-      <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
-        {title}
-      </h3>
-      <div className="flex flex-col gap-1">{children}</div>
+    <div role="tablist" className="flex flex-wrap gap-1.5">
+      {TABS.map((t) => {
+        const on = active === t.id;
+        return (
+          <button
+            key={t.id}
+            role="tab"
+            type="button"
+            aria-selected={on}
+            onClick={() => onChange(t.id)}
+            className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+              on
+                ? "border-accent/40 bg-accent/10 text-accent"
+                : "border-border bg-surface text-muted hover:border-accent/60 hover:text-accent"
+            }`}
+          >
+            {t.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
+// ── Tab contents ───────────────────────────────────────────────────
+
+function MapkyTab() {
+  const placesLayerVisible = useUiStore((s) => s.placesLayerVisible);
+  const togglePlacesLayer = useUiStore((s) => s.togglePlacesLayer);
+  const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
+  const toggleCapturesLayer = useUiStore((s) => s.toggleCapturesLayer);
+  const activeCollections = useUiStore((s) => s.activeCollectionOverlays);
+  const clearAllCollectionOverlays = useUiStore(
+    (s) => s.clearAllCollectionOverlays,
+  );
+  return (
+    <div className="flex flex-col gap-1">
+      <Toggle
+        icon={<MapPin className="h-4 w-4" />}
+        label="Places"
+        on={placesLayerVisible}
+        onChange={togglePlacesLayer}
+      />
+      <PlaceFilterControls disabled={!placesLayerVisible} />
+      <Toggle
+        icon={<Camera className="h-4 w-4" />}
+        label="Captures"
+        on={capturesLayerVisible}
+        onChange={toggleCapturesLayer}
+      />
+      {activeCollections.size > 0 && (
+        <button
+          onClick={clearAllCollectionOverlays}
+          className="mt-2 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-left text-xs text-muted hover:border-accent hover:text-foreground"
+        >
+          Hide all {activeCollections.size} pinned collection
+          {activeCollections.size === 1 ? "" : "s"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function BasemapTab() {
+  const basemap = useMapStore((s) => s.basemap);
+  const setBasemap = useMapStore((s) => s.setBasemap);
+  const satelliteLabels = useMapStore((s) => s.satelliteLabels);
+  const toggleSatelliteLabels = useMapStore((s) => s.toggleSatelliteLabels);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-1.5">
+        <BasemapTile
+          icon={<MapIcon className="h-4 w-4" />}
+          label="Map"
+          active={basemap === "default"}
+          onClick={() => setBasemap("default")}
+        />
+        <BasemapTile
+          icon={<Mountain className="h-4 w-4" />}
+          label="Terrain"
+          active={basemap === "terrain"}
+          onClick={() => setBasemap("terrain")}
+        />
+        <BasemapTile
+          icon={<Bike className="h-4 w-4" />}
+          label="Cycling"
+          active={basemap === "cycling"}
+          onClick={() => setBasemap("cycling")}
+        />
+        <BasemapTile
+          icon={<Satellite className="h-4 w-4" />}
+          label="Satellite"
+          active={basemap === "satellite"}
+          onClick={() => setBasemap("satellite")}
+        />
+      </div>
+      {basemap === "satellite" && (
+        <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-surface">
+          <input
+            type="checkbox"
+            checked={satelliteLabels}
+            onChange={toggleSatelliteLabels}
+            className="h-3.5 w-3.5 accent-accent"
+          />
+          <span className="flex-1">Show place &amp; road labels</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+function OverlaysTab() {
+  const btcOverlayVisible = useUiStore((s) => s.btcOverlayVisible);
+  const toggleBtcOverlay = useUiStore((s) => s.toggleBtcOverlay);
+  const metroOverlayVisible = useUiStore((s) => s.metroOverlayVisible);
+  const toggleMetroOverlay = useUiStore((s) => s.toggleMetroOverlay);
+  const buildings3DVisible = useUiStore((s) => s.buildings3DVisible);
+  const toggleBuildings3D = useUiStore((s) => s.toggleBuildings3D);
+  return (
+    <div className="flex flex-col gap-1">
+      <Toggle
+        icon={<Bitcoin className="h-4 w-4" />}
+        label="Bitcoin POIs"
+        on={btcOverlayVisible}
+        onChange={toggleBtcOverlay}
+      />
+      <Toggle
+        icon={<TrainFront className="h-4 w-4" />}
+        label="Rail & metro"
+        on={metroOverlayVisible}
+        onChange={toggleMetroOverlay}
+      />
+      <Toggle
+        icon={<Building2 className="h-4 w-4" />}
+        label="3D buildings"
+        on={buildings3DVisible}
+        onChange={toggleBuildings3D}
+      />
+    </div>
+  );
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+
 function Toggle({
   icon,
   label,
-  description,
   on,
   onChange,
 }: {
   icon: React.ReactNode;
   label: string;
-  description: string;
   on: boolean;
   onChange: () => void;
 }) {
   return (
     <button
       onClick={onChange}
-      className="flex items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface"
+      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface"
     >
-      <span
-        className={`mt-0.5 ${on ? "text-accent" : "text-muted"}`}
-        aria-hidden
-      >
+      <span className={on ? "text-accent" : "text-muted"} aria-hidden>
         {icon}
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm text-foreground">{label}</span>
-        <span className="block text-[11px] text-muted">{description}</span>
-      </span>
+      <span className="min-w-0 flex-1 text-sm text-foreground">{label}</span>
       <Switch on={on} />
     </button>
   );
@@ -290,10 +312,8 @@ function Toggle({
 function Switch({ on }: { on: boolean }) {
   return (
     <span
-      className={`mt-1 inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full border transition-colors ${
-        on
-          ? "border-accent bg-accent"
-          : "border-border bg-surface"
+      className={`inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full border transition-colors ${
+        on ? "border-accent bg-accent" : "border-border bg-surface"
       }`}
       aria-hidden
     >

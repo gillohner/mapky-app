@@ -64,6 +64,8 @@ export interface SelectedFeature {
 
 export type DimmableLayer = "places" | "captures";
 
+export type LayerSheetTab = "mapky" | "basemap" | "overlays";
+
 interface UiStore {
   /**
    * User toggles for the always-on Mapky data layers. These act when
@@ -169,6 +171,11 @@ interface UiStore {
   layerSheetOpen: boolean;
   setLayerSheetOpen: (open: boolean) => void;
   toggleLayerSheet: () => void;
+
+  /** Last-viewed tab inside the LayerSheet — persisted so the sheet
+   *  re-opens to where the user left off. */
+  layerSheetActiveTab: LayerSheetTab;
+  setLayerSheetActiveTab: (tab: LayerSheetTab) => void;
 
   pendingPoiClick: PendingPoiClick | null;
   setPendingPoiClick: (click: PendingPoiClick) => void;
@@ -305,6 +312,9 @@ export const useUiStore = create<UiStore>()(
       setLayerSheetOpen: (open) => set({ layerSheetOpen: open }),
       toggleLayerSheet: () => set((s) => ({ layerSheetOpen: !s.layerSheetOpen })),
 
+      layerSheetActiveTab: "mapky",
+      setLayerSheetActiveTab: (tab) => set({ layerSheetActiveTab: tab }),
+
       pendingPoiClick: null,
       setPendingPoiClick: (click) => set({ pendingPoiClick: click }),
       clearPendingPoiClick: () => set({ pendingPoiClick: null }),
@@ -391,7 +401,9 @@ export const useUiStore = create<UiStore>()(
       //     into its own btcOverlayVisible toggle (back to a sibling
       //     overlay; the v7 collapse hit an impossible-AND trap when
       //     all three pills were on with non-overlapping data).
-      version: 8,
+      // v9: add layerSheetActiveTab so the tabbed LayerSheet re-opens
+      //     where the user left off. Default "mapky".
+      version: 9,
       migrate: (persisted: unknown, version: number) => {
         if (!persisted || typeof persisted !== "object") return persisted;
         const state = persisted as Record<string, unknown>;
@@ -406,6 +418,14 @@ export const useUiStore = create<UiStore>()(
           state.placesFilters = { activities, minRating: undefined };
           state.btcOverlayVisible = !!old.bitcoin;
         }
+        if (version < 9) {
+          // No-op for prior data — just adopt the v9 default if the
+          // persisted state somehow carries an unrecognized value.
+          const t = state.layerSheetActiveTab;
+          if (t !== "mapky" && t !== "basemap" && t !== "overlays") {
+            state.layerSheetActiveTab = "mapky";
+          }
+        }
         return state;
       },
       // Persist user-controlled toggles only. Theme/basemap lives in
@@ -419,6 +439,7 @@ export const useUiStore = create<UiStore>()(
         placesFilters: state.placesFilters,
         btcOverlayVisible: state.btcOverlayVisible,
         buildings3DVisible: state.buildings3DVisible,
+        layerSheetActiveTab: state.layerSheetActiveTab,
       }),
     },
   ),
