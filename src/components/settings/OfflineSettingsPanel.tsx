@@ -191,7 +191,7 @@ export function OfflineSettingsPanel() {
             {!persistent && (
               <button
                 onClick={handlePersistent}
-                className="rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-surface"
+                className="rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-surface/60"
               >
                 Make persistent
               </button>
@@ -229,7 +229,7 @@ export function OfflineSettingsPanel() {
                 <button
                   onClick={handleResync}
                   disabled={syncing}
-                  className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-surface disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-surface/60 disabled:opacity-50"
                 >
                   <RefreshCw
                     className={`h-3 w-3 ${syncing ? "animate-spin" : ""}`}
@@ -302,7 +302,7 @@ export function OfflineSettingsPanel() {
               </ul>
               <button
                 onClick={handleRetryOutbox}
-                className="mt-3 inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-surface"
+                className="mt-3 inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-surface/60"
               >
                 <RefreshCw className="h-3 w-3" />
                 Retry now
@@ -381,7 +381,7 @@ export function OfflineSettingsPanel() {
           )}
           <button
             onClick={() => setAddOpen(true)}
-            className="mt-3 inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-surface"
+            className="mt-3 inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-surface/60"
           >
             <Plus className="h-3 w-3" />
             Add region

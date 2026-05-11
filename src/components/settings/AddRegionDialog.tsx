@@ -247,7 +247,7 @@ export function AddRegionDialog({
         <footer className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
           <button
             onClick={onClose}
-            className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-surface"
+            className="rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface/60"
           >
             Cancel
           </button>
