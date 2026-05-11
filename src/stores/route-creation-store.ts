@@ -59,6 +59,8 @@ export interface RouteComputed {
   engine: "valhalla" | "manual" | "gpx";
   costing: string | null;
   computed_at: number;
+  /** True when this snap was replayed from the offline cache. */
+  cached?: boolean;
 }
 
 interface RouteCreationState {
@@ -407,6 +409,7 @@ export function snapToComputed(snap: RouteSnapResult): RouteComputed {
     engine: snap.engine,
     costing: snap.costing,
     computed_at: snap.computed_at,
+    cached: snap.cached,
   };
 }
 

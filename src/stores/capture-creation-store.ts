@@ -34,6 +34,30 @@ export interface DraftItem {
   capturedAt: number | null;
 }
 
+/**
+ * Targets an existing sequence for append mode. When set:
+ *   - the wizard SKIPS the per-capture caption + sequence name/description
+ *     fields (those belong to the existing sequence already)
+ *   - publishing routes through `appendToSequence` instead of
+ *     `publishSequence` / `publishGeoCapture`
+ *   - the publish toast / nav land on the parent sequence
+ */
+export interface TargetSequence {
+  authorId: string;
+  sequenceId: string;
+  /** Snapshot of the sequence's current state (used to recompute aggregates). */
+  current: {
+    kind: GeoCaptureKind;
+    name: string | null;
+    description: string | null;
+    device: string | null;
+    capturedAtStart: number;
+    capturedAtEnd: number;
+    captureCount: number;
+    bbox: { minLat: number; minLon: number; maxLat: number; maxLon: number } | null;
+  };
+}
+
 interface CaptureCreationState {
   isOpen: boolean;
   step: CaptureStep;
@@ -49,9 +73,14 @@ interface CaptureCreationState {
   sequenceName: string;
   sequenceDescription: string;
 
+  /** When non-null, the wizard appends to this sequence instead of creating one. */
+  targetSequence: TargetSequence | null;
+
   isPublishing: boolean;
 
   open: () => void;
+  /** Open in "append to existing sequence" mode. */
+  openForSequence: (target: TargetSequence) => void;
   close: () => void;
   reset: () => void;
 
@@ -90,6 +119,7 @@ const INITIAL = {
   pendingTags: [] as string[],
   sequenceName: "",
   sequenceDescription: "",
+  targetSequence: null as TargetSequence | null,
   isPublishing: false,
 };
 
@@ -137,6 +167,9 @@ export const useCaptureCreationStore = create<CaptureCreationState>((set, get) =
   ...INITIAL,
 
   open: () => set({ ...INITIAL, isOpen: true }),
+
+  openForSequence: (target) =>
+    set({ ...INITIAL, isOpen: true, targetSequence: target }),
 
   close: () => {
     revokeItems(get().items);

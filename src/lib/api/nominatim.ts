@@ -127,6 +127,12 @@ export interface NominatimSearchResult {
   category: string;
   lat: number;
   lon: number;
+  /**
+   * `[south, north, west, east]` in decimal degrees. Set when the
+   * underlying OSM element has an administrative boundary (countries,
+   * states, cities, neighbourhoods). Absent for single-node POIs.
+   */
+  boundingbox?: [number, number, number, number];
 }
 
 export async function searchPlaces(
@@ -155,6 +161,15 @@ function parseSearchResults(data: PluginNominatimRow[]): NominatimSearchResult[]
       const lat = r.lat ?? Number.NaN;
       const lon = r.lon ?? Number.NaN;
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      const bb =
+        Array.isArray(r.boundingbox) && r.boundingbox.length === 4
+          ? ([
+              r.boundingbox[0],
+              r.boundingbox[1],
+              r.boundingbox[2],
+              r.boundingbox[3],
+            ] as [number, number, number, number])
+          : undefined;
       return {
         osm_type: r.osm_type ?? "",
         osm_id: r.osm_id ?? 0,
@@ -164,6 +179,7 @@ function parseSearchResults(data: PluginNominatimRow[]): NominatimSearchResult[]
         category: r.category ?? "",
         lat,
         lon,
+        ...(bb && { boundingbox: bb }),
       } satisfies NominatimSearchResult;
     })
     .filter((r): r is NominatimSearchResult => r !== null);
@@ -377,6 +393,9 @@ interface PluginNominatimRow {
   lat: number | null;
   lon: number | null;
   extratags?: Record<string, string>;
+  /** `[south, north, west, east]` decimal degrees. Plumbed through
+   *  from Nominatim's admin-boundary results. */
+  boundingbox?: [number, number, number, number] | null;
 }
 
 interface PluginSearchParams {

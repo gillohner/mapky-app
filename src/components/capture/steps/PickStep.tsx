@@ -108,6 +108,8 @@ export function PickStep() {
   const setItems = useCaptureCreationStore((s) => s.setItems);
   const removeItem = useCaptureCreationStore((s) => s.removeItem);
   const setStep = useCaptureCreationStore((s) => s.setStep);
+  const setActiveIndex = useCaptureCreationStore((s) => s.setActiveIndex);
+  const activeIndex = useCaptureCreationStore((s) => s.activeIndex);
   const active = useActiveDraftItem();
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -179,7 +181,7 @@ export function PickStep() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 p-4">
+    <div className="flex h-full flex-col gap-4">
       {/* Drop zone / gallery */}
       {items.length === 0 ? (
         <>
@@ -287,40 +289,62 @@ export function PickStep() {
 
           {active && <DetectionChip item={active} />}
 
-          {/* Thumbnail strip (only when batch) */}
+          {/* Thumbnail strip (only when batch). Clicking a thumbnail
+              switches which item is "active" — drives the big preview
+              + DetectionChip above. The X remove sits as a sibling
+              (not nested in a button-in-button) so its click bubbles
+              don't trigger the outer thumbnail click. */}
           {isBatch && (
             <div className="flex gap-2 overflow-x-auto pb-1">
-              {items.map((it, idx) => (
-                <div
-                  key={it.id}
-                  className="group relative h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-surface"
-                >
-                  {it.file.type.startsWith("video/") ? (
-                    <video
-                      src={it.previewUrl}
-                      className="h-full w-full object-cover"
-                      muted
-                    />
-                  ) : (
-                    <img
-                      src={it.previewUrl}
-                      alt={`Item ${idx + 1}`}
-                      className="h-full w-full object-cover"
-                    />
-                  )}
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1 py-0.5 text-[10px] text-white">
-                    {idx + 1}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(it.id)}
-                    className="absolute right-0.5 top-0.5 rounded-full bg-black/70 p-0.5 text-white opacity-0 transition-opacity hover:bg-red-500 group-hover:opacity-100"
-                    aria-label="Remove"
+              {items.map((it, idx) => {
+                const isActive = idx === activeIndex;
+                return (
+                  <div
+                    key={it.id}
+                    className="group relative h-16 w-20 shrink-0"
                   >
-                    <XIcon className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
+                    <button
+                      type="button"
+                      onClick={() => setActiveIndex(idx)}
+                      aria-pressed={isActive}
+                      aria-label={`Show capture ${idx + 1}`}
+                      className={`relative h-full w-full overflow-hidden rounded-lg border bg-surface transition-all ${
+                        isActive
+                          ? "border-sky-500 ring-2 ring-sky-500/40"
+                          : "border-border hover:border-sky-500/60"
+                      }`}
+                    >
+                      {it.file.type.startsWith("video/") ? (
+                        <video
+                          src={it.previewUrl}
+                          className="h-full w-full object-cover"
+                          muted
+                        />
+                      ) : (
+                        <img
+                          src={it.previewUrl}
+                          alt={`Item ${idx + 1}`}
+                          className="h-full w-full object-cover"
+                        />
+                      )}
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1 py-0.5 text-[10px] text-white">
+                        {idx + 1}
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeItem(it.id);
+                      }}
+                      className="absolute right-0.5 top-0.5 rounded-full bg-black/70 p-0.5 text-white opacity-0 transition-opacity hover:bg-red-500 group-hover:opacity-100 focus:opacity-100"
+                      aria-label="Remove"
+                    >
+                      <XIcon className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
               <button
                 type="button"
                 onClick={() => addInputRef.current?.click()}

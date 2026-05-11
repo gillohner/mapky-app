@@ -5,6 +5,7 @@ import {
   LogIn,
   LogOut,
   Moon,
+  Settings,
   Sun,
   User,
   X,
@@ -19,7 +20,7 @@ import {
   getPubkyAvatarUrl,
   truncatePublicKey,
 } from "@/lib/api/user";
-import { MAIN_NAV, navMatch, type NavTarget } from "./nav-items";
+import { MAIN_NAV, isNavActive, type NavTarget } from "./nav-items";
 
 /**
  * Mobile-only slide-in nav drawer. Replaces the persistent `IconRail`
@@ -68,11 +69,10 @@ export function MobileNavDrawer() {
   }, [open, setMobileNavOpen]);
 
   const navTo = (to: NavTarget) => {
-    const matchPrefix = navMatch(to);
-    if (pathname.startsWith(matchPrefix)) navigate({ to: "/" });
+    if (isNavActive(pathname, to)) navigate({ to: "/" });
     else navigate({ to });
   };
-  const isActive = (to: NavTarget) => pathname.startsWith(navMatch(to));
+  const isActive = (to: NavTarget) => isNavActive(pathname, to);
 
   const handleThemeToggle = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -204,8 +204,23 @@ export function MobileNavDrawer() {
           })}
         </nav>
 
-        {/* Theme toggle */}
+        {/* Settings + theme toggle */}
         <div className="border-t border-border p-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              if (pathname.startsWith("/settings")) navigate({ to: "/" });
+              else navigate({ to: "/settings/offline" });
+            }}
+            className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors ${
+              pathname.startsWith("/settings")
+                ? "bg-accent/10 text-accent"
+                : "text-foreground hover:bg-surface"
+            }`}
+          >
+            <Settings className="h-5 w-5 text-muted" />
+            <span>Offline settings</span>
+          </button>
           <button
             type="button"
             onClick={handleThemeToggle}

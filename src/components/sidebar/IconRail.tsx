@@ -3,6 +3,7 @@ import {
   LogIn,
   LogOut,
   Moon,
+  Settings,
   Sun,
   User,
 } from "lucide-react";
@@ -16,7 +17,7 @@ import {
   truncatePublicKey,
 } from "@/lib/api/user";
 import { useUserProfile } from "@/lib/api/hooks";
-import { MAIN_NAV, navMatch, type NavTarget } from "./nav-items";
+import { MAIN_NAV, isNavActive, type NavTarget } from "./nav-items";
 
 function RailButton({
   onClick,
@@ -65,11 +66,10 @@ export function IconRail() {
   // tabbed apps. Sub-paths count as active too so /place/$id stays
   // bound to the Places nav, etc.
   const navTo = (to: NavTarget) => {
-    const matchPrefix = navMatch(to);
-    if (pathname.startsWith(matchPrefix)) navigate({ to: "/" });
+    if (isNavActive(pathname, to)) navigate({ to: "/" });
     else navigate({ to });
   };
-  const isActive = (to: NavTarget) => pathname.startsWith(navMatch(to));
+  const isActive = (to: NavTarget) => isNavActive(pathname, to);
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -182,6 +182,17 @@ export function IconRail() {
         ) : (
           <Moon className="h-5 w-5" />
         )}
+      </RailButton>
+
+      <RailButton
+        onClick={() => {
+          if (pathname.startsWith("/settings")) navigate({ to: "/" });
+          else navigate({ to: "/settings/offline" });
+        }}
+        title="Offline settings"
+        active={pathname.startsWith("/settings")}
+      >
+        <Settings className="h-5 w-5" />
       </RailButton>
 
       <div className="my-1 w-6 border-t border-border" />

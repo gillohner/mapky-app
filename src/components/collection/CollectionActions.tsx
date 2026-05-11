@@ -1,32 +1,16 @@
 import { useState, useRef } from "react";
-import {
-  TagIcon,
-  Pencil,
-  Plus,
-  Share2,
-  Trash2,
-  X,
-  Send,
-  Check,
-  Loader2,
-} from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { Plus, X, Check, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/AuthProvider";
-import {
-  createCollectionTag,
-  updateCollectionJson,
-  makeOsmUrl,
-} from "@/lib/mapky-specs";
+import { updateCollectionJson, makeOsmUrl } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import {
   pendingEntityFieldPatch,
   pendingSingleFieldPatch,
-  registerPending,
 } from "@/lib/api/optimistic-overlay";
 import { searchPlaces } from "@/lib/api/nominatim";
 import { toast } from "sonner";
-import type { CollectionDetails, PostTagDetails } from "@/types/mapky";
+import type { CollectionDetails } from "@/types/mapky";
 
 const sameItems = (a: string[], b: string[]) =>
   a.length === b.length && a.every((v, i) => v === b[i]);
@@ -35,20 +19,30 @@ interface CollectionActionsProps {
   authorId: string;
   collectionId: string;
   collection?: CollectionDetails;
+  /**
+   * `editMode` and `confirmDelete` are owned by the parent panel so it
+   * can wire them to header icon buttons. The Add-Place flow lives in
+   * `<CollectionAddPlace />` and is rendered below the places list, not
+   * here — keeps "edit / confirm delete" anchored visually to the title.
+   */
+  editMode: boolean;
+  confirmDelete: boolean;
+  onCloseEdit: () => void;
+  onCloseConfirmDelete: () => void;
+  onConfirmDelete: () => void;
 }
-
-type Mode = null | "tag" | "edit" | "add-place" | "confirm-delete";
 
 export function CollectionActions({
   authorId,
   collectionId,
   collection,
+  editMode,
+  confirmDelete,
+  onCloseEdit,
+  onCloseConfirmDelete,
+  onConfirmDelete,
 }: CollectionActionsProps) {
-  const { isAuthenticated, session, publicKey } = useAuth();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const [mode, setMode] = useState<Mode>(null);
-  const isOwner = publicKey === authorId;
 
   const invalidate = () => {
     queryClient.invalidateQueries({
@@ -59,91 +53,37 @@ export function CollectionActions({
     });
   };
 
-  const handleShare = () => {
-    const url = `${window.location.origin}/collection/${authorId}/${collectionId}`;
-    navigator.clipboard.writeText(url);
-    toast.success("Link copied");
-  };
-
-  const handleDelete = async () => {
-    if (!session || !collection) return;
-    try {
-      const path = `/pub/mapky.app/collections/${collectionId}`;
-      await session.storage.delete(path as `/pub/${string}`);
-
-      // Cancel in-flight fetches so they don't overwrite optimistic data
-      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", authorId] });
-      await queryClient.cancelQueries({ queryKey: ["mapky", "collection", authorId, collectionId] });
-
-      // Optimistic cache update — remove from user's collection list and clear detail cache
-      queryClient.setQueryData<CollectionDetails[]>(
-        ["mapky", "collections", "user", authorId],
-        (old) => old?.filter((c) => { const [, id] = c.id.split(":"); return id !== collectionId; }),
-      );
-      queryClient.removeQueries({ queryKey: ["mapky", "collection", authorId, collectionId] });
-
-      toast.success("Collection deleted");
-      navigate({ to: "/collections" });
-
-      // Background reconciliation — delay to let server finish indexing
-      ingestUserIntoNexus(publicKey!).then(() => setTimeout(() => {
-        invalidate();
-      }, 5000));
-    } catch {
-      toast.error("Failed to delete");
-    }
-  };
-
-  if (mode === "tag") {
-    return (
-      <TagInline
-        authorId={authorId}
-        collectionId={collectionId}
-        onClose={() => setMode(null)}
-      />
-    );
-  }
-
-  if (mode === "edit" && collection) {
+  if (editMode && collection) {
     return (
       <EditInline
         authorId={authorId}
         collectionId={collectionId}
         collection={collection}
-        onClose={() => setMode(null)}
+        onClose={onCloseEdit}
         onSaved={invalidate}
       />
     );
   }
 
-  if (mode === "add-place" && collection) {
-    return (
-      <AddPlaceInline
-        authorId={authorId}
-        collectionId={collectionId}
-        collection={collection}
-        onClose={() => setMode(null)}
-        onSaved={invalidate}
-      />
-    );
-  }
-
-  if (mode === "confirm-delete") {
+  if (confirmDelete) {
     return (
       <div className="space-y-3 rounded-lg border border-red-500/30 bg-surface p-3">
         <p className="text-sm text-foreground">
-          Delete <span className="font-medium">{collection?.name}</span>? This cannot be undone.
+          Delete <span className="font-medium">{collection?.name}</span>? This
+          cannot be undone.
         </p>
         <div className="flex justify-end gap-2">
           <button
-            onClick={() => setMode(null)}
-            className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:bg-background"
+            type="button"
+            onClick={onCloseConfirmDelete}
+            className="rounded-md border border-border px-3 py-1 text-xs text-muted hover:bg-background"
           >
             Cancel
           </button>
           <button
-            onClick={handleDelete}
-            className="rounded-lg bg-red-500 px-3 py-1.5 text-sm text-white hover:bg-red-600"
+            type="button"
+            onClick={onConfirmDelete}
+            className="rounded-md bg-red-500 px-3 py-1 text-xs font-medium text-white hover:bg-red-600"
           >
             Delete
           </button>
@@ -152,184 +92,60 @@ export function CollectionActions({
     );
   }
 
-  return (
-    <div className="flex flex-wrap gap-2">
-      <ActionButton
-        icon={<TagIcon className="h-4 w-4" />}
-        label="Tag"
-        disabled={!isAuthenticated}
-        onClick={() => setMode("tag")}
-      />
-      {isOwner && (
-        <>
-          <ActionButton
-            icon={<Plus className="h-4 w-4" />}
-            label="Add Place"
-            onClick={() => setMode("add-place")}
-          />
-          <ActionButton
-            icon={<Pencil className="h-4 w-4" />}
-            label="Edit"
-            onClick={() => setMode("edit")}
-          />
-        </>
-      )}
-      <ActionButton
-        icon={<Share2 className="h-4 w-4" />}
-        label="Share"
-        onClick={handleShare}
-      />
-      {isOwner && (
-        <ActionButton
-          icon={<Trash2 className="h-4 w-4" />}
-          label="Delete"
-          onClick={() => setMode("confirm-delete")}
-          className="text-red-500 hover:border-red-500"
-        />
-      )}
-    </div>
-  );
+  return null;
 }
 
-function ActionButton({
-  icon,
-  label,
-  disabled,
-  onClick,
-  className = "",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  disabled?: boolean;
-  onClick?: () => void;
-  className?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-background disabled:text-muted disabled:opacity-50 ${className}`}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function TagInline({
+/**
+ * Add-Place trigger + inline search form. Rendered below the Places
+ * list so the workflow flows naturally: scroll past existing places,
+ * see the prompt to add another. Owner-only.
+ */
+export function CollectionAddPlace({
   authorId,
   collectionId,
-  onClose,
+  collection,
 }: {
   authorId: string;
   collectionId: string;
-  onClose: () => void;
+  collection?: CollectionDetails;
 }) {
-  const { session, publicKey } = useAuth();
+  const { publicKey } = useAuth();
   const queryClient = useQueryClient();
-  const [label, setLabel] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [open, setOpen] = useState(false);
+  const isOwner = publicKey === authorId;
 
-  const normalized = label.trim().toLowerCase().replace(/\s+/g, "-");
+  if (!isOwner || !collection) return null;
 
-  const handleSubmit = async () => {
-    if (!session || !publicKey || !normalized) return;
-    setSubmitting(true);
-    try {
-      const result = createCollectionTag(
-        publicKey,
-        authorId,
-        collectionId,
-        normalized,
-      );
-      await session.storage.putText(
-        result.path as `/pub/${string}`,
-        result.json,
-      );
-
-      // Cancel in-flight fetches so they don't overwrite optimistic data
-      await queryClient.cancelQueries({ queryKey: ["mapky", "collection", authorId, collectionId, "tags"] });
-
-      // Optimistic cache update + matching overlay so the tag survives
-      // a stale refetch from a faster sibling write.
-      const applyAdd = (
-        old: PostTagDetails[] | undefined,
-      ): PostTagDetails[] => {
-        const entry = { label: normalized, taggers: [publicKey], taggers_count: 1 };
-        if (!old) return [entry];
-        const existing = old.find((t) => t.label === normalized);
-        if (existing) {
-          if (existing.taggers.includes(publicKey)) return old;
-          return old.map((t) =>
-            t.label === normalized
-              ? { ...t, taggers: [...t.taggers, publicKey], taggers_count: t.taggers_count + 1 }
-              : t,
-          );
-        }
-        return [...old, entry];
-      };
-      const tagsKey = [
-        "mapky",
-        "collection",
-        authorId,
-        collectionId,
-        "tags",
-      ] as const;
-      queryClient.setQueryData<PostTagDetails[]>(tagsKey, applyAdd);
-      registerPending<PostTagDetails[] | undefined>(tagsKey, {
-        id: `tag:${publicKey}:${normalized}`,
-        apply: applyAdd,
-        isConfirmed: (old) =>
-          !!old?.find((t) => t.label === normalized)?.taggers.includes(publicKey),
-      });
-
-      toast.success(`Tagged with "${normalized}"`);
-      onClose();
-
-      // Background reconciliation — delay to let server finish indexing
-      ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["mapky", "collection", authorId, collectionId, "tags"] });
-        queryClient.invalidateQueries({ queryKey: ["mapky", "collection", authorId, collectionId] });
-      }, 5000));
-    } catch {
-      toast.error("Failed to tag");
-    } finally {
-      setSubmitting(false);
-    }
+  const invalidate = () => {
+    queryClient.invalidateQueries({
+      queryKey: ["mapky", "collection", authorId, collectionId],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ["mapky", "collections", "user", authorId],
+    });
   };
 
+  if (open) {
+    return (
+      <AddPlaceInline
+        authorId={authorId}
+        collectionId={collectionId}
+        collection={collection}
+        onClose={() => setOpen(false)}
+        onSaved={invalidate}
+      />
+    );
+  }
+
   return (
-    <div className="space-y-2 rounded-lg border border-border bg-surface p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-foreground">
-          Tag this collection
-        </span>
-        <button
-          onClick={onClose}
-          className="rounded p-1 text-muted hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-          placeholder="e.g. restaurants, favorites"
-          maxLength={20}
-          className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-        />
-        <button
-          onClick={handleSubmit}
-          disabled={!normalized || submitting}
-          className="rounded-lg bg-accent px-3 py-2 text-white disabled:opacity-50"
-        >
-          <Send className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className="flex w-full items-center justify-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-accent"
+    >
+      <Plus className="h-3.5 w-3.5" />
+      Add Place
+    </button>
   );
 }
 
@@ -368,11 +184,9 @@ function EditInline({
       const path = `/pub/mapky.app/collections/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
 
-      // Cancel in-flight fetches so they don't overwrite optimistic data
       await queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, collectionId] });
       await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
 
-      // Optimistic cache update
       queryClient.setQueryData<CollectionDetails>(
         ["mapky", "collection", publicKey, collectionId],
         (old) => old ? { ...old, name: name.trim(), description: description.trim() || null, color } : old,
@@ -388,7 +202,6 @@ function EditInline({
       toast.success("Collection updated");
       onClose();
 
-      // Background reconciliation — delay to let server finish indexing
       ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
         onSaved();
       }, 5000));
@@ -401,32 +214,22 @@ function EditInline({
 
   return (
     <div className="space-y-2 rounded-lg border border-border bg-surface p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-foreground">
-          Edit collection
-        </span>
-        <button
-          onClick={onClose}
-          className="rounded p-1 text-muted hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
       <input
         type="text"
         value={name}
         onChange={(e) => setName(e.target.value)}
         maxLength={100}
-        placeholder="Name"
-        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
+        placeholder="Collection name"
+        autoFocus
+        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
       />
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        maxLength={300}
+        maxLength={1000}
         placeholder="Description (optional)"
-        rows={2}
-        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none resize-none"
+        rows={3}
+        className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
       />
       <div className="flex items-center gap-2">
         <label className="text-xs text-muted">Map color</label>
@@ -440,20 +243,23 @@ function EditInline({
       </div>
       <div className="flex justify-end gap-2">
         <button
+          type="button"
           onClick={onClose}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:bg-background"
+          disabled={submitting}
+          className="rounded-md border border-border px-3 py-1 text-xs text-muted hover:bg-background disabled:opacity-50"
         >
           Cancel
         </button>
         <button
+          type="button"
           onClick={handleSave}
           disabled={!name.trim() || submitting}
-          className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          className="flex items-center gap-1 rounded-md bg-accent px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
         >
           {submitting ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="h-3 w-3 animate-spin" />
           ) : (
-            <Check className="h-3.5 w-3.5" />
+            <Check className="h-3 w-3" />
           )}
           Save
         </button>
@@ -531,11 +337,9 @@ function AddPlaceInline({
       const path = `/pub/mapky.app/collections/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
 
-      // Cancel in-flight fetches so they don't overwrite optimistic data
       await queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, collectionId] });
       await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
 
-      // Optimistic cache update
       queryClient.setQueryData<CollectionDetails>(
         ["mapky", "collection", publicKey, collectionId],
         (old) => (old ? { ...old, items: newItems } : old),
@@ -548,8 +352,6 @@ function AddPlaceInline({
         }),
       );
 
-      // Overlay so a fast second add doesn't lose the first when the
-      // delayed refetch races nexus indexing (issue #7).
       const patchOpId = `coll-items:${collectionId}`;
       pendingSingleFieldPatch<CollectionDetails, string[]>({
         queryKey: ["mapky", "collection", publicKey, collectionId],
@@ -571,7 +373,6 @@ function AddPlaceInline({
       toast.success("Place added");
       onClose();
 
-      // Background reconciliation — delay to let server finish indexing
       ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
         onSaved();
       }, 5000));

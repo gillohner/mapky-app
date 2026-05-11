@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
+import { registerServiceWorker } from "@/lib/pwa/register-sw";
 import "@/styles/app.css";
 
 const router = createRouter({ routeTree });
@@ -37,3 +38,5 @@ if (
 createRoot(document.getElementById("root")!).render(
   <RouterProvider router={router} />,
 );
+
+registerServiceWorker();

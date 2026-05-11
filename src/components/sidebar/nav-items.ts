@@ -1,6 +1,5 @@
 import {
   Camera,
-  Film,
   FolderHeart,
   MapPin,
   MessageSquare,
@@ -19,7 +18,6 @@ export type NavTarget =
   | "/collections"
   | "/routes"
   | "/captures"
-  | "/sequences"
   | "/my-posts";
 
 export interface NavItem {
@@ -34,28 +32,42 @@ export const MAIN_NAV: NavItem[] = [
   { to: "/places", label: "Places", icon: MapPin },
   { to: "/collections", label: "Collections", icon: FolderHeart },
   { to: "/routes", label: "Routes", icon: RouteIcon },
+  // "Captures" feeds both single captures and sequences — see
+  // CaptureList. There's no separate "Sequences" nav.
   { to: "/captures", label: "Captures", icon: Camera },
-  { to: "/sequences", label: "Sequences", icon: Film },
   { to: "/my-posts", label: "My Posts", icon: MessageSquare, requiresAuth: true },
 ];
 
 /**
- * Map a nav target to the URL prefix that counts as "active" for it.
- * Detail pages (e.g. `/place/$id`) belong to their list nav (`/places`).
+ * Map a nav target to the URL prefix(es) that count as "active" for
+ * it. Detail pages (e.g. `/place/$id`) belong to their list nav
+ * (`/places`). Most nav entries have a single prefix; `/captures`
+ * has two ("/capture..." and "/sequence...") because the unified
+ * Captures sidebar surfaces both kinds of content.
  */
-export function navMatch(to: NavTarget): string {
+export function navMatchPrefixes(to: NavTarget): readonly string[] {
   switch (to) {
     case "/places":
-      return "/place"; // matches /places, /place/...
+      return ["/place"]; // matches /places, /place/...
     case "/collections":
-      return "/collection"; // matches /collections, /collection/...
+      return ["/collection"]; // matches /collections, /collection/...
     case "/routes":
-      return "/route"; // matches /routes, /route/...
+      return ["/route"]; // matches /routes, /route/...
     case "/captures":
-      return "/capture"; // matches /captures, /capture/...
-    case "/sequences":
-      return "/sequence"; // matches /sequences, /sequence/...
+      return ["/capture", "/sequence"]; // matches /captures, /capture/..., /sequence/...
     case "/my-posts":
-      return "/my-posts";
+      return ["/my-posts"];
   }
+}
+
+/** Convenience for callers that just want to know if a pathname is
+ *  active for a given nav target. */
+export function isNavActive(pathname: string, to: NavTarget): boolean {
+  return navMatchPrefixes(to).some((p) => pathname.startsWith(p));
+}
+
+/** First prefix — used by callers that need a navigation target
+ *  rather than a match check. */
+export function navMatch(to: NavTarget): string {
+  return navMatchPrefixes(to)[0];
 }

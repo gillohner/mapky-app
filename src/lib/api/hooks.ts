@@ -593,6 +593,10 @@ export function useGeoCaptureDetail(authorId: string, captureId: string) {
     queryFn: () => fetchGeoCaptureDetail(authorId, captureId),
     enabled: !!authorId && !!captureId,
     retry: noRetryOn404,
+    // 30s stale window so the optimistic seed published from the
+    // capture wizard isn't revalidated against an unindexed nexus
+    // before the user even sees the panel.
+    staleTime: 30_000,
   });
 }
 

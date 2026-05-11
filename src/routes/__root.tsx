@@ -19,6 +19,9 @@ import { SearchBar } from "@/components/sidebar/SearchBar";
 import { CaptureCreationPanel } from "@/components/capture/CaptureCreationPanel";
 import { MainMapCaptureOverlay } from "@/components/capture/MainMapCaptureOverlay";
 import { DirectionsLayer } from "@/components/route/DirectionsLayer";
+import { OfflineBadge } from "@/components/pwa/OfflineBadge";
+import { OwnDataSync } from "@/components/offline/OwnDataSync";
+import { OfflineBoot } from "@/components/offline/OfflineBoot";
 import { Toaster } from "sonner";
 import { useUrlSync } from "@/hooks/use-url-sync";
 
@@ -31,6 +34,8 @@ function RootLayout() {
   return (
     <QueryProvider>
       <AuthProvider>
+        <OwnDataSync />
+        <OfflineBoot />
         <div className="relative h-dvh w-screen overflow-hidden">
           <MapView />
           <PlaceAnnotationsLayer />
@@ -47,10 +52,16 @@ function RootLayout() {
           <MobileNavDrawer />
           <SearchBar />
           <DirectionsLayer />
-          <CaptureCreationPanel />
           <Outlet />
+          {/* CaptureCreationPanel renders AFTER <Outlet /> so when the
+              user is on /captures and clicks "New capture", the wizard
+              paints OVER the captures sidebar (both share the same
+              left-anchored DiscoverSidebar slot at z-10; later in DOM
+              wins). Closing the wizard reveals whatever was beneath. */}
+          <CaptureCreationPanel />
           <LayerSheet />
           <MapLegends />
+          <OfflineBadge />
         </div>
         <Toaster position="bottom-center" />
       </AuthProvider>

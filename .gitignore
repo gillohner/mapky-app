@@ -4,6 +4,9 @@ node_modules/
 # Build
 dist/
 dist-ssr/
+# TanStack Router plugin's transient cache — only the generated
+# routeTree.gen.ts (under src/) is tracked.
+.tanstack/
 
 # E2E artifacts — screenshots, results.json, exported GPX are generated
 # every run. The driver scripts (e2e/*.mjs, e2e/README.md) stay tracked.

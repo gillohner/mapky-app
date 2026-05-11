@@ -35,6 +35,13 @@ export interface RouteSnapResult {
   engine: "valhalla";
   costing: Costing;
   computed_at: number;
+  /**
+   * True when this snap was served from the local offline cache (a
+   * prior network response). The engine identifier stays "valhalla"
+   * because the data lineage is the same — `cached` only describes
+   * how *this* result was retrieved.
+   */
+  cached?: boolean;
 }
 
 export interface ManeuverStep {

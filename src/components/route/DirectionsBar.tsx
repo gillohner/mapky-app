@@ -98,6 +98,7 @@ export function DirectionsBar() {
   const setComputing = useRouteCreationStore((s) => s.setComputing);
   const setComputeError = useRouteCreationStore((s) => s.setComputeError);
   const isComputing = useRouteCreationStore((s) => s.isComputing);
+  const isCached = useRouteCreationStore((s) => s.computed?.cached === true);
   const preferences = useRouteCreationStore((s) => s.preferences);
   const setPreferences = useRouteCreationStore((s) => s.setPreferences);
 
@@ -314,6 +315,14 @@ export function DirectionsBar() {
 
         {isComputing && (
           <span className="text-[10px] text-muted">snapping…</span>
+        )}
+        {!isComputing && isCached && (
+          <span
+            className="text-[10px] text-amber-600 dark:text-amber-400"
+            title="This route was replayed from your offline cache."
+          >
+            cached
+          </span>
         )}
 
         <div className="relative">

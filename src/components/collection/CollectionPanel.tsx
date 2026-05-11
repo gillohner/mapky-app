@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CollectionOverlayEntry } from "@/stores/ui-store";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,9 +7,11 @@ import { useUiStore } from "@/stores/ui-store";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { useBackOr } from "@/hooks/use-back-or";
+import { useShareLink } from "@/lib/hooks/use-share-link";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
+import { PanelHeaderActions } from "@/components/shared/PanelHeaderActions";
 import { CollectionHeader } from "./CollectionHeader";
-import { CollectionActions } from "./CollectionActions";
+import { CollectionActions, CollectionAddPlace } from "./CollectionActions";
 import { CollectionTags } from "./CollectionTags";
 import { CollectionPlaces } from "./CollectionPlaces";
 import { updateCollectionJson } from "@/lib/mapky-specs";
@@ -42,11 +44,40 @@ export function CollectionPanel({
   const { data: collection, isLoading } = useCollection(authorId, collectionId);
   const addOverlay = useUiStore((s) => s.addCollectionOverlay);
   const isOwner = publicKey === authorId;
+  const [editMode, setEditMode] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const share = useShareLink({ kind: "collection", authorId, resourceId: collectionId });
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["mapky", "collection", authorId, collectionId] });
     queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "user", authorId] });
   }, [queryClient, authorId, collectionId]);
+
+  const handleDelete = useCallback(async () => {
+    if (!session || !collection) return;
+    try {
+      const path = `/pub/mapky.app/collections/${collectionId}`;
+      await session.storage.delete(path as `/pub/${string}`);
+
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", authorId] });
+      await queryClient.cancelQueries({ queryKey: ["mapky", "collection", authorId, collectionId] });
+
+      queryClient.setQueryData<CollectionDetails[]>(
+        ["mapky", "collections", "user", authorId],
+        (old) => old?.filter((c) => { const [, id] = c.id.split(":"); return id !== collectionId; }),
+      );
+      queryClient.removeQueries({ queryKey: ["mapky", "collection", authorId, collectionId] });
+
+      toast.success("Collection deleted");
+      navigate({ to: "/collections" });
+
+      ingestUserIntoNexus(publicKey!).then(() => setTimeout(() => {
+        invalidate();
+      }, 5000));
+    } catch {
+      toast.error("Failed to delete");
+    }
+  }, [session, collection, collectionId, authorId, publicKey, queryClient, invalidate, navigate]);
 
   const handleRemovePlace = useCallback(async (url: string) => {
     if (!session || !publicKey || !collection) return;
@@ -80,8 +111,6 @@ export function CollectionPanel({
           return id === collectionId ? { ...c, items: newItems } : c;
         }),
       );
-      // Drop this collection from the per-place "in collection" list so
-      // the bookmark indicator on the place panel updates immediately.
       if (removed) {
         queryClient.setQueryData<CollectionDetails[]>(
           ["mapky", "collections", "place", removed.osmType, removed.osmId],
@@ -105,15 +134,8 @@ export function CollectionPanel({
     }
   }, [session, publicKey, collection, collectionId, queryClient, invalidate]);
 
-  // Dim the always-on Mapky data layers so this collection's overlay
-  // owns the visual focus.
-  // Hide places + captures entirely — this collection's overlay owns
-  // the map, same rule the collections list uses.
   useAutoFocusLayer("collections", { hide: true });
 
-  // On mount: save the user's pinned overlays, swap to ONLY this
-  // collection's overlay so the focused detail isn't visually competing
-  // with everything else they had pinned. Restore on unmount.
   const savedOverlays = useRef<Map<string, CollectionOverlayEntry> | null>(null);
   useEffect(() => {
     const store = useUiStore.getState();
@@ -133,21 +155,14 @@ export function CollectionPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authorId, collectionId]);
 
-  // Keep overlay forced on if color updates from API.
   useEffect(() => {
     if (collection?.color) {
       addOverlay(authorId, collectionId, collection.color);
     }
   }, [collection?.color, authorId, collectionId, addOverlay]);
 
-  // Top-right X always closes the entire sidebar back to the map.
   const close = () => navigate({ to: "/" });
 
-  // Top-left back arrow steps back through history. If the user came
-  // from a place panel, search results, or the collections list, that
-  // surface is one history pop away with its tab + scroll preserved.
-  // The fallback covers deep links: pick the best parent based on the
-  // back-context query params we received.
   const fallback = () => {
     if (fromPlaceType && fromPlaceId) {
       navigate({
@@ -173,12 +188,21 @@ export function CollectionPanel({
       ? "Search results"
       : "Collections";
 
+  const headerActions = (
+    <PanelHeaderActions
+      share={{ onClick: share }}
+      edit={isOwner ? { onClick: () => setEditMode(true) } : undefined}
+      remove={isOwner ? { onClick: () => setConfirmDelete(true) } : undefined}
+    />
+  );
+
   return (
     <DiscoverSidebar
-      title="Collection"
+      title={collection?.name?.trim() || "Collection"}
       onClose={close}
       onBack={back}
       backLabel={backLabel}
+      rightHeaderSlot={headerActions}
       mobileCollapsible
     >
       {isLoading ? (
@@ -186,22 +210,40 @@ export function CollectionPanel({
       ) : (
         <div className="space-y-4">
           <CollectionHeader collection={collection ?? undefined} authorId={authorId} />
-          <div className="border-t border-border pt-4">
+          {(editMode || confirmDelete) && (
             <CollectionActions
               authorId={authorId}
               collectionId={collectionId}
               collection={collection ?? undefined}
+              editMode={editMode}
+              confirmDelete={confirmDelete}
+              onCloseEdit={() => setEditMode(false)}
+              onCloseConfirmDelete={() => setConfirmDelete(false)}
+              onConfirmDelete={() => {
+                setConfirmDelete(false);
+                handleDelete();
+              }}
             />
-          </div>
+          )}
+          {!editMode && collection?.description && (
+            <p className="whitespace-pre-wrap text-sm text-foreground">
+              {collection.description}
+            </p>
+          )}
           <CollectionTags authorId={authorId} collectionId={collectionId} />
-          <div className="border-t border-border pt-4">
-            <h3 className="mb-2 text-sm font-medium text-foreground">Places</h3>
+          <div className="space-y-2 border-t border-border pt-4">
+            <h3 className="text-sm font-medium text-foreground">Places</h3>
             <CollectionPlaces
               items={collection?.items ?? []}
               authorId={authorId}
               collectionId={collectionId}
               isOwner={isOwner}
               onRemove={handleRemovePlace}
+            />
+            <CollectionAddPlace
+              authorId={authorId}
+              collectionId={collectionId}
+              collection={collection ?? undefined}
             />
           </div>
           <ResourceDiscussion

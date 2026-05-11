@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import wasm from "vite-plugin-wasm";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
+import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
 
 export default defineConfig({
@@ -11,6 +12,131 @@ export default defineConfig({
     react(),
     tailwindcss(),
     wasm(),
+    VitePWA({
+      registerType: "autoUpdate",
+      injectRegister: false,
+      // Keep our hand-authored public/manifest.json as the source of
+      // truth — the plugin would otherwise emit its own
+      // manifest.webmanifest and we'd have to keep them in sync.
+      manifest: false,
+      includeAssets: ["favicon.svg", "icons.svg", "manifest.json"],
+      workbox: {
+        // Vendor chunks (pubky SDK, maplibre) are large — raise the
+        // per-file cap so they land in the precache instead of being
+        // skipped (Workbox default is 2 MB).
+        maximumFileSizeToCacheInBytes: 20 * 1024 * 1024,
+        globPatterns: ["**/*.{js,css,html,svg,woff,woff2,ttf,png,webp}"],
+        // TanStack Router rewrites all paths to index.html — without
+        // a navigateFallback the SW would 404 on deep links offline.
+        navigateFallback: "/index.html",
+        navigateFallbackDenylist: [
+          /^\/v0\//,
+          /^\/static\//,
+          /^\/nominatim\//,
+          /^\/valhalla\//,
+        ],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
+        runtimeCaching: [
+          // Protomaps hosted tiles — `/tiles/v4/{z}/{x}/{y}.mvt`
+          // (the actual URL the TileJSON declares). One cache entry
+          // per tile, so a country pre-warm doesn't thrash itself.
+          // The offline `mapky-tile` protocol writes its own copy
+          // into IDB; this SW cache is the secondary buffer for
+          // ad-hoc panning past pre-warmed regions.
+          {
+            urlPattern: ({ url }) =>
+              url.hostname === "api.protomaps.com" &&
+              /\/tiles\/v\d+\/\d+\/\d+\/\d+(\.[a-z]+)?$/.test(url.pathname),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "protomaps-tiles",
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: {
+                maxEntries: 100_000,
+                maxAgeSeconds: 60 * 60 * 24 * 90,
+              },
+            },
+          },
+          {
+            urlPattern: ({ url }) =>
+              url.hostname === "api.protomaps.com" &&
+              url.pathname.endsWith(".json"),
+            handler: "StaleWhileRevalidate",
+            options: { cacheName: "protomaps-meta" },
+          },
+          {
+            urlPattern: ({ url }) =>
+              url.hostname === "protomaps.github.io",
+            handler: "CacheFirst",
+            options: {
+              cacheName: "map-assets",
+              expiration: {
+                maxEntries: 500,
+                maxAgeSeconds: 60 * 60 * 24 * 365,
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          // Raster overlays (Esri imagery, CyclOSM, OpenRailwayMap,
+          // Terrarium DEM). All are {z}/{x}/{y} PNGs; cap entries to
+          // keep storage bounded.
+          {
+            urlPattern: ({ url }) =>
+              url.hostname === "server.arcgisonline.com" ||
+              url.hostname.endsWith(".tiles.openrailwaymap.org") ||
+              url.hostname.endsWith(".tile-cyclosm.openstreetmap.fr") ||
+              (url.hostname === "s3.amazonaws.com" &&
+                url.pathname.startsWith("/elevation-tiles-prod/")),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "raster-tiles",
+              expiration: {
+                maxEntries: 2000,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          // Nexus API. Network-first so fresh data wins when online;
+          // falls back to cache when offline or slow. Matches both
+          // same-origin (dev proxy) and cross-origin (prod nexus URL).
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith("/v0/"),
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "nexus-api",
+              networkTimeoutSeconds: 4,
+              expiration: {
+                maxEntries: 1000,
+                maxAgeSeconds: 60 * 60 * 24 * 7,
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          // Pubky gateway media (`/static/files`, `/static/avatar`).
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith("/static/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "pubky-media",
+              expiration: {
+                maxEntries: 1000,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
+      devOptions: {
+        // Default off — the SW would interfere with HMR and shadow
+        // the Vite proxy. Flip locally when smoke-testing offline.
+        enabled: false,
+        type: "module",
+      },
+    }),
   ],
   resolve: {
     alias: {

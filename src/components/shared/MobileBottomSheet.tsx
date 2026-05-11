@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export type SheetSnap = "collapsed" | "middle" | "expanded";
 
@@ -57,6 +57,12 @@ export function MobileBottomSheet({
   const [dragOffsetPx, setDragOffsetPx] = useState(0);
   const [dragging, setDragging] = useState(false);
   const dragStartRef = useRef<number | null>(null);
+  // Measured height of the always-visible chrome (drag handle + header).
+  // Subtracted from the sheet's on-screen portion to size the scrollable
+  // body so its scrollbar engages whenever content overflows whatever's
+  // currently visible — collapsed, middle, or expanded.
+  const chromeRef = useRef<HTMLDivElement>(null);
+  const [chromePx, setChromePx] = useState(0);
 
   const getVh = () =>
     typeof window === "undefined" ? 800 : window.innerHeight;
@@ -70,6 +76,25 @@ export function MobileBottomSheet({
     0,
     Math.min(sheetPx() - 60, baseTranslate + dragOffsetPx),
   );
+
+  // The scrollable body's max-height tracks what's actually on screen.
+  // While dragging, follow the drag offset so the scroll area grows or
+  // shrinks live with the user's finger; at rest it falls back to the
+  // current snap. The chrome (handle + header) sits at the top of the
+  // sheet so we subtract its measured height to leave room for it.
+  const visibleSheetPx = sheetPx() - translateY;
+  const bodyMaxPx = Math.max(0, visibleSheetPx - chromePx);
+
+  useLayoutEffect(() => {
+    if (!chromeRef.current) return;
+    const measure = () => {
+      if (chromeRef.current) setChromePx(chromeRef.current.offsetHeight);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(chromeRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   const startDrag = (clientY: number) => {
     dragStartRef.current = clientY;
@@ -166,28 +191,40 @@ export function MobileBottomSheet({
         transition: dragging ? "none" : "transform 250ms ease-out",
       }}
     >
-      {/* Drag handle — full-width hit target so it's easy to grab on
-          touch devices. `touch-action: none` stops the page from
-          stealing the gesture as a scroll. */}
+      <div ref={chromeRef} className="flex-shrink-0">
+        {/* Drag handle — full-width hit target so it's easy to grab on
+            touch devices. `touch-action: none` stops the page from
+            stealing the gesture as a scroll. */}
+        <div
+          className="flex cursor-grab touch-none select-none justify-center py-2 active:cursor-grabbing"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            startDrag(e.clientY);
+          }}
+          onTouchStart={(e) => {
+            if (e.touches[0]) startDrag(e.touches[0].clientY);
+          }}
+        >
+          <div className="h-1 w-10 rounded-full bg-border" />
+        </div>
+        {header}
+      </div>
+      {/* Body height tracks the on-screen portion of the sheet so
+          overflow-y-auto engages whenever content runs past what's
+          actually visible — at the collapsed snap that's just below
+          the title row; at expanded it's the full sheet. Avoids the
+          old behaviour where a 90vh-tall flex body never scrolled
+          because typical content fit inside it even when most of it
+          was off-screen. */}
       <div
-        className="flex flex-shrink-0 cursor-grab touch-none select-none justify-center py-2 active:cursor-grabbing"
-        onMouseDown={(e) => {
-          e.preventDefault();
-          startDrag(e.clientY);
-        }}
-        onTouchStart={(e) => {
-          if (e.touches[0]) startDrag(e.touches[0].clientY);
+        className="min-h-0 overflow-y-auto"
+        style={{
+          maxHeight: `${bodyMaxPx}px`,
+          transition: dragging ? "none" : "max-height 250ms ease-out",
         }}
       >
-        <div className="h-1 w-10 rounded-full bg-border" />
+        {children}
       </div>
-      <div className="flex-shrink-0">{header}</div>
-      {/* Body always renders. The sheet's translateY-controlled height
-          clips it naturally — at the collapsed snap the user sees the
-          first slice of the body (e.g. the place name + type for a
-          detail panel), and the same content grows in place as they
-          drag up. No duplication into a separate "peek" slot. */}
-      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
     </div>
   );
 }
