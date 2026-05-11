@@ -8,6 +8,8 @@ import {
   Clock,
   AlertTriangle,
   Layers,
+  Plus,
+  MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
@@ -34,7 +36,13 @@ import {
 } from "@/lib/offline/outbox";
 import { syncOwnResources } from "@/lib/offline/sync-own";
 import { drainOutbox } from "@/lib/offline/outbox-drain";
-import type { OutboxEntry, OwnResourceType } from "@/lib/offline/db";
+import { listRegions, deleteRegion } from "@/lib/offline/regions";
+import type {
+  OutboxEntry,
+  OwnResourceType,
+  Region,
+} from "@/lib/offline/db";
+import { AddRegionDialog } from "./AddRegionDialog";
 
 interface OwnCounts {
   post: number;
@@ -66,19 +74,23 @@ export function OfflineSettingsPanel() {
   const [ownCounts, setOwnCounts] = useState<OwnCounts | null>(null);
   const [routesCount, setRoutesCount] = useState(0);
   const [outboxEntries, setOutboxEntries] = useState<OutboxEntry[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   const refreshAll = useCallback(async () => {
-    const [est, persist, routes, entries] = await Promise.all([
+    const [est, persist, routes, entries, regs] = await Promise.all([
       getStorageEstimate(),
       isPersisted(),
       countCachedRoutes(),
       listOutboxAll(),
+      listRegions(),
     ]);
     setStorage(est);
     setPersistent(persist);
     setRoutesCount(routes);
     setOutboxEntries(entries);
+    setRegions(regs);
     if (publicKey) {
       setOwnCounts(await countOwnByUserType(publicKey));
     } else {
@@ -320,11 +332,73 @@ export function OfflineSettingsPanel() {
         </Section>
 
         <Section
-          icon={<HardDrive className="h-4 w-4" />}
+          icon={<MapPin className="h-4 w-4" />}
           title="Offline regions"
-          subtitle="Coming soon: download a bbox of map tiles + Mapky data for guaranteed offline use."
-        />
+          subtitle={
+            regions.length === 0
+              ? "Pre-warm a region's map tiles so the map renders fully even without network."
+              : `${regions.length} region${regions.length === 1 ? "" : "s"} downloaded.`
+          }
+        >
+          {regions.length > 0 && (
+            <ul className="mt-2 space-y-1.5">
+              {regions.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex items-center gap-2 rounded border border-border bg-surface px-2 py-1.5 text-xs"
+                >
+                  <span
+                    className={`flex h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+                      r.status === "ready"
+                        ? "bg-green-500"
+                        : r.status === "downloading"
+                          ? "bg-blue-500"
+                          : r.status === "error"
+                            ? "bg-red-500"
+                            : "bg-amber-500"
+                    }`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{r.name}</div>
+                    <div className="text-[11px] text-muted">
+                      {formatBytes(r.sizeBytes)} · {r.status}
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      await deleteRegion(r.id);
+                      await refreshAll();
+                    }}
+                    className="rounded p-0.5 text-muted hover:text-red-500"
+                    aria-label="Remove region"
+                    title="Remove region from this list (cached tiles will age out of the SW cache on their own)"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            onClick={() => setAddOpen(true)}
+            className="mt-3 inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-surface"
+          >
+            <Plus className="h-3 w-3" />
+            Add region
+          </button>
+          <p className="mt-2 text-[11px] text-muted">
+            Tiles are stored in the browser's HTTP cache. They're available
+            as long as the cache hasn't aged them out; a future update will
+            move them into a dedicated per-region store.
+          </p>
+        </Section>
       </div>
+      {addOpen && (
+        <AddRegionDialog
+          onClose={() => setAddOpen(false)}
+          onAdded={refreshAll}
+        />
+      )}
     </DiscoverSidebar>
   );
 }
