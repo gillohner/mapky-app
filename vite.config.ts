@@ -39,22 +39,22 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         runtimeCaching: [
-          // Protomaps PMTiles — single multi-GB byte-range archive.
-          // CacheFirst with rangeRequests keeps recently-viewed tile
-          // ranges around. Each tile request issues a distinct Range
-          // header, so for region pre-warms we need a *high*
-          // maxEntries — a country at z=14 is ~50 k entries.
+          // Protomaps hosted tiles — `/tiles/v4/{z}/{x}/{y}.mvt`
+          // (the actual URL the TileJSON declares). One cache entry
+          // per tile, so a country pre-warm doesn't thrash itself.
+          // The offline `mapky-tile` protocol writes its own copy
+          // into IDB; this SW cache is the secondary buffer for
+          // ad-hoc panning past pre-warmed regions.
           {
             urlPattern: ({ url }) =>
               url.hostname === "api.protomaps.com" &&
-              url.pathname.endsWith(".pmtiles"),
+              /\/tiles\/v\d+\/\d+\/\d+\/\d+(\.[a-z]+)?$/.test(url.pathname),
             handler: "CacheFirst",
             options: {
-              cacheName: "pmtiles-runtime",
-              rangeRequests: true,
-              cacheableResponse: { statuses: [0, 200, 206] },
+              cacheName: "protomaps-tiles",
+              cacheableResponse: { statuses: [0, 200] },
               expiration: {
-                maxEntries: 250_000,
+                maxEntries: 100_000,
                 maxAgeSeconds: 60 * 60 * 24 * 90,
               },
             },
@@ -64,7 +64,7 @@ export default defineConfig({
               url.hostname === "api.protomaps.com" &&
               url.pathname.endsWith(".json"),
             handler: "StaleWhileRevalidate",
-            options: { cacheName: "pmtiles-meta" },
+            options: { cacheName: "protomaps-meta" },
           },
           {
             urlPattern: ({ url }) =>

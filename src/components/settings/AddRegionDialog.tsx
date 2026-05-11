@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { searchPlaces, type NominatimSearchResult } from "@/lib/api/nominatim";
-import { config } from "@/lib/config";
 import {
   HARD_MAX_ZOOM,
   LARGE_DOWNLOAD_TILES,
@@ -154,7 +153,6 @@ export function AddRegionDialog({
           name,
           bbox,
           tier: "basic",
-          pmtilesUrl: pmtilesUrlWithKey(),
           minZoom: 0,
           maxZoom,
           force: forceOversize,
@@ -491,8 +489,3 @@ function subtitleOf(s: Selection): string {
     : "Point — using radius around centre";
 }
 
-function pmtilesUrlWithKey(): string {
-  const key = config.protomaps.key;
-  if (!key) return config.protomaps.url;
-  return `${config.protomaps.url}?key=${key}`;
-}

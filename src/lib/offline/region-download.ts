@@ -1,4 +1,3 @@
-import { PMTiles } from "pmtiles";
 import {
   countTiles,
   estimateTilesBytes,
@@ -7,6 +6,7 @@ import {
 } from "./tiles";
 import { putRegion, setRegionStatus } from "./regions";
 import { putOfflineTiles } from "./offline-tiles";
+import { getTileTemplate, tileUrlFor } from "./tile-source";
 import type { Region, RegionTier } from "./db";
 
 /**
@@ -42,8 +42,6 @@ export interface DownloadRegionInput {
   name: string;
   bbox: Bbox;
   tier: RegionTier;
-  /** PMTiles URL — usually `config.protomaps.url`. */
-  pmtilesUrl: string;
   minZoom?: number;
   maxZoom?: number;
   /**
@@ -136,20 +134,20 @@ export async function downloadRegion(
   };
   await putRegion(region);
 
-  const pm = new PMTiles(input.pmtilesUrl);
-  // Read the header so we don't try to fetch tiles past the archive's
-  // own max zoom — Protomaps caps at z=15.
-  let archiveMaxZoom = maxZoom;
+  // Resolve the upstream tile URL template (`https://.../{z}/{x}/{y}.mvt?key=...`).
+  // Protomaps' hosted API doesn't serve a single .pmtiles file —
+  // tiles are individual MVT URLs declared in the TileJSON. Cached
+  // process-wide so subsequent region downloads reuse the resolution.
+  let tileTemplate: string;
   try {
-    const header = await pm.getHeader();
-    archiveMaxZoom = Math.min(maxZoom, header.maxZoom);
-  } catch {
-    // Header fetch failures still let us try the tiles — getZxy will
-    // either succeed or throw individually.
+    tileTemplate = await getTileTemplate();
+  } catch (err) {
+    await setRegionStatus(input.id, "error", String(err));
+    throw err;
   }
 
   const queue: Array<[number, number, number]> = [];
-  for (let z = minZoom; z <= archiveMaxZoom; z++) {
+  for (let z = minZoom; z <= maxZoom; z++) {
     queue.push(...tilesInBbox(input.bbox, z));
   }
   const total = queue.length;
@@ -187,20 +185,26 @@ export async function downloadRegion(
       if (!next) return;
       const [z, x, y] = next;
       try {
-        const resp = await pm.getZxy(z, x, y, callbacks.signal);
-        if (resp?.data) {
-          const buf = resp.data;
-          // pmtiles returns ArrayBuffer; copy into a Uint8Array so the
-          // IDB record holds bytes regardless of source backing.
-          const bytes = new Uint8Array(buf.byteLength);
-          bytes.set(new Uint8Array(buf));
-          pendingWrites.push({ z, x, y, bytes });
-          if (pendingWrites.length >= BATCH_SIZE) {
-            await flushPending(false);
+        const url = tileUrlFor(tileTemplate, z, x, y);
+        const res = await fetch(url, { signal: callbacks.signal });
+        if (res.ok) {
+          const buf = await res.arrayBuffer();
+          if (buf.byteLength > 0) {
+            const bytes = new Uint8Array(buf.byteLength);
+            bytes.set(new Uint8Array(buf));
+            pendingWrites.push({ z, x, y, bytes });
+            if (pendingWrites.length >= BATCH_SIZE) {
+              await flushPending(false);
+            }
           }
+        } else if (res.status !== 404) {
+          // 404 = out-of-coverage tile (normal). Anything else is
+          // worth counting as an error so the user sees something
+          // went wrong.
+          errored += 1;
         }
-      } catch {
-        // Out-of-coverage or transient HTTP — count and move on.
+      } catch (err) {
+        if ((err as Error)?.name === "AbortError") return;
         errored += 1;
       }
       done += 1;

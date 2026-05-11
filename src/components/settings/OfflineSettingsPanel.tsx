@@ -117,11 +117,13 @@ export function OfflineSettingsPanel() {
   const handlePersistent = async () => {
     const granted = await requestPersistent();
     setPersistent(granted);
-    toast[granted ? "success" : "info"](
-      granted
-        ? "Storage marked persistent."
-        : "Browser declined the persistence request.",
-    );
+    if (granted) {
+      toast.success("Storage marked persistent.");
+    } else {
+      toast.info(
+        "Browser hasn't granted persistent storage yet. Chromium typically auto-grants once the PWA has high engagement — visit again later.",
+      );
+    }
   };
 
   const handleResync = async () => {

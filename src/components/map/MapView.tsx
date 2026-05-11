@@ -1,6 +1,9 @@
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
-import { addProtomapsProtocol } from "@/lib/map/protomaps";
+import {
+  offlineTileTransformRequest,
+  registerOfflineTileProtocol,
+} from "@/lib/map/protomaps";
 import { Maximize2 } from "lucide-react";
 import { createMapStyle } from "@/lib/map/style";
 import { pickFeature } from "@/lib/map/pick-feature";
@@ -107,16 +110,21 @@ export function MapView() {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    // Register the offline-aware pmtiles protocol once, before the
-    // map mounts — handler is idempotent so subsequent calls are
-    // free.
-    addProtomapsProtocol();
+    // Register the offline-aware mapky-tile protocol once, before
+    // the map mounts — handler is idempotent so subsequent calls
+    // are free.
+    registerOfflineTileProtocol();
 
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: createMapStyle(theme, basemap, { satelliteLabels }),
       center: center,
       zoom: zoom,
+      // Reroute every upstream tile fetch through the offline
+      // protocol so IDB-cached tiles are consulted before the
+      // network. Non-tile requests (TileJSON, glyphs, sprites) pass
+      // through unchanged.
+      transformRequest: offlineTileTransformRequest,
       // Default attribution is expanded and competes with the
       // capture/mini-map at bottom-right — render a compact "i" toggle
       // instead so it stays out of the way until tapped.
