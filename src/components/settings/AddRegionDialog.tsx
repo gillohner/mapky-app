@@ -12,9 +12,9 @@ import { searchPlaces, type NominatimSearchResult } from "@/lib/api/nominatim";
 import {
   HARD_MAX_ZOOM,
   LARGE_DOWNLOAD_TILES,
-  downloadRegion,
   planRegion,
 } from "@/lib/offline/region-download";
+import { useRegionDownloadStore } from "@/stores/region-download-store";
 import { formatBytes } from "@/lib/offline/quota";
 import {
   REGION_TREE,
@@ -51,13 +51,8 @@ export function AddRegionDialog({
   const [selection, setSelection] = useState<Selection | null>(null);
   const [radiusKm, setRadiusKm] = useState(5);
   const [maxZoom, setMaxZoom] = useState(14);
-  const [downloading, setDownloading] = useState(false);
   const [forceOversize, setForceOversize] = useState(false);
-  const [progress, setProgress] = useState<{
-    done: number;
-    total: number;
-    bytesStored: number;
-  } | null>(null);
+  const start = useRegionDownloadStore((s) => s.start);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -135,7 +130,7 @@ export function AddRegionDialog({
     setResults([]);
   };
 
-  const handleDownload = async () => {
+  const handleDownload = () => {
     if (!selection || !bbox || !plan) return;
     if (plan.tooLarge && !forceOversize) {
       toast.error(
@@ -143,37 +138,25 @@ export function AddRegionDialog({
       );
       return;
     }
-    setDownloading(true);
-    setProgress({ done: 0, total: plan.tileCount, bytesStored: 0 });
     const { id, name } = identityOf(selection);
-    try {
-      await downloadRegion(
-        {
-          id,
-          name,
-          bbox,
-          tier: "basic",
-          minZoom: 0,
-          maxZoom,
-          force: forceOversize,
-        },
-        {
-          onProgress: (p) =>
-            setProgress({
-              done: p.done,
-              total: p.total,
-              bytesStored: p.bytesStored,
-            }),
-        },
-      );
-      toast.success(`Downloaded ${name} for offline use`);
-      onAdded();
-      onClose();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Download failed");
-    } finally {
-      setDownloading(false);
-    }
+    // Fire-and-forget: the store owns the lifecycle, the dialog
+    // closes immediately so the user can keep using the app while
+    // the download runs in the background.
+    void start(
+      {
+        id,
+        name,
+        bbox,
+        tier: "basic",
+        minZoom: 0,
+        maxZoom,
+        force: forceOversize,
+      },
+      onAdded,
+    );
+    toast.info(`Starting download for ${name}…`);
+    onAdded();
+    onClose();
   };
 
   const toggleContinent = (id: string) => {
@@ -418,25 +401,6 @@ export function AddRegionDialog({
                 </div>
               )}
 
-              {downloading && progress && (
-                <div>
-                  <div className="mb-1 flex justify-between text-xs">
-                    <span className="text-muted">Downloading…</span>
-                    <span className="font-mono text-foreground">
-                      {progress.done} / {progress.total} ·{" "}
-                      {formatBytes(progress.bytesStored)}
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
-                    <div
-                      className="h-full bg-accent transition-all"
-                      style={{
-                        width: `${Math.round((progress.done / progress.total) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>
@@ -450,15 +414,11 @@ export function AddRegionDialog({
           </button>
           <button
             onClick={handleDownload}
-            disabled={
-              !selection ||
-              downloading ||
-              (plan?.tooLarge && !forceOversize)
-            }
+            disabled={!selection || (plan?.tooLarge && !forceOversize)}
             className="inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
           >
             <Download className="h-3 w-3" />
-            {downloading ? "Downloading" : "Download"}
+            Download
           </button>
         </footer>
       </div>

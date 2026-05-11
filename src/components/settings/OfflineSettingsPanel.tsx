@@ -10,6 +10,7 @@ import {
   Layers,
   Plus,
   MapPin,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DiscoverSidebar } from "@/components/discover/DiscoverSidebar";
@@ -42,6 +43,7 @@ import {
 import { syncOwnResources } from "@/lib/offline/sync-own";
 import { drainOutbox } from "@/lib/offline/outbox-drain";
 import { listRegions, deleteRegion } from "@/lib/offline/regions";
+import { useRegionDownloadStore } from "@/stores/region-download-store";
 import type {
   OutboxEntry,
   OwnResourceType,
@@ -84,6 +86,12 @@ export function OfflineSettingsPanel() {
   const [tilesBytes, setTilesBytes] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+
+  // Live progress for any region currently downloading in the
+  // background store. Refresh on changes so progress bars animate.
+  const activeDownloads = useRegionDownloadStore((s) => s.active);
+  const cancelDownload = useRegionDownloadStore((s) => s.cancel);
+  const clearDownload = useRegionDownloadStore((s) => s.clear);
 
   const refreshAll = useCallback(async () => {
     const [est, persist, routes, entries, regs, tCount, tBytes] =
@@ -362,43 +370,86 @@ export function OfflineSettingsPanel() {
         >
           {regions.length > 0 && (
             <ul className="mt-2 space-y-1.5">
-              {regions.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex items-center gap-2 rounded border border-border bg-surface px-2 py-1.5 text-xs"
-                >
-                  <span
-                    className={`flex h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-                      r.status === "ready"
-                        ? "bg-green-500"
-                        : r.status === "downloading"
-                          ? "bg-blue-500"
-                          : r.status === "error"
-                            ? "bg-red-500"
-                            : "bg-amber-500"
-                    }`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium text-foreground">
-                      {r.name}
-                    </div>
-                    <div className="text-[11px] text-muted">
-                      {formatBytes(r.sizeBytes)} · {r.status}
-                    </div>
-                  </div>
-                  <button
-                    onClick={async () => {
-                      await deleteRegion(r.id);
-                      await refreshAll();
-                    }}
-                    className="rounded p-0.5 text-muted hover:text-red-500"
-                    aria-label="Remove region"
-                    title="Remove region from this list (cached tiles will age out of the SW cache on their own)"
+              {regions.map((r) => {
+                const live = activeDownloads[r.id];
+                const isRunning = live?.status === "running";
+                const pct =
+                  live && live.progress.total > 0
+                    ? Math.round(
+                        (live.progress.done / live.progress.total) * 100,
+                      )
+                    : 0;
+                const liveBytes = live
+                  ? formatBytes(live.progress.bytesStored)
+                  : null;
+                return (
+                  <li
+                    key={r.id}
+                    className="rounded border border-border bg-surface px-2 py-1.5 text-xs"
                   >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </li>
-              ))}
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`flex h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+                          isRunning
+                            ? "bg-blue-500"
+                            : live?.status === "errored"
+                              ? "bg-red-500"
+                              : r.status === "ready"
+                                ? "bg-green-500"
+                                : r.status === "downloading"
+                                  ? "bg-blue-500"
+                                  : r.status === "error"
+                                    ? "bg-red-500"
+                                    : "bg-amber-500"
+                        }`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium text-foreground">
+                          {r.name}
+                        </div>
+                        <div className="text-[11px] text-muted">
+                          {isRunning
+                            ? `${pct}% · ${live.progress.done} / ${live.progress.total} tiles · ${liveBytes}`
+                            : live?.status === "errored"
+                              ? live.error ?? "Download failed"
+                              : `${formatBytes(r.sizeBytes)} · ${r.status}`}
+                        </div>
+                      </div>
+                      {isRunning ? (
+                        <button
+                          onClick={() => cancelDownload(r.id)}
+                          className="rounded p-0.5 text-muted hover:text-red-500"
+                          aria-label="Cancel download"
+                          title="Cancel — tiles already stored stay on disk"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={async () => {
+                            await deleteRegion(r.id);
+                            clearDownload(r.id);
+                            await refreshAll();
+                          }}
+                          className="rounded p-0.5 text-muted hover:text-red-500"
+                          aria-label="Remove region"
+                          title="Remove region from this list"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                    {isRunning && (
+                      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-background">
+                        <div
+                          className="h-full bg-accent transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
           <div className="mt-3 flex gap-2">
