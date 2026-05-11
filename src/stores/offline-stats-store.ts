@@ -51,6 +51,14 @@ interface Snapshot {
 interface State extends Snapshot {
   refreshing: boolean;
   refresh: (publicKey: string | null) => Promise<void>;
+  /**
+   * Lightweight refresh that only re-reads storage + tile-store
+   * counts. Used during active downloads to surface live byte
+   * counts without re-running the full IDB fan-out every poll
+   * (own-resource counts and outbox state don't change while
+   * tiles are streaming in).
+   */
+  refreshStorage: () => Promise<void>;
   /** Cheap selective updaters used by user actions (e.g. clearing a
    *  cache) so the UI reflects the change without a full re-scan. */
   patch: (partial: Partial<Snapshot>) => void;
@@ -112,6 +120,19 @@ export const useOfflineStatsStore = create<State>((set) => ({
   },
 
   patch: (partial) => set((s) => ({ ...s, ...partial })),
+
+  refreshStorage: async () => {
+    try {
+      const [est, tCount, tBytes] = await Promise.all([
+        getStorageEstimate(),
+        countOfflineTiles(),
+        totalOfflineTilesBytes(),
+      ]);
+      set({ storage: est, tilesCount: tCount, tilesBytes: tBytes });
+    } catch (err) {
+      console.warn("[offline-stats] refreshStorage failed", err);
+    }
+  },
 }));
 
 export type { OwnCounts as OfflineOwnCounts };

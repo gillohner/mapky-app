@@ -73,6 +73,7 @@ export function OfflineSettingsPanel() {
     tilesBytes,
     ownCounts,
     refresh,
+    refreshStorage,
     patch,
     refreshing,
   } = stats;
@@ -102,6 +103,34 @@ export function OfflineSettingsPanel() {
   useEffect(() => {
     void refresh(publicKey);
   }, [refresh, publicKey, pending, downloadSig]);
+
+  // Boolean keyed off downloadSig (which only changes when a
+  // download is added/removed/transitions status — not on every
+  // progress tick), so the polling effect doesn't re-bind its
+  // interval every time a tile lands.
+  const anyRunning = useMemo(
+    () => downloadSig.split(",").some((entry) => entry.endsWith(":running")),
+    [downloadSig],
+  );
+
+  // While any download is running, poll just the storage + tile
+  // counters so the Storage and Offline-regions subtitles update in
+  // real time as bytes land. Skips the heavy own-data / outbox /
+  // routes-cache scans (those don't move while tiles stream in).
+  useEffect(() => {
+    if (!anyRunning) return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      void refreshStorage();
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [anyRunning, refreshStorage]);
 
   // Merge IDB regions + any active downloads that haven't been
   // committed to IDB yet, so a freshly-started download shows a row
