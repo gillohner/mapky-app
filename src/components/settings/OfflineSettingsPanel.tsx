@@ -359,7 +359,9 @@ export function OfflineSettingsPanel() {
                     }`}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{r.name}</div>
+                    <div className="truncate font-medium text-foreground">
+                      {r.name}
+                    </div>
                     <div className="text-[11px] text-muted">
                       {formatBytes(r.sizeBytes)} · {r.status}
                     </div>
