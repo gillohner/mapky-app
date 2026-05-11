@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Database,
+  Play,
   RefreshCw,
   Trash2,
   HardDrive,
@@ -82,6 +83,7 @@ export function OfflineSettingsPanel() {
   const activeDownloads = useRegionDownloadStore((s) => s.active);
   const cancelDownload = useRegionDownloadStore((s) => s.cancel);
   const clearDownload = useRegionDownloadStore((s) => s.clear);
+  const resumeOne = useRegionDownloadStore((s) => s.resumeOne);
 
   // Stable signature of which downloads are present (independent of
   // per-tile progress updates). Lets us refresh the panel data once
@@ -451,6 +453,16 @@ export function OfflineSettingsPanel() {
                 const liveBytes = live
                   ? formatBytes(live.progress.bytesStored)
                   : null;
+                // Resumable when the region isn't currently fetching
+                // and either errored/cancelled in the live store, OR
+                // its IDB row is still marked "downloading" (a stale
+                // session) or "error".
+                const isResumable =
+                  !isRunning &&
+                  (live?.status === "errored" ||
+                    live?.status === "cancelled" ||
+                    (!live &&
+                      (r.status === "downloading" || r.status === "error")));
                 return (
                   <li
                     key={r.id}
@@ -496,16 +508,28 @@ export function OfflineSettingsPanel() {
                           <X className="h-3 w-3" />
                         </button>
                       ) : (
-                        <button
-                          onClick={() =>
-                            setConfirm({ kind: "remove-region", region: r })
-                          }
-                          className="rounded p-0.5 text-muted hover:text-red-500"
-                          aria-label="Remove region"
-                          title="Remove region from this list"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
+                        <>
+                          {isResumable && (
+                            <button
+                              onClick={() => void resumeOne(r.id)}
+                              className="rounded p-0.5 text-muted hover:text-accent"
+                              aria-label="Resume download"
+                              title="Resume — skips tiles already on disk"
+                            >
+                              <Play className="h-3 w-3" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() =>
+                              setConfirm({ kind: "remove-region", region: r })
+                            }
+                            className="rounded p-0.5 text-muted hover:text-red-500"
+                            aria-label="Remove region"
+                            title="Remove region from this list"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </>
                       )}
                     </div>
                     {isRunning && (

@@ -87,19 +87,18 @@ export const useOfflineStatsStore = create<State>((set) => ({
     set({ refreshing: true });
     inFlight = (async () => {
       try {
-        const [est, persist, routes, entries, regs, tCount, tBytes] =
-          await Promise.all([
-            getStorageEstimate(),
-            isPersisted(),
-            countCachedRoutes(),
-            listOutboxAll(),
-            listRegions(),
-            countOfflineTiles(),
-            totalOfflineTilesBytes(),
-          ]);
-        const ownCounts = publicKey
-          ? await countOwnByUserType(publicKey)
-          : null;
+        // Fast bucket — small / cheap reads. Paint immediately so
+        // the panel stops showing "Reading…" the moment we have any
+        // data to render. The heavy offline_tiles cursor scan can
+        // take 10+ seconds on big libraries; the rest of the panel
+        // shouldn't wait for it.
+        const [est, persist, routes, entries, regs] = await Promise.all([
+          getStorageEstimate(),
+          isPersisted(),
+          countCachedRoutes(),
+          listOutboxAll(),
+          listRegions(),
+        ]);
         set({
           loadedAt: Date.now(),
           storage: est,
@@ -107,10 +106,17 @@ export const useOfflineStatsStore = create<State>((set) => ({
           regions: regs,
           outboxEntries: entries,
           routesCount: routes,
-          tilesCount: tCount,
-          tilesBytes: tBytes,
-          ownCounts,
         });
+
+        // Slow bucket — own-data per-type counts (7 sequential
+        // count() calls) and the offline_tiles size+count cursor
+        // scan. Patched in once they resolve.
+        const [tCount, tBytes, ownCounts] = await Promise.all([
+          countOfflineTiles(),
+          totalOfflineTilesBytes(),
+          publicKey ? countOwnByUserType(publicKey) : Promise.resolve(null),
+        ]);
+        set({ tilesCount: tCount, tilesBytes: tBytes, ownCounts });
       } finally {
         set({ refreshing: false });
         inFlight = null;

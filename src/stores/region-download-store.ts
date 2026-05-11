@@ -5,7 +5,7 @@ import {
   type DownloadProgress,
   type DownloadRegionInput,
 } from "@/lib/offline/region-download";
-import { listRegions, putRegion } from "@/lib/offline/regions";
+import { getRegion, listRegions, putRegion } from "@/lib/offline/regions";
 
 /**
  * In-memory tracker for region downloads. The actual fetch loop runs
@@ -48,6 +48,15 @@ interface Actions {
    * if a download is already in flight.
    */
   resumeStuck: () => Promise<number>;
+  /**
+   * Manually resume a single region by id. Reads its stored bbox +
+   * maxZoom from IDB and re-runs `start()` with the same params.
+   * Works whether the region is stuck in "downloading", "error",
+   * "cancelled", or any prior state — the worker loop will skip
+   * tiles already on disk, so resume is cheap when most of the
+   * region was already fetched.
+   */
+  resumeOne: (id: string) => Promise<void>;
 }
 
 export const useRegionDownloadStore = create<State & Actions>((set, get) => ({
@@ -183,6 +192,24 @@ export const useRegionDownloadStore = create<State & Actions>((set, get) => ({
     set((s) => {
       const { [id]: _gone, ...rest } = s.active;
       return { ...s, active: rest };
+    });
+  },
+
+  resumeOne: async (id) => {
+    const region = await getRegion(id);
+    if (!region) {
+      toast.error("Region not found.");
+      return;
+    }
+    const [west, south, east, north] = region.bbox;
+    await get().start({
+      id: region.id,
+      name: region.name,
+      bbox: { west, south, east, north },
+      tier: region.tier,
+      minZoom: 0,
+      maxZoom: region.maxZoom ?? 14,
+      force: true,
     });
   },
 
