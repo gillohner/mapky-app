@@ -10,7 +10,12 @@ import {
 import { toast } from "sonner";
 import { searchPlaces, type NominatimSearchResult } from "@/lib/api/nominatim";
 import { config } from "@/lib/config";
-import { downloadRegion, planRegion } from "@/lib/offline/region-download";
+import {
+  HARD_MAX_ZOOM,
+  LARGE_DOWNLOAD_TILES,
+  downloadRegion,
+  planRegion,
+} from "@/lib/offline/region-download";
 import { formatBytes } from "@/lib/offline/quota";
 import {
   REGION_TREE,
@@ -348,7 +353,7 @@ export function AddRegionDialog({
                 <input
                   type="range"
                   min={4}
-                  max={15}
+                  max={HARD_MAX_ZOOM}
                   step={1}
                   value={maxZoom}
                   onChange={(e) => setMaxZoom(Number(e.target.value))}
@@ -356,7 +361,8 @@ export function AddRegionDialog({
                 />
                 <p className="mt-1 text-[11px] text-muted">
                   Higher zoom shows more detail but downloads more tiles.
-                  Continent-scale picks stay readable around z=5–7.
+                  Continent-scale picks stay readable around z=5–7;
+                  countries z=10–12; cities z=13–14.
                 </p>
               </div>
 
@@ -375,10 +381,17 @@ export function AddRegionDialog({
                     </span>
                   </div>
                   {plan.tooLarge && (
-                    <p className="mt-1 text-amber-600 dark:text-amber-400">
+                    <p className="mt-1 text-red-600 dark:text-red-400">
                       Too large — reduce max zoom or pick a smaller area.
                     </p>
                   )}
+                  {!plan.tooLarge &&
+                    plan.tileCount > LARGE_DOWNLOAD_TILES && (
+                      <p className="mt-1 text-amber-600 dark:text-amber-400">
+                        Large download — may take several minutes and lean
+                        on the upstream tile server.
+                      </p>
+                    )}
                 </div>
               )}
 

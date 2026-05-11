@@ -9,11 +9,24 @@ import { putRegion, setRegionStatus } from "./regions";
 import type { Region, RegionTier } from "./db";
 
 /**
- * Maximum tiles per region download. At ~20 KB per tile this is a
- * generous 200 MB cap — big enough for a small country, small enough
- * that we don't burn through Protomaps' rate limit on a misclick.
+ * Maximum tiles per region download. At ~18 KB per tile this caps a
+ * single download around ~1.8 GB — enough for a small country at
+ * street-level detail (Switzerland z=14 ≈ 50 k tiles ≈ 900 MB) or a
+ * mid-size country at neighbourhood detail. Beyond this the SW
+ * pre-warm approach gets too chatty against the upstream PMTiles
+ * server; multi-GB extracts are the territory of the (future)
+ * server-side `pmtiles extract` endpoint.
  */
-const MAX_TILES = 10_000;
+const MAX_TILES = 100_000;
+
+/** Hard ceiling beyond which the UI shouldn't even offer the zoom
+ *  level. `z=15` of a country crosses into 100k+ tiles territory
+ *  with the current approach. */
+export const HARD_MAX_ZOOM = 14;
+
+/** Soft threshold over which the UI shows a "this is a lot" warning
+ *  even if the request still fits inside MAX_TILES. */
+export const LARGE_DOWNLOAD_TILES = 25_000;
 
 /** Bounded concurrency for the tile fetch loop. PMTiles JS already
  *  pools the underlying file directory, so the bottleneck is the

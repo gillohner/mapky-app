@@ -41,9 +41,9 @@ export default defineConfig({
         runtimeCaching: [
           // Protomaps PMTiles — single multi-GB byte-range archive.
           // CacheFirst with rangeRequests keeps recently-viewed tile
-          // ranges around. Bounded region downloads (Phase 3) will
-          // own a separate OPFS-backed cache; this runtime cache is
-          // the best-effort "what you've panned over" buffer.
+          // ranges around. Each tile request issues a distinct Range
+          // header, so for region pre-warms we need a *high*
+          // maxEntries — a country at z=14 is ~50 k entries.
           {
             urlPattern: ({ url }) =>
               url.hostname === "api.protomaps.com" &&
@@ -54,8 +54,8 @@ export default defineConfig({
               rangeRequests: true,
               cacheableResponse: { statuses: [0, 200, 206] },
               expiration: {
-                maxEntries: 200,
-                maxAgeSeconds: 60 * 60 * 24 * 30,
+                maxEntries: 250_000,
+                maxAgeSeconds: 60 * 60 * 24 * 90,
               },
             },
           },
