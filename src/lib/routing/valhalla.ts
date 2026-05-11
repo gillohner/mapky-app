@@ -14,6 +14,11 @@ import type {
 } from "./types";
 import axios from "axios";
 import { nexusClient } from "@/lib/api/client";
+import {
+  hashRouteRequest,
+  getCachedRoute,
+  putCachedRoute,
+} from "@/lib/offline/routes-cache";
 
 // All Valhalla traffic flows through the pubky-nexus plugin's cached
 // proxy at `/v0/mapky/routing/valhalla`. The plugin holds a 24 h Redis
@@ -70,6 +75,22 @@ export class RoutingError extends Error {
   }
 }
 
+/**
+ * Thrown when the user is offline and the requested waypoints have no
+ * snap in the local cache. Subclasses RoutingError so the existing
+ * error UI handles it uniformly; the `name` lets callers detect the
+ * offline-specific case to offer different recovery hints.
+ */
+export class OfflineRoutingError extends RoutingError {
+  constructor() {
+    super("You're offline and this route hasn't been computed before.", {
+      hint:
+        "Plan this route once while connected so it's available offline next time.",
+    });
+    this.name = "OfflineRoutingError";
+  }
+}
+
 export interface ValhallaRequestOptions {
   signal?: AbortSignal;
   /** User-overridable preferences (avoid ferries/tolls/highways). */
@@ -99,6 +120,14 @@ export interface RouteSnapBundle {
 /**
  * Request a snapped route from Valhalla. Returns the primary path plus
  * any alternates the engine produced.
+ *
+ * Offline behavior: every successful response is persisted into the
+ * local `routes_cache` IDB store keyed by a hash of (waypoints,
+ * costing, preferences). When the network round-trip fails — or the
+ * browser already knows it's offline — we look up that hash and
+ * replay the cached bundle (with `cached: true` set on each snap).
+ * If the lookup misses too, we throw `OfflineRoutingError` so the UI
+ * can prompt the user to plan it once while connected.
  */
 export async function requestRoute(
   waypoints: Waypoint[],
@@ -120,6 +149,20 @@ export async function requestRoute(
     avoidTolls: null,
     avoidHighways: null,
   };
+
+  const cacheKeyPromise = hashRouteRequest({
+    waypoints: waypoints.map((w) => ({ lat: w.lat, lon: w.lon })),
+    activity: costing,
+    preferences: prefs,
+  });
+
+  // When we already know we're offline, skip the 4 s network timeout
+  // and serve from cache directly. Treat a cache miss as terminal.
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    const hit = await lookupCachedBundle(await cacheKeyPromise);
+    if (hit) return hit;
+    throw new OfflineRoutingError();
+  }
   // Merge order: prefs (avoid_X) → activity options (walking_speed, etc.).
   // Activity wins if there's a conflict, but in practice the two sets
   // address disjoint Valhalla knobs.
@@ -147,6 +190,18 @@ export async function requestRoute(
   } catch (err) {
     if (axios.isCancel(err) || (err instanceof Error && err.name === "CanceledError")) {
       throw err;
+    }
+    // No HTTP response = couldn't reach the backend at all. Try the
+    // offline cache as a fallback before propagating the error.
+    if (axios.isAxiosError(err) && !err.response) {
+      const hit = await lookupCachedBundle(await cacheKeyPromise);
+      if (hit) return hit;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        throw new OfflineRoutingError();
+      }
+      throw new RoutingError(
+        err.message || "Network error reaching the routing service",
+      );
     }
     if (axios.isAxiosError(err) && err.response) {
       const status = err.response.status;
@@ -192,7 +247,38 @@ export async function requestRoute(
     .map((a) => (a?.trip?.legs?.length ? tripToSnap(a.trip, waypoints, costing) : null))
     .filter((s): s is RouteSnapResult => s !== null);
 
-  return { primary, alternates };
+  const bundle: RouteSnapBundle = { primary, alternates };
+
+  // Persist for offline replay. Fire-and-forget — a write failure
+  // (quota, transient IDB error) should not break a successful snap.
+  void cacheKeyPromise.then((key) =>
+    putCachedRoute({
+      key,
+      request: { waypoints, costing, preferences: prefs },
+      response: bundle,
+    }).catch((cacheErr) => {
+      console.warn("[routing] failed to cache route", cacheErr);
+    }),
+  );
+
+  return bundle;
+}
+
+/**
+ * Look up a previously-computed bundle and tag each snap with
+ * `cached: true` so the UI can surface its provenance.
+ */
+async function lookupCachedBundle(
+  key: string,
+): Promise<RouteSnapBundle | null> {
+  const entry = await getCachedRoute(key);
+  if (!entry) return null;
+  const bundle = entry.response as RouteSnapBundle;
+  if (!bundle?.primary?.polyline) return null;
+  return {
+    primary: { ...bundle.primary, cached: true },
+    alternates: bundle.alternates.map((a) => ({ ...a, cached: true })),
+  };
 }
 
 function tripToSnap(
