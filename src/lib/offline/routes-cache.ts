@@ -56,6 +56,16 @@ export async function putCachedRoute(
   await evictIfNeeded();
 }
 
+export async function countCachedRoutes(): Promise<number> {
+  const db = await getDB();
+  return db.count("routes_cache");
+}
+
+export async function clearRoutesCache(): Promise<void> {
+  const db = await getDB();
+  await db.clear("routes_cache");
+}
+
 async function evictIfNeeded(): Promise<void> {
   const db = await getDB();
   const count = await db.count("routes_cache");

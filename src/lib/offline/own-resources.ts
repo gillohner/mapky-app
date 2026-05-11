@@ -55,3 +55,38 @@ export async function clearUserOwnResources(userId: string): Promise<void> {
   const keys = await tx.store.index("by-userId").getAllKeys(userId);
   await Promise.all([...keys.map((k) => tx.store.delete(k)), tx.done]);
 }
+
+/**
+ * Per-type counts for a single user. Used by the offline settings page
+ * to show what's mirrored locally.
+ */
+export async function countOwnByUserType(
+  userId: string,
+): Promise<Record<OwnResourceType, number>> {
+  const types: OwnResourceType[] = [
+    "post",
+    "review",
+    "collection",
+    "incident",
+    "geoCapture",
+    "sequence",
+    "route",
+  ];
+  const db = await getDB();
+  const tx = db.transaction("own_resources", "readonly");
+  const idx = tx.store.index("by-userId-type");
+  const result: Record<OwnResourceType, number> = {
+    post: 0,
+    review: 0,
+    collection: 0,
+    incident: 0,
+    geoCapture: 0,
+    sequence: 0,
+    route: 0,
+  };
+  for (const t of types) {
+    result[t] = await idx.count([userId, t]);
+  }
+  await tx.done;
+  return result;
+}

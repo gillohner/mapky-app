@@ -18,6 +18,7 @@ import { Route as CollectionsRouteImport } from './routes/collections'
 import { Route as CapturesRouteImport } from './routes/captures'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RoutesIndexRouteImport } from './routes/routes/index'
+import { Route as SettingsOfflineRouteImport } from './routes/settings/offline'
 import { Route as SequenceAuthorIdSequenceIdRouteImport } from './routes/sequence/$authorId.$sequenceId'
 import { Route as RouteAuthorIdRouteIdRouteImport } from './routes/route/$authorId.$routeId'
 import { Route as PlaceOsmTypeOsmIdRouteImport } from './routes/place/$osmType.$osmId'
@@ -69,6 +70,11 @@ const RoutesIndexRoute = RoutesIndexRouteImport.update({
   path: '/routes/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsOfflineRoute = SettingsOfflineRouteImport.update({
+  id: '/settings/offline',
+  path: '/settings/offline',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SequenceAuthorIdSequenceIdRoute =
   SequenceAuthorIdSequenceIdRouteImport.update({
     id: '/sequence/$authorId/$sequenceId',
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/my-posts': typeof MyPostsRoute
   '/places': typeof PlacesRoute
   '/search': typeof SearchRoute
+  '/settings/offline': typeof SettingsOfflineRoute
   '/routes/': typeof RoutesIndexRoute
   '/capture/$authorId/$captureId': typeof CaptureAuthorIdCaptureIdRoute
   '/collection/$authorId/$collectionId': typeof CollectionAuthorIdCollectionIdRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/my-posts': typeof MyPostsRoute
   '/places': typeof PlacesRoute
   '/search': typeof SearchRoute
+  '/settings/offline': typeof SettingsOfflineRoute
   '/routes': typeof RoutesIndexRoute
   '/capture/$authorId/$captureId': typeof CaptureAuthorIdCaptureIdRoute
   '/collection/$authorId/$collectionId': typeof CollectionAuthorIdCollectionIdRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/my-posts': typeof MyPostsRoute
   '/places': typeof PlacesRoute
   '/search': typeof SearchRoute
+  '/settings/offline': typeof SettingsOfflineRoute
   '/routes/': typeof RoutesIndexRoute
   '/capture/$authorId/$captureId': typeof CaptureAuthorIdCaptureIdRoute
   '/collection/$authorId/$collectionId': typeof CollectionAuthorIdCollectionIdRoute
@@ -158,6 +167,7 @@ export interface FileRouteTypes {
     | '/my-posts'
     | '/places'
     | '/search'
+    | '/settings/offline'
     | '/routes/'
     | '/capture/$authorId/$captureId'
     | '/collection/$authorId/$collectionId'
@@ -174,6 +184,7 @@ export interface FileRouteTypes {
     | '/my-posts'
     | '/places'
     | '/search'
+    | '/settings/offline'
     | '/routes'
     | '/capture/$authorId/$captureId'
     | '/collection/$authorId/$collectionId'
@@ -190,6 +201,7 @@ export interface FileRouteTypes {
     | '/my-posts'
     | '/places'
     | '/search'
+    | '/settings/offline'
     | '/routes/'
     | '/capture/$authorId/$captureId'
     | '/collection/$authorId/$collectionId'
@@ -207,6 +219,7 @@ export interface RootRouteChildren {
   MyPostsRoute: typeof MyPostsRoute
   PlacesRoute: typeof PlacesRoute
   SearchRoute: typeof SearchRoute
+  SettingsOfflineRoute: typeof SettingsOfflineRoute
   RoutesIndexRoute: typeof RoutesIndexRoute
   CaptureAuthorIdCaptureIdRoute: typeof CaptureAuthorIdCaptureIdRoute
   CollectionAuthorIdCollectionIdRoute: typeof CollectionAuthorIdCollectionIdRoute
@@ -280,6 +293,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RoutesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/offline': {
+      id: '/settings/offline'
+      path: '/settings/offline'
+      fullPath: '/settings/offline'
+      preLoaderRoute: typeof SettingsOfflineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sequence/$authorId/$sequenceId': {
       id: '/sequence/$authorId/$sequenceId'
       path: '/sequence/$authorId/$sequenceId'
@@ -327,6 +347,7 @@ const rootRouteChildren: RootRouteChildren = {
   MyPostsRoute: MyPostsRoute,
   PlacesRoute: PlacesRoute,
   SearchRoute: SearchRoute,
+  SettingsOfflineRoute: SettingsOfflineRoute,
   RoutesIndexRoute: RoutesIndexRoute,
   CaptureAuthorIdCaptureIdRoute: CaptureAuthorIdCaptureIdRoute,
   CollectionAuthorIdCollectionIdRoute: CollectionAuthorIdCollectionIdRoute,

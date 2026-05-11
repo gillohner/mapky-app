@@ -3,6 +3,7 @@ import {
   LogIn,
   LogOut,
   Moon,
+  Settings,
   Sun,
   User,
 } from "lucide-react";
@@ -181,6 +182,17 @@ export function IconRail() {
         ) : (
           <Moon className="h-5 w-5" />
         )}
+      </RailButton>
+
+      <RailButton
+        onClick={() => {
+          if (pathname.startsWith("/settings")) navigate({ to: "/" });
+          else navigate({ to: "/settings/offline" });
+        }}
+        title="Offline settings"
+        active={pathname.startsWith("/settings")}
+      >
+        <Settings className="h-5 w-5" />
       </RailButton>
 
       <div className="my-1 w-6 border-t border-border" />
