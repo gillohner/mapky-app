@@ -19,6 +19,7 @@ import { SearchBar } from "@/components/sidebar/SearchBar";
 import { CaptureCreationPanel } from "@/components/capture/CaptureCreationPanel";
 import { MainMapCaptureOverlay } from "@/components/capture/MainMapCaptureOverlay";
 import { DirectionsLayer } from "@/components/route/DirectionsLayer";
+import { OfflineBadge } from "@/components/pwa/OfflineBadge";
 import { Toaster } from "sonner";
 import { useUrlSync } from "@/hooks/use-url-sync";
 
@@ -56,6 +57,7 @@ function RootLayout() {
           <CaptureCreationPanel />
           <LayerSheet />
           <MapLegends />
+          <OfflineBadge />
         </div>
         <Toaster position="bottom-center" />
       </AuthProvider>
