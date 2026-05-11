@@ -6,6 +6,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { registerPending } from "@/lib/api/optimistic-overlay";
+import { outboxDelete, outboxPutText } from "@/lib/offline/outbox-drain";
 import type { PostTagDetails } from "@/types/mapky";
 
 /**
@@ -123,10 +124,23 @@ export function TagStrip({
     try {
       const result = buildTag(publicKey, tagLabel);
 
+      // Route through the outbox helpers so a flaky network falls
+      // back to the persistent queue instead of toasting an error.
+      // The optimistic cache update below runs unchanged regardless of
+      // which branch wins (live write vs. queued).
       if (removing) {
-        await session.storage.delete(result.path as `/pub/${string}`);
+        await outboxDelete({
+          session,
+          userId: publicKey,
+          path: result.path as `/pub/${string}`,
+        });
       } else {
-        await session.storage.putText(result.path as `/pub/${string}`, result.json);
+        await outboxPutText({
+          session,
+          userId: publicKey,
+          path: result.path as `/pub/${string}`,
+          text: result.json,
+        });
       }
 
       // Pure mutation logic — applied through whichever cache integration

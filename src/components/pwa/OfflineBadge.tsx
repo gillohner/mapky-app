@@ -1,14 +1,23 @@
 import { CloudOff } from "lucide-react";
 import { useOnlineStatus } from "@/hooks/use-online-status";
+import { useOutboxCount } from "@/hooks/use-outbox-count";
 
 /**
  * Small chip pinned to the top-center that appears when the browser
- * reports offline. Stays out of the way of search/HUD; non-blocking
- * because the SW serves cached data underneath.
+ * reports offline OR when writes are queued in the outbox. Stays out
+ * of the way of search/HUD; non-blocking because the SW serves cached
+ * data underneath and queued writes drain automatically on reconnect.
  */
 export function OfflineBadge() {
   const online = useOnlineStatus();
-  if (online) return null;
+  const pending = useOutboxCount();
+  if (online && pending === 0) return null;
+
+  const label = online
+    ? `${pending} write${pending === 1 ? "" : "s"} queued`
+    : pending > 0
+      ? `Offline — ${pending} write${pending === 1 ? "" : "s"} pending`
+      : "Offline — using cached data";
 
   // Sits just below the SearchBar (top-3, ~48 px tall) so the chip
   // never collides with the search input on mobile.
@@ -20,7 +29,7 @@ export function OfflineBadge() {
     >
       <span className="inline-flex items-center gap-1.5">
         <CloudOff className="h-3.5 w-3.5" />
-        Offline — using cached data
+        {label}
       </span>
     </div>
   );
