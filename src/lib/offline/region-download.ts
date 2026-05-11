@@ -192,13 +192,29 @@ export async function downloadRegion(
   // bytes we touched this run.
   let done = skippedFromStart;
   let errored = 0;
-  if (skippedFromStart > 0) {
+
+  // Throttle the progress callback. Without this, every tile that
+  // lands fires a Zustand `set()` (one per fetch, up to thousands
+  // per second), which the React tree can't keep up with and which
+  // in pathological cases overflows the call stack. 100 ms gives
+  // ~10 fps progress updates — smooth without melting the UI.
+  let lastEmit = 0;
+  const PROGRESS_INTERVAL_MS = 100;
+  const emitProgress = (force: boolean) => {
+    const now =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (!force && now - lastEmit < PROGRESS_INTERVAL_MS) return;
+    lastEmit = now;
     callbacks.onProgress?.({
       done,
       total,
       errored,
       bytesStored,
     });
+  };
+
+  if (skippedFromStart > 0) {
+    emitProgress(true);
   }
   const workers = Array.from({ length: FETCH_CONCURRENCY }, async () => {
     while (queue.length > 0) {
@@ -230,12 +246,7 @@ export async function downloadRegion(
         errored += 1;
       }
       done += 1;
-      callbacks.onProgress?.({
-        done,
-        total,
-        errored,
-        bytesStored,
-      });
+      emitProgress(false);
     }
   });
 
@@ -252,6 +263,9 @@ export async function downloadRegion(
     await setRegionStatus(input.id, "error", String(writeError));
     throw writeError;
   }
+  // Force one last emit so the UI reflects final counts even if
+  // the previous tick happened mid-throttle.
+  emitProgress(true);
 
   if (callbacks.signal?.aborted) {
     await setRegionStatus(input.id, "error", "Cancelled");

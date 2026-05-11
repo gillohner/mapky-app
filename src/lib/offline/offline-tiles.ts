@@ -97,16 +97,26 @@ export async function getStoredKeysForZRange(
   minZ: number,
   maxZ: number,
 ): Promise<Set<string>> {
-  const db = await getDB();
-  const tx = db.transaction("offline_tiles", "readonly");
   const set = new Set<string>();
-  const range = IDBKeyRange.bound(minZ, maxZ);
-  let cursor = await tx.store.index("by-z").openKeyCursor(range);
-  while (cursor) {
-    const pk = cursor.primaryKey as [number, number, number];
-    set.add(`${pk[0]}/${pk[1]}/${pk[2]}`);
-    cursor = await cursor.continue();
+  try {
+    const db = await getDB();
+    if (!db.objectStoreNames.contains("offline_tiles")) {
+      // Recovery hasn't yet caught up — return empty so the
+      // download falls back to "no tiles known", i.e. fetches
+      // everything. Safer than throwing.
+      return set;
+    }
+    const tx = db.transaction("offline_tiles", "readonly");
+    const range = IDBKeyRange.bound(minZ, maxZ);
+    let cursor = await tx.store.index("by-z").openKeyCursor(range);
+    while (cursor) {
+      const pk = cursor.primaryKey as [number, number, number];
+      set.add(`${pk[0]}/${pk[1]}/${pk[2]}`);
+      cursor = await cursor.continue();
+    }
+    await tx.done;
+  } catch (err) {
+    console.warn("[offline-tiles] getStoredKeysForZRange failed", err);
   }
-  await tx.done;
   return set;
 }

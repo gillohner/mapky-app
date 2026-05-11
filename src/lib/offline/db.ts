@@ -145,13 +145,30 @@ interface MapkyOfflineDB extends DBSchema {
 export type MapkyDB = IDBPDatabase<MapkyOfflineDB>;
 
 const DB_NAME = "mapky-offline";
-const DB_VERSION = 2;
+/**
+ * Schema versions:
+ *   1 — regions, own_resources, outbox, routes_cache
+ *   2 — adds offline_tiles
+ *   3 — re-bump to recover IDBs that landed on v2 without the
+ *       offline_tiles store (an upgrade racing with a still-open
+ *       tab can skip the store creation). The upgrade callback is
+ *       idempotent — every `createObjectStore` is guarded by an
+ *       `objectStoreNames.contains` check, so already-correct
+ *       databases see no change.
+ */
+const DB_VERSION = 3;
+const REQUIRED_STORES = [
+  "regions",
+  "own_resources",
+  "outbox",
+  "routes_cache",
+  "offline_tiles",
+] as const;
 
 let dbPromise: Promise<MapkyDB> | null = null;
 
-export function getDB(): Promise<MapkyDB> {
-  if (dbPromise) return dbPromise;
-  dbPromise = openDB<MapkyOfflineDB>(DB_NAME, DB_VERSION, {
+function openMapkyDB(version: number): Promise<MapkyDB> {
+  return openDB<MapkyOfflineDB>(DB_NAME, version, {
     upgrade(db) {
       if (!db.objectStoreNames.contains("regions")) {
         const store = db.createObjectStore("regions", { keyPath: "id" });
@@ -188,10 +205,35 @@ export function getDB(): Promise<MapkyDB> {
       console.warn("[offline-db] upgrade blocked by another tab");
     },
     blocking() {
-      // Older tab is open during an upgrade — close so the new one wins.
+      // Older tab is open during an upgrade — close so the new one
+      // wins. Drop our cached promise so the next getDB() opens a
+      // fresh connection at the new version.
       dbPromise?.then((db) => db.close());
       dbPromise = null;
     },
   });
+}
+
+export function getDB(): Promise<MapkyDB> {
+  if (dbPromise) return dbPromise;
+  dbPromise = (async () => {
+    let db = await openMapkyDB(DB_VERSION);
+    // Defensive recovery: if the on-disk schema is missing any
+    // required store (e.g. a previous upgrade was interrupted by a
+    // still-open tab and silently skipped a `createObjectStore`),
+    // close and re-open at the next version so the upgrade callback
+    // runs again with all guards intact.
+    const missing = REQUIRED_STORES.filter(
+      (name) => !db.objectStoreNames.contains(name),
+    );
+    if (missing.length > 0) {
+      console.warn(
+        `[offline-db] stores missing after upgrade: ${missing.join(", ")} — re-upgrading at v${DB_VERSION + 1}`,
+      );
+      db.close();
+      db = await openMapkyDB(DB_VERSION + 1);
+    }
+    return db;
+  })();
   return dbPromise;
 }
