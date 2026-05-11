@@ -6,6 +6,7 @@ import {
   type Bbox,
 } from "./tiles";
 import { putRegion, setRegionStatus } from "./regions";
+import { putOfflineTiles } from "./offline-tiles";
 import type { Region, RegionTier } from "./db";
 
 /**
@@ -45,12 +46,22 @@ export interface DownloadRegionInput {
   pmtilesUrl: string;
   minZoom?: number;
   maxZoom?: number;
+  /**
+   * Bypass the soft MAX_TILES safety cap. The dialog lets the user
+   * opt in to this after seeing the "Too large" warning — it's their
+   * storage, their patience with the upstream, their call. Note that
+   * the upstream's own rate limits still apply and will surface as
+   * per-tile errors in the progress callback.
+   */
+  force?: boolean;
 }
 
 export interface DownloadProgress {
   done: number;
   total: number;
   errored: number;
+  /** Real bytes written to IDB so far — for live size feedback. */
+  bytesStored: number;
 }
 
 export interface DownloadResult {
@@ -58,6 +69,8 @@ export interface DownloadResult {
   written: number;
   errored: number;
   abortedAt?: number;
+  /** Real bytes written to IDB. */
+  bytesStored: number;
 }
 
 export function planRegion(
@@ -101,9 +114,9 @@ export async function downloadRegion(
     minZoom,
     maxZoom,
   );
-  if (tooLarge) {
+  if (tooLarge && !input.force) {
     throw new Error(
-      `Region too large (${tileCount} tiles) — narrow the bbox or lower max zoom.`,
+      `Region too large (${tileCount} tiles) — narrow the bbox, lower max zoom, or set force: true to override the soft cap.`,
     );
   }
 
@@ -141,6 +154,30 @@ export async function downloadRegion(
   }
   const total = queue.length;
 
+  // Coalesced bytes-to-write buffer. Each worker pushes successful
+  // tile reads; a flusher task drains it in batches so we get the
+  // amortized cost of one IDB tx per ~256 tiles rather than one per
+  // tile. Critical for big regions — single-tile transactions chew
+  // through wall-clock time.
+  const BATCH_SIZE = 256;
+  type Pending = { z: number; x: number; y: number; bytes: Uint8Array };
+  const pendingWrites: Pending[] = [];
+  let bytesStored = 0;
+  let writeError: unknown = null;
+
+  const flushPending = async (force: boolean) => {
+    if (writeError) return;
+    if (!force && pendingWrites.length < BATCH_SIZE) return;
+    const batch = pendingWrites.splice(0, pendingWrites.length);
+    if (batch.length === 0) return;
+    try {
+      await putOfflineTiles(batch);
+      for (const t of batch) bytesStored += t.bytes.byteLength;
+    } catch (err) {
+      writeError = err;
+    }
+  };
+
   let done = 0;
   let errored = 0;
   const workers = Array.from({ length: FETCH_CONCURRENCY }, async () => {
@@ -150,13 +187,29 @@ export async function downloadRegion(
       if (!next) return;
       const [z, x, y] = next;
       try {
-        await pm.getZxy(z, x, y, callbacks.signal);
+        const resp = await pm.getZxy(z, x, y, callbacks.signal);
+        if (resp?.data) {
+          const buf = resp.data;
+          // pmtiles returns ArrayBuffer; copy into a Uint8Array so the
+          // IDB record holds bytes regardless of source backing.
+          const bytes = new Uint8Array(buf.byteLength);
+          bytes.set(new Uint8Array(buf));
+          pendingWrites.push({ z, x, y, bytes });
+          if (pendingWrites.length >= BATCH_SIZE) {
+            await flushPending(false);
+          }
+        }
       } catch {
         // Out-of-coverage or transient HTTP — count and move on.
         errored += 1;
       }
       done += 1;
-      callbacks.onProgress?.({ done, total, errored });
+      callbacks.onProgress?.({
+        done,
+        total,
+        errored,
+        bytesStored,
+      });
     }
   });
 
@@ -167,15 +220,30 @@ export async function downloadRegion(
     throw err;
   }
 
+  // Drain the last partial batch.
+  await flushPending(true);
+  if (writeError) {
+    await setRegionStatus(input.id, "error", String(writeError));
+    throw writeError;
+  }
+
   if (callbacks.signal?.aborted) {
     await setRegionStatus(input.id, "error", "Cancelled");
-    return { total, written: done - errored, errored, abortedAt: done };
+    return {
+      total,
+      written: done - errored,
+      errored,
+      abortedAt: done,
+      bytesStored,
+    };
   }
 
   region.status = "ready";
   region.lastUpdatedAt = Date.now();
-  region.sizeBytes = estimateTilesBytes(done - errored);
+  // Use the real number of bytes we actually stored, not the per-tile
+  // estimate — so the settings page reflects on-disk reality.
+  region.sizeBytes = bytesStored;
   await putRegion(region);
 
-  return { total, written: done - errored, errored };
+  return { total, written: done - errored, errored, bytesStored };
 }

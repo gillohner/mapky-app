@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
+import { addProtomapsProtocol } from "@/lib/map/protomaps";
 import { Maximize2 } from "lucide-react";
 import { createMapStyle } from "@/lib/map/style";
 import { pickFeature } from "@/lib/map/pick-feature";
@@ -105,6 +106,11 @@ export function MapView() {
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+
+    // Register the offline-aware pmtiles protocol once, before the
+    // map mounts — handler is idempotent so subsequent calls are
+    // free.
+    addProtomapsProtocol();
 
     const map = new maplibregl.Map({
       container: containerRef.current,

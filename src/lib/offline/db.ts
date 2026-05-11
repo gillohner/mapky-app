@@ -88,6 +88,27 @@ export interface RouteCacheEntry {
   accessedAt: number;
 }
 
+/**
+ * Persisted PMTiles tile bytes — what `region-download` writes after
+ * fetching each tile via the pmtiles JS client, and what our custom
+ * MapLibre protocol returns when MapLibre asks for that tile while
+ * offline. Bytes are the decompressed MVT payload (whatever pmtiles
+ * JS returned from `getZxy`), so MapLibre consumes them as-is.
+ *
+ * Keyed by `[z, x, y]` — region overlap stores one copy of each
+ * tile, not N. Deleting a region drops the region row but leaves
+ * its tiles in place (they're still useful for any overlapping
+ * region or for ad-hoc panning).
+ */
+export interface OfflineTile {
+  z: number;
+  x: number;
+  y: number;
+  bytes: Uint8Array;
+  sizeBytes: number;
+  storedAt: number;
+}
+
 interface MapkyOfflineDB extends DBSchema {
   regions: {
     key: string;
@@ -109,12 +130,17 @@ interface MapkyOfflineDB extends DBSchema {
     value: RouteCacheEntry;
     indexes: { "by-accessedAt": number };
   };
+  offline_tiles: {
+    key: [number, number, number];
+    value: OfflineTile;
+    indexes: { "by-z": number };
+  };
 }
 
 export type MapkyDB = IDBPDatabase<MapkyOfflineDB>;
 
 const DB_NAME = "mapky-offline";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<MapkyDB> | null = null;
 
@@ -145,6 +171,12 @@ export function getDB(): Promise<MapkyDB> {
       if (!db.objectStoreNames.contains("routes_cache")) {
         const store = db.createObjectStore("routes_cache", { keyPath: "key" });
         store.createIndex("by-accessedAt", "accessedAt");
+      }
+      if (!db.objectStoreNames.contains("offline_tiles")) {
+        const store = db.createObjectStore("offline_tiles", {
+          keyPath: ["z", "x", "y"],
+        });
+        store.createIndex("by-z", "z");
       }
     },
     blocked() {

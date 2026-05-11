@@ -53,9 +53,11 @@ export function AddRegionDialog({
   const [radiusKm, setRadiusKm] = useState(5);
   const [maxZoom, setMaxZoom] = useState(14);
   const [downloading, setDownloading] = useState(false);
+  const [forceOversize, setForceOversize] = useState(false);
   const [progress, setProgress] = useState<{
     done: number;
     total: number;
+    bytesStored: number;
   } | null>(null);
 
   useEffect(() => {
@@ -136,12 +138,14 @@ export function AddRegionDialog({
 
   const handleDownload = async () => {
     if (!selection || !bbox || !plan) return;
-    if (plan.tooLarge) {
-      toast.error("Region too large — reduce max zoom or pick a smaller area.");
+    if (plan.tooLarge && !forceOversize) {
+      toast.error(
+        "Region too large — reduce max zoom, pick a smaller area, or enable the override.",
+      );
       return;
     }
     setDownloading(true);
-    setProgress({ done: 0, total: plan.tileCount });
+    setProgress({ done: 0, total: plan.tileCount, bytesStored: 0 });
     const { id, name } = identityOf(selection);
     try {
       await downloadRegion(
@@ -153,9 +157,15 @@ export function AddRegionDialog({
           pmtilesUrl: pmtilesUrlWithKey(),
           minZoom: 0,
           maxZoom,
+          force: forceOversize,
         },
         {
-          onProgress: (p) => setProgress({ done: p.done, total: p.total }),
+          onProgress: (p) =>
+            setProgress({
+              done: p.done,
+              total: p.total,
+              bytesStored: p.bytesStored,
+            }),
         },
       );
       toast.success(`Downloaded ${name} for offline use`);
@@ -381,9 +391,24 @@ export function AddRegionDialog({
                     </span>
                   </div>
                   {plan.tooLarge && (
-                    <p className="mt-1 text-red-600 dark:text-red-400">
-                      Too large — reduce max zoom or pick a smaller area.
-                    </p>
+                    <>
+                      <p className="mt-1 text-red-600 dark:text-red-400">
+                        Too large for the safety cap. Reduce max zoom, pick
+                        a smaller area, or override below.
+                      </p>
+                      <label className="mt-2 flex items-start gap-2 text-[11px] text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={forceOversize}
+                          onChange={(e) => setForceOversize(e.target.checked)}
+                          className="mt-0.5 accent-accent"
+                        />
+                        <span>
+                          I understand this will use a lot of storage and
+                          may take a long time — download anyway.
+                        </span>
+                      </label>
+                    </>
                   )}
                   {!plan.tooLarge &&
                     plan.tileCount > LARGE_DOWNLOAD_TILES && (
@@ -400,7 +425,8 @@ export function AddRegionDialog({
                   <div className="mb-1 flex justify-between text-xs">
                     <span className="text-muted">Downloading…</span>
                     <span className="font-mono text-foreground">
-                      {progress.done} / {progress.total}
+                      {progress.done} / {progress.total} ·{" "}
+                      {formatBytes(progress.bytesStored)}
                     </span>
                   </div>
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
@@ -426,7 +452,11 @@ export function AddRegionDialog({
           </button>
           <button
             onClick={handleDownload}
-            disabled={!selection || downloading || plan?.tooLarge}
+            disabled={
+              !selection ||
+              downloading ||
+              (plan?.tooLarge && !forceOversize)
+            }
             className="inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
           >
             <Download className="h-3 w-3" />

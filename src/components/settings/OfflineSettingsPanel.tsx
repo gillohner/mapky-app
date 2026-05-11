@@ -27,6 +27,11 @@ import {
   clearRoutesCache,
 } from "@/lib/offline/routes-cache";
 import {
+  clearAllOfflineTiles,
+  countOfflineTiles,
+  totalOfflineTilesBytes,
+} from "@/lib/offline/offline-tiles";
+import {
   countOwnByUserType,
   clearUserOwnResources,
 } from "@/lib/offline/own-resources";
@@ -75,22 +80,29 @@ export function OfflineSettingsPanel() {
   const [routesCount, setRoutesCount] = useState(0);
   const [outboxEntries, setOutboxEntries] = useState<OutboxEntry[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
+  const [tilesCount, setTilesCount] = useState(0);
+  const [tilesBytes, setTilesBytes] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
   const refreshAll = useCallback(async () => {
-    const [est, persist, routes, entries, regs] = await Promise.all([
-      getStorageEstimate(),
-      isPersisted(),
-      countCachedRoutes(),
-      listOutboxAll(),
-      listRegions(),
-    ]);
+    const [est, persist, routes, entries, regs, tCount, tBytes] =
+      await Promise.all([
+        getStorageEstimate(),
+        isPersisted(),
+        countCachedRoutes(),
+        listOutboxAll(),
+        listRegions(),
+        countOfflineTiles(),
+        totalOfflineTilesBytes(),
+      ]);
     setStorage(est);
     setPersistent(persist);
     setRoutesCount(routes);
     setOutboxEntries(entries);
     setRegions(regs);
+    setTilesCount(tCount);
+    setTilesBytes(tBytes);
     if (publicKey) {
       setOwnCounts(await countOwnByUserType(publicKey));
     } else {
@@ -136,6 +148,12 @@ export function OfflineSettingsPanel() {
   const handleClearRoutes = async () => {
     await clearRoutesCache();
     toast.success("Cleared cached routes");
+    await refreshAll();
+  };
+
+  const handleClearTiles = async () => {
+    await clearAllOfflineTiles();
+    toast.success("Cleared all offline tiles");
     await refreshAll();
   };
 
@@ -335,9 +353,9 @@ export function OfflineSettingsPanel() {
           icon={<MapPin className="h-4 w-4" />}
           title="Offline regions"
           subtitle={
-            regions.length === 0
-              ? "Pre-warm a region's map tiles so the map renders fully even without network."
-              : `${regions.length} region${regions.length === 1 ? "" : "s"} downloaded.`
+            tilesCount === 0
+              ? "Download a region to make its map tiles available offline."
+              : `${tilesCount} tiles stored locally · ${formatBytes(tilesBytes)} on disk.`
           }
         >
           {regions.length > 0 && (
@@ -381,17 +399,27 @@ export function OfflineSettingsPanel() {
               ))}
             </ul>
           )}
-          <button
-            onClick={() => setAddOpen(true)}
-            className="mt-3 inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-surface/60"
-          >
-            <Plus className="h-3 w-3" />
-            Add region
-          </button>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => setAddOpen(true)}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-surface/60"
+            >
+              <Plus className="h-3 w-3" />
+              Add region
+            </button>
+            {tilesCount > 0 && (
+              <button
+                onClick={handleClearTiles}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+              >
+                <Trash2 className="h-3 w-3" />
+                Clear all tiles
+              </button>
+            )}
+          </div>
           <p className="mt-2 text-[11px] text-muted">
-            Tiles are stored in the browser's HTTP cache. They're available
-            as long as the cache hasn't aged them out; a future update will
-            move them into a dedicated per-region store.
+            Tiles are stored in IndexedDB and served back through a custom
+            MapLibre protocol — they survive reloads and work fully offline.
           </p>
         </Section>
       </div>
