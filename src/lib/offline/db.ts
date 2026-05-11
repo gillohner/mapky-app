@@ -37,6 +37,11 @@ export interface Region {
   btcMapDataAt?: number;
   status: RegionStatus;
   error?: string;
+  /** Highest zoom level requested at download time. Used by the
+   *  auto-resume path so a reload mid-download knows where to pick
+   *  back up. Optional for back-compat with rows written before this
+   *  field existed. */
+  maxZoom?: number;
 }
 
 export type OwnResourceType =

@@ -5,7 +5,7 @@ import {
   type Bbox,
 } from "./tiles";
 import { putRegion, setRegionStatus } from "./regions";
-import { putOfflineTiles } from "./offline-tiles";
+import { getStoredKeysForZRange, putOfflineTiles } from "./offline-tiles";
 import { getTileTemplate, tileUrlFor } from "./tile-source";
 import type { Region, RegionTier } from "./db";
 
@@ -131,6 +131,7 @@ export async function downloadRegion(
     downloadedAt: Date.now(),
     lastUpdatedAt: Date.now(),
     status: "downloading",
+    maxZoom,
   };
   await putRegion(region);
 
@@ -146,11 +147,21 @@ export async function downloadRegion(
     throw err;
   }
 
-  const queue: Array<[number, number, number]> = [];
+  const fullQueue: Array<[number, number, number]> = [];
   for (let z = minZoom; z <= maxZoom; z++) {
-    queue.push(...tilesInBbox(input.bbox, z));
+    fullQueue.push(...tilesInBbox(input.bbox, z));
   }
-  const total = queue.length;
+  const total = fullQueue.length;
+
+  // Skip tiles we already have on disk — critical for resume after
+  // reload (where the region row's status is still "downloading"
+  // but the previous fetch loop is gone), and a nice speedup for
+  // overlapping region picks even on cold runs.
+  const stored = await getStoredKeysForZRange(minZoom, maxZoom);
+  const queue: Array<[number, number, number]> = fullQueue.filter(
+    ([z, x, y]) => !stored.has(`${z}/${x}/${y}`),
+  );
+  const skippedFromStart = total - queue.length;
 
   // Coalesced bytes-to-write buffer. Each worker pushes successful
   // tile reads; a flusher task drains it in batches so we get the
@@ -176,8 +187,19 @@ export async function downloadRegion(
     }
   };
 
-  let done = 0;
+  // Pre-count the tiles we already had on disk so progress and the
+  // final result reflect the *region's* completeness, not just the
+  // bytes we touched this run.
+  let done = skippedFromStart;
   let errored = 0;
+  if (skippedFromStart > 0) {
+    callbacks.onProgress?.({
+      done,
+      total,
+      errored,
+      bytesStored,
+    });
+  }
   const workers = Array.from({ length: FETCH_CONCURRENCY }, async () => {
     while (queue.length > 0) {
       if (callbacks.signal?.aborted) return;

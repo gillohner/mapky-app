@@ -21,6 +21,7 @@ import { MainMapCaptureOverlay } from "@/components/capture/MainMapCaptureOverla
 import { DirectionsLayer } from "@/components/route/DirectionsLayer";
 import { OfflineBadge } from "@/components/pwa/OfflineBadge";
 import { OwnDataSync } from "@/components/offline/OwnDataSync";
+import { OfflineBoot } from "@/components/offline/OfflineBoot";
 import { Toaster } from "sonner";
 import { useUrlSync } from "@/hooks/use-url-sync";
 
@@ -34,6 +35,7 @@ function RootLayout() {
     <QueryProvider>
       <AuthProvider>
         <OwnDataSync />
+        <OfflineBoot />
         <div className="relative h-dvh w-screen overflow-hidden">
           <MapView />
           <PlaceAnnotationsLayer />

@@ -5,7 +5,7 @@ import {
   type DownloadProgress,
   type DownloadRegionInput,
 } from "@/lib/offline/region-download";
-import { putRegion } from "@/lib/offline/regions";
+import { listRegions, putRegion } from "@/lib/offline/regions";
 
 /**
  * In-memory tracker for region downloads. The actual fetch loop runs
@@ -40,6 +40,14 @@ interface Actions {
   ) => Promise<void>;
   cancel: (id: string) => void;
   clear: (id: string) => void;
+  /**
+   * Look for region rows stuck in `status: "downloading"` (i.e. a
+   * previous tab was reloaded mid-download) and re-kick them with
+   * the same params. Idempotent and safe to call on every app
+   * boot — `start()`'s "already running" guard prevents duplicates
+   * if a download is already in flight.
+   */
+  resumeStuck: () => Promise<number>;
 }
 
 export const useRegionDownloadStore = create<State & Actions>((set, get) => ({
@@ -91,6 +99,7 @@ export const useRegionDownloadStore = create<State & Actions>((set, get) => ({
         downloadedAt: Date.now(),
         lastUpdatedAt: Date.now(),
         status: "downloading",
+        maxZoom: input.maxZoom,
       });
       onAdded?.();
     } catch {
@@ -175,5 +184,31 @@ export const useRegionDownloadStore = create<State & Actions>((set, get) => ({
       const { [id]: _gone, ...rest } = s.active;
       return { ...s, active: rest };
     });
+  },
+
+  resumeStuck: async () => {
+    const all = await listRegions();
+    const stuck = all.filter(
+      (r) => r.status === "downloading" && !get().active[r.id],
+    );
+    if (stuck.length === 0) return 0;
+    for (const r of stuck) {
+      const [west, south, east, north] = r.bbox;
+      // No `await` — we want stuck downloads running in parallel,
+      // not serialized.
+      void get().start({
+        id: r.id,
+        name: r.name,
+        bbox: { west, south, east, north },
+        tier: r.tier,
+        minZoom: 0,
+        maxZoom: r.maxZoom ?? 14,
+        force: true,
+      });
+    }
+    toast.info(
+      `Resuming ${stuck.length} interrupted download${stuck.length === 1 ? "" : "s"}…`,
+    );
+    return stuck.length;
   },
 }));

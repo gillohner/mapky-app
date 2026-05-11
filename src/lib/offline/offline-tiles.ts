@@ -82,3 +82,31 @@ export async function clearAllOfflineTiles(): Promise<void> {
   const db = await getDB();
   await db.clear("offline_tiles");
 }
+
+/**
+ * Build a Set of stored "z/x/y" keys for every tile whose z falls in
+ * [minZ, maxZ]. Used by the download path to skip tiles already on
+ * disk — critical for resume after reload, and a worthwhile speedup
+ * for overlapping regions even on first runs.
+ *
+ * Single cursor scan against the `by-z` index keyed-only (no value
+ * reads), so the cost is roughly O(N) over the index entries — much
+ * cheaper than N individual `get()` calls.
+ */
+export async function getStoredKeysForZRange(
+  minZ: number,
+  maxZ: number,
+): Promise<Set<string>> {
+  const db = await getDB();
+  const tx = db.transaction("offline_tiles", "readonly");
+  const set = new Set<string>();
+  const range = IDBKeyRange.bound(minZ, maxZ);
+  let cursor = await tx.store.index("by-z").openKeyCursor(range);
+  while (cursor) {
+    const pk = cursor.primaryKey as [number, number, number];
+    set.add(`${pk[0]}/${pk[1]}/${pk[2]}`);
+    cursor = await cursor.continue();
+  }
+  await tx.done;
+  return set;
+}
