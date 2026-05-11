@@ -1,22 +1,32 @@
-import { useEffect, useState } from "react";
-import { Download, Search, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Download, Globe, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { searchPlaces, type NominatimSearchResult } from "@/lib/api/nominatim";
 import { config } from "@/lib/config";
 import { downloadRegion, planRegion } from "@/lib/offline/region-download";
 import { formatBytes } from "@/lib/offline/quota";
+import { REGION_PRESETS, type RegionPreset } from "@/lib/offline/region-presets";
 import type { Bbox } from "@/lib/offline/tiles";
 
 /**
- * Modal-style dialog for picking a city to download. Search uses
- * Nominatim via the existing cached plugin proxy; the bbox is
- * synthesised from the result's lat/lon plus a fixed buffer so we
- * don't need a new search shape just for boundingboxes. A "City
- * radius" slider lets the user trade size for coverage.
+ * "Add region" dialog with two entry points:
  *
- * On confirm: kicks off `downloadRegion` with progress callbacks and
- * dismisses on completion. The parent reloads the regions list.
+ *   1. Continent presets — large hardcoded bboxes that aren't a single
+ *      OSM relation. Defaulted to a low max-zoom because tile counts
+ *      blow up fast at continent scale.
+ *   2. Place search — runs Nominatim via the plugin's cached proxy.
+ *      Admin-boundary results (countries / states / cities) carry the
+ *      real `boundingbox` from upstream, so the dialog uses that as-is.
+ *      Point hits (POIs) fall back to a synthetic lat/lon ± radius box.
+ *
+ * Both paths feed the same downloadRegion() loop — the only difference
+ * is how the bbox is sourced.
  */
+
+type Selection =
+  | { kind: "preset"; preset: RegionPreset }
+  | { kind: "search"; result: NominatimSearchResult };
+
 export function AddRegionDialog({
   onClose,
   onAdded,
@@ -27,7 +37,7 @@ export function AddRegionDialog({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<NominatimSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
-  const [selected, setSelected] = useState<NominatimSearchResult | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
   const [radiusKm, setRadiusKm] = useState(5);
   const [maxZoom, setMaxZoom] = useState(14);
   const [downloading, setDownloading] = useState(false);
@@ -55,38 +65,85 @@ export function AddRegionDialog({
     return () => clearTimeout(t);
   }, [query]);
 
-  // Synthetic bbox: 1 km ≈ 0.009° latitude / (cos(lat) × 0.009°) longitude
-  // — close enough for picking a download footprint.
-  const bbox: Bbox | null = selected
-    ? (() => {
-        const dLat = (radiusKm * 0.009) / 1;
-        const dLon =
-          (radiusKm * 0.009) /
-          Math.max(0.1, Math.cos((selected.lat * Math.PI) / 180));
-        return {
-          west: selected.lon - dLon,
-          south: selected.lat - dLat,
-          east: selected.lon + dLon,
-          north: selected.lat + dLat,
-        };
-      })()
-    : null;
+  /** Final bbox to download — varies by selection kind. */
+  const bbox: Bbox | null = useMemo(() => {
+    if (!selection) return null;
+    if (selection.kind === "preset") return selection.preset.bbox;
+    const result = selection.result;
+    if (result.boundingbox) {
+      const [south, north, west, east] = result.boundingbox;
+      return { south, north, west, east };
+    }
+    // Point hit — synthesise a square box. 1 km ≈ 0.009° latitude;
+    // longitude scaled by cos(lat) so high-latitude squares don't
+    // turn into rectangles in tile space.
+    const dLat = radiusKm * 0.009;
+    const dLon =
+      (radiusKm * 0.009) / Math.max(0.1, Math.cos((result.lat * Math.PI) / 180));
+    return {
+      west: result.lon - dLon,
+      south: result.lat - dLat,
+      east: result.lon + dLon,
+      north: result.lat + dLat,
+    };
+  }, [selection, radiusKm]);
+
+  const usesSyntheticBbox =
+    selection?.kind === "search" && !selection.result.boundingbox;
 
   const plan = bbox ? planRegion(bbox, 0, maxZoom) : null;
 
+  const handleSelectPreset = (preset: RegionPreset) => {
+    setSelection({ kind: "preset", preset });
+    setQuery(preset.name);
+    setResults([]);
+    setMaxZoom(preset.defaultMaxZoom);
+  };
+
+  const handleSelectResult = (r: NominatimSearchResult) => {
+    setSelection({ kind: "search", result: r });
+    setQuery(r.display_name.split(",")[0] || r.name);
+    setResults([]);
+    // Lower the ceiling for big admin areas — a country at z=14 is
+    // hundreds of MB. Heuristic: 4° wide → 12, 10° → 10, 30°+ → 7.
+    if (r.boundingbox) {
+      const [south, north, west, east] = r.boundingbox;
+      const span = Math.max(north - south, east - west);
+      const z = span > 30 ? 7 : span > 10 ? 10 : span > 4 ? 12 : 14;
+      setMaxZoom(z);
+    } else {
+      setMaxZoom(14);
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelection(null);
+    setQuery("");
+    setResults([]);
+  };
+
   const handleDownload = async () => {
-    if (!selected || !bbox || !plan) return;
+    if (!selection || !bbox || !plan) return;
     if (plan.tooLarge) {
-      toast.error("Region too large — reduce radius or max zoom.");
+      toast.error("Region too large — reduce max zoom or pick a smaller area.");
       return;
     }
     setDownloading(true);
     setProgress({ done: 0, total: plan.tileCount });
+    const id =
+      selection.kind === "preset"
+        ? selection.preset.id
+        : `${selection.result.osm_type}:${selection.result.osm_id}`;
+    const name =
+      selection.kind === "preset"
+        ? selection.preset.name
+        : selection.result.display_name.split(",")[0] ||
+          selection.result.name;
     try {
       await downloadRegion(
         {
-          id: `${selected.osm_type}:${selected.osm_id}`,
-          name: selected.display_name.split(",")[0] || selected.name,
+          id,
+          name,
           bbox,
           tier: "basic",
           pmtilesUrl: pmtilesUrlWithKey(),
@@ -97,7 +154,7 @@ export function AddRegionDialog({
           onProgress: (p) => setProgress({ done: p.done, total: p.total }),
         },
       );
-      toast.success(`Downloaded ${selected.name} for offline use`);
+      toast.success(`Downloaded ${name} for offline use`);
       onAdded();
       onClose();
     } catch (err) {
@@ -122,66 +179,118 @@ export function AddRegionDialog({
         </header>
 
         <div className="space-y-4 p-4">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-muted">
-              City
-            </label>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search city or place"
-                className="w-full rounded-md border border-border bg-surface px-7 py-1.5 text-sm focus:border-accent focus:outline-none"
-                autoFocus
-              />
-            </div>
-            {results.length > 0 && !selected && (
-              <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border border-border bg-surface">
-                {results.slice(0, 8).map((r) => (
-                  <li key={`${r.osm_type}:${r.osm_id}`}>
-                    <button
-                      onClick={() => {
-                        setSelected(r);
-                        setQuery(r.display_name.split(",")[0] || r.name);
-                        setResults([]);
-                      }}
-                      className="w-full px-2 py-1.5 text-left text-xs hover:bg-background"
-                    >
-                      <div className="font-medium">{r.name || r.display_name}</div>
-                      <div className="truncate text-muted">
-                        {r.display_name}
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {searching && (
-              <p className="mt-1 text-[11px] text-muted">searching…</p>
-            )}
-          </div>
-
-          {selected && (
+          {!selection && (
             <>
               <div>
-                <label className="mb-1 flex items-center justify-between text-xs font-medium text-muted">
-                  <span>Radius around the centre</span>
-                  <span className="font-mono text-foreground">
-                    {radiusKm} km
-                  </span>
+                <label className="mb-1 block text-xs font-medium text-muted">
+                  Continents
                 </label>
-                <input
-                  type="range"
-                  min={1}
-                  max={50}
-                  step={1}
-                  value={radiusKm}
-                  onChange={(e) => setRadiusKm(Number(e.target.value))}
-                  className="w-full"
-                />
+                <div className="flex flex-wrap gap-1.5">
+                  {REGION_PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => handleSelectPreset(p)}
+                      className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-surface/60"
+                    >
+                      <Globe className="h-3 w-3" />
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">
+                  Or search a country, city, or place
+                </label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+                  <input
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Switzerland, Manhattan, Eiffel Tower…"
+                    className="w-full rounded-md border border-border bg-surface px-7 py-1.5 text-sm focus:border-accent focus:outline-none"
+                    autoFocus
+                  />
+                </div>
+                {results.length > 0 && (
+                  <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border border-border bg-surface">
+                    {results.slice(0, 8).map((r) => (
+                      <li key={`${r.osm_type}:${r.osm_id}`}>
+                        <button
+                          onClick={() => handleSelectResult(r)}
+                          className="w-full px-2 py-1.5 text-left text-xs hover:bg-background"
+                        >
+                          <div className="flex items-center gap-1.5 font-medium text-foreground">
+                            {r.name || r.display_name}
+                            {r.boundingbox && (
+                              <span className="rounded bg-accent/10 px-1 py-px text-[9px] uppercase tracking-wide text-accent">
+                                admin
+                              </span>
+                            )}
+                          </div>
+                          <div className="truncate text-muted">
+                            {r.display_name}
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {searching && (
+                  <p className="mt-1 text-[11px] text-muted">searching…</p>
+                )}
+              </div>
+            </>
+          )}
+
+          {selection && (
+            <>
+              <div className="flex items-center justify-between rounded-md border border-border bg-surface px-3 py-2 text-xs">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium text-foreground">
+                    {selection.kind === "preset"
+                      ? selection.preset.name
+                      : selection.result.display_name.split(",")[0] ||
+                        selection.result.name}
+                  </div>
+                  <div className="text-[11px] text-muted">
+                    {selection.kind === "preset"
+                      ? "Continent preset"
+                      : selection.result.boundingbox
+                        ? "Admin boundary"
+                        : "Point — using radius around centre"}
+                  </div>
+                </div>
+                <button
+                  onClick={handleClearSelection}
+                  className="ml-2 rounded p-1 text-muted hover:text-foreground"
+                  aria-label="Change selection"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {usesSyntheticBbox && (
+                <div>
+                  <label className="mb-1 flex items-center justify-between text-xs font-medium text-muted">
+                    <span>Radius around the centre</span>
+                    <span className="font-mono text-foreground">
+                      {radiusKm} km
+                    </span>
+                  </label>
+                  <input
+                    type="range"
+                    min={1}
+                    max={50}
+                    step={1}
+                    value={radiusKm}
+                    onChange={(e) => setRadiusKm(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="mb-1 flex items-center justify-between text-xs font-medium text-muted">
@@ -190,7 +299,7 @@ export function AddRegionDialog({
                 </label>
                 <input
                   type="range"
-                  min={8}
+                  min={4}
                   max={15}
                   step={1}
                   value={maxZoom}
@@ -199,6 +308,7 @@ export function AddRegionDialog({
                 />
                 <p className="mt-1 text-[11px] text-muted">
                   Higher zoom shows more detail but downloads more tiles.
+                  Continent-scale regions stay readable around z=5–7.
                 </p>
               </div>
 
@@ -216,7 +326,7 @@ export function AddRegionDialog({
                   </div>
                   {plan.tooLarge && (
                     <p className="mt-1 text-amber-600 dark:text-amber-400">
-                      Too large — reduce radius or max zoom.
+                      Too large — reduce max zoom or pick a smaller area.
                     </p>
                   )}
                 </div>
@@ -253,7 +363,7 @@ export function AddRegionDialog({
           </button>
           <button
             onClick={handleDownload}
-            disabled={!selected || downloading || plan?.tooLarge}
+            disabled={!selection || downloading || plan?.tooLarge}
             className="inline-flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40"
           >
             <Download className="h-3 w-3" />
