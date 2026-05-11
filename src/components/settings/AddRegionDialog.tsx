@@ -139,9 +139,10 @@ export function AddRegionDialog({
       return;
     }
     const { id, name } = identityOf(selection);
-    // Fire-and-forget: the store owns the lifecycle, the dialog
-    // closes immediately so the user can keep using the app while
-    // the download runs in the background.
+    // Fire-and-forget: the store owns the lifecycle (including
+    // staging the region row in IDB and firing onAdded once the
+    // row exists), so the dialog can close immediately while the
+    // fetch loop continues in the background.
     void start(
       {
         id,
@@ -155,7 +156,6 @@ export function AddRegionDialog({
       onAdded,
     );
     toast.info(`Starting download for ${name}…`);
-    onAdded();
     onClose();
   };
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Database,
@@ -18,48 +18,24 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useOutboxCount } from "@/hooks/use-outbox-count";
 import {
   formatBytes,
-  getStorageEstimate,
-  isPersisted,
   requestPersistent,
-  type StorageEstimate,
 } from "@/lib/offline/quota";
-import {
-  countCachedRoutes,
-  clearRoutesCache,
-} from "@/lib/offline/routes-cache";
-import {
-  clearAllOfflineTiles,
-  countOfflineTiles,
-  totalOfflineTilesBytes,
-} from "@/lib/offline/offline-tiles";
-import {
-  countOwnByUserType,
-  clearUserOwnResources,
-} from "@/lib/offline/own-resources";
-import {
-  listAll as listOutboxAll,
-  removeOutboxEntry,
-} from "@/lib/offline/outbox";
+import { clearRoutesCache } from "@/lib/offline/routes-cache";
+import { clearUserOwnResources } from "@/lib/offline/own-resources";
+import { removeOutboxEntry } from "@/lib/offline/outbox";
 import { syncOwnResources } from "@/lib/offline/sync-own";
 import { drainOutbox } from "@/lib/offline/outbox-drain";
-import { listRegions, deleteRegion } from "@/lib/offline/regions";
+import { deleteRegion } from "@/lib/offline/regions";
+import { clearAllOfflineTiles } from "@/lib/offline/offline-tiles";
 import { useRegionDownloadStore } from "@/stores/region-download-store";
+import { useOfflineStatsStore } from "@/stores/offline-stats-store";
 import type {
   OutboxEntry,
   OwnResourceType,
   Region,
 } from "@/lib/offline/db";
 import { AddRegionDialog } from "./AddRegionDialog";
-
-interface OwnCounts {
-  post: number;
-  review: number;
-  collection: number;
-  incident: number;
-  geoCapture: number;
-  sequence: number;
-  route: number;
-}
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 
 const OWN_TYPE_LABELS: Record<OwnResourceType, string> = {
   post: "Posts",
@@ -71,60 +47,89 @@ const OWN_TYPE_LABELS: Record<OwnResourceType, string> = {
   route: "Routes",
 };
 
+type ConfirmKind =
+  | { kind: "clear-own" }
+  | { kind: "clear-routes" }
+  | { kind: "clear-tiles" }
+  | { kind: "remove-region"; region: Region }
+  | { kind: "drop-outbox"; entry: OutboxEntry };
+
 export function OfflineSettingsPanel() {
   const navigate = useNavigate();
   const { publicKey, session } = useAuth();
   const pending = useOutboxCount(2000);
 
-  const [storage, setStorage] = useState<StorageEstimate | null>(null);
-  const [persistent, setPersistent] = useState(false);
-  const [ownCounts, setOwnCounts] = useState<OwnCounts | null>(null);
-  const [routesCount, setRoutesCount] = useState(0);
-  const [outboxEntries, setOutboxEntries] = useState<OutboxEntry[]>([]);
-  const [regions, setRegions] = useState<Region[]>([]);
-  const [tilesCount, setTilesCount] = useState(0);
-  const [tilesBytes, setTilesBytes] = useState(0);
-  const [syncing, setSyncing] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
+  // Hoisted snapshot — survives route changes so re-entering the
+  // panel paints last-known values instantly while a background
+  // refresh runs.
+  const stats = useOfflineStatsStore();
+  const {
+    storage,
+    persistent,
+    regions,
+    outboxEntries,
+    routesCount,
+    tilesCount,
+    tilesBytes,
+    ownCounts,
+    refresh,
+    patch,
+    refreshing,
+  } = stats;
+  const loaded = stats.loadedAt !== null;
 
-  // Live progress for any region currently downloading in the
-  // background store. Refresh on changes so progress bars animate.
   const activeDownloads = useRegionDownloadStore((s) => s.active);
   const cancelDownload = useRegionDownloadStore((s) => s.cancel);
   const clearDownload = useRegionDownloadStore((s) => s.clear);
 
-  const refreshAll = useCallback(async () => {
-    const [est, persist, routes, entries, regs, tCount, tBytes] =
-      await Promise.all([
-        getStorageEstimate(),
-        isPersisted(),
-        countCachedRoutes(),
-        listOutboxAll(),
-        listRegions(),
-        countOfflineTiles(),
-        totalOfflineTilesBytes(),
-      ]);
-    setStorage(est);
-    setPersistent(persist);
-    setRoutesCount(routes);
-    setOutboxEntries(entries);
-    setRegions(regs);
-    setTilesCount(tCount);
-    setTilesBytes(tBytes);
-    if (publicKey) {
-      setOwnCounts(await countOwnByUserType(publicKey));
-    } else {
-      setOwnCounts(null);
-    }
-  }, [publicKey]);
+  // Stable signature of which downloads are present (independent of
+  // per-tile progress updates). Lets us refresh the panel data once
+  // when a download is added/removed/finished, without firing on
+  // every progress callback.
+  const downloadSig = useMemo(
+    () =>
+      Object.values(activeDownloads)
+        .map((d) => `${d.id}:${d.status}`)
+        .sort()
+        .join(","),
+    [activeDownloads],
+  );
+
+  const [syncing, setSyncing] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmKind | null>(null);
 
   useEffect(() => {
-    void refreshAll();
-  }, [refreshAll, pending]);
+    void refresh(publicKey);
+  }, [refresh, publicKey, pending, downloadSig]);
+
+  // Merge IDB regions + any active downloads that haven't been
+  // committed to IDB yet, so a freshly-started download shows a row
+  // immediately (and its progress can render).
+  const displayedRegions = useMemo<Region[]>(() => {
+    const byId = new Map<string, Region>();
+    for (const r of regions) byId.set(r.id, r);
+    for (const id of Object.keys(activeDownloads)) {
+      if (byId.has(id)) continue;
+      const d = activeDownloads[id];
+      byId.set(id, {
+        id,
+        name: d.name,
+        bbox: [0, 0, 0, 0],
+        tier: "basic",
+        pmtilesPath: "",
+        sizeBytes: d.progress.bytesStored,
+        downloadedAt: Date.now(),
+        lastUpdatedAt: Date.now(),
+        status: d.status === "running" ? "downloading" : "ready",
+      });
+    }
+    return [...byId.values()];
+  }, [regions, activeDownloads]);
 
   const handlePersistent = async () => {
     const granted = await requestPersistent();
-    setPersistent(granted);
+    patch({ persistent: granted });
     if (granted) {
       toast.success("Storage marked persistent.");
     } else {
@@ -140,7 +145,7 @@ export function OfflineSettingsPanel() {
     try {
       await syncOwnResources(publicKey);
       toast.success("Resynced own data");
-      await refreshAll();
+      await refresh(publicKey);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Resync failed");
     } finally {
@@ -150,21 +155,35 @@ export function OfflineSettingsPanel() {
 
   const handleClearOwn = async () => {
     if (!publicKey) return;
+    // Optimistic: clear UI immediately, then run the IDB op + refresh.
+    patch({
+      ownCounts: {
+        post: 0,
+        review: 0,
+        collection: 0,
+        incident: 0,
+        geoCapture: 0,
+        sequence: 0,
+        route: 0,
+      },
+    });
     await clearUserOwnResources(publicKey);
     toast.success("Cleared local copy of your data");
-    await refreshAll();
+    void refresh(publicKey);
   };
 
   const handleClearRoutes = async () => {
+    patch({ routesCount: 0 });
     await clearRoutesCache();
     toast.success("Cleared cached routes");
-    await refreshAll();
+    void refresh(publicKey);
   };
 
   const handleClearTiles = async () => {
+    patch({ tilesCount: 0, tilesBytes: 0 });
     await clearAllOfflineTiles();
     toast.success("Cleared all offline tiles");
-    await refreshAll();
+    void refresh(publicKey);
   };
 
   const handleRetryOutbox = async () => {
@@ -176,13 +195,32 @@ export function OfflineSettingsPanel() {
     toast.success(
       `Drained ${result.written} write${result.written === 1 ? "" : "s"}`,
     );
-    await refreshAll();
+    void refresh(publicKey);
   };
 
-  const handleDeleteEntry = async (id?: number) => {
-    if (id === undefined) return;
-    await removeOutboxEntry(id);
-    await refreshAll();
+  const handleDeleteEntry = async (entry: OutboxEntry) => {
+    if (entry.id === undefined) return;
+    patch({ outboxEntries: outboxEntries.filter((e) => e.id !== entry.id) });
+    await removeOutboxEntry(entry.id);
+    void refresh(publicKey);
+  };
+
+  const handleRemoveRegion = async (region: Region) => {
+    patch({ regions: regions.filter((r) => r.id !== region.id) });
+    clearDownload(region.id);
+    await deleteRegion(region.id);
+    void refresh(publicKey);
+  };
+
+  const confirmBodies: Record<ConfirmKind["kind"], string> = {
+    "clear-own":
+      "Removes your locally-cached posts, reviews, collections, captures, sequences and routes. Originals on your homeserver are untouched — the next sync will pull them back.",
+    "clear-routes":
+      "Removes every snapped route cached for offline replay. You can recompute them while online.",
+    "clear-tiles":
+      "Removes every offline map tile across all regions. The map will need to re-download tiles when you next pan over an area.",
+    "remove-region": "",
+    "drop-outbox": "",
   };
 
   return (
@@ -197,7 +235,9 @@ export function OfflineSettingsPanel() {
           subtitle={
             storage
               ? `${formatBytes(storage.usage)} of ${formatBytes(storage.quota)} used`
-              : "Not available in this browser"
+              : loaded
+                ? "Not available in this browser"
+                : "Reading…"
           }
         >
           {storage && storage.quota > 0 && (
@@ -265,8 +305,8 @@ export function OfflineSettingsPanel() {
                   Resync
                 </button>
                 <button
-                  onClick={handleClearOwn}
-                  className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                  onClick={() => setConfirm({ kind: "clear-own" })}
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                 >
                   <Trash2 className="h-3 w-3" />
                   Clear
@@ -314,7 +354,7 @@ export function OfflineSettingsPanel() {
                       </span>
                     )}
                     <button
-                      onClick={() => handleDeleteEntry(entry.id)}
+                      onClick={() => setConfirm({ kind: "drop-outbox", entry })}
                       className="ml-auto rounded p-0.5 text-muted hover:text-red-500"
                       aria-label="Drop this entry"
                     >
@@ -350,8 +390,8 @@ export function OfflineSettingsPanel() {
         >
           {routesCount > 0 && (
             <button
-              onClick={handleClearRoutes}
-              className="mt-2 inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+              onClick={() => setConfirm({ kind: "clear-routes" })}
+              className="mt-2 inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
             >
               <Trash2 className="h-3 w-3" />
               Clear
@@ -365,12 +405,12 @@ export function OfflineSettingsPanel() {
           subtitle={
             tilesCount === 0
               ? "Download a region to make its map tiles available offline."
-              : `${tilesCount} tiles stored locally · ${formatBytes(tilesBytes)} on disk.`
+              : `${tilesCount} tiles stored locally · ${formatBytes(tilesBytes)} on disk.${refreshing ? " refreshing…" : ""}`
           }
         >
-          {regions.length > 0 && (
+          {displayedRegions.length > 0 && (
             <ul className="mt-2 space-y-1.5">
-              {regions.map((r) => {
+              {displayedRegions.map((r) => {
                 const live = activeDownloads[r.id];
                 const isRunning = live?.status === "running";
                 const pct =
@@ -409,7 +449,9 @@ export function OfflineSettingsPanel() {
                         </div>
                         <div className="text-[11px] text-muted">
                           {isRunning
-                            ? `${pct}% · ${live.progress.done} / ${live.progress.total} tiles · ${liveBytes}`
+                            ? live.progress.total > 0
+                              ? `${pct}% · ${live.progress.done} / ${live.progress.total} tiles · ${liveBytes}`
+                              : "Preparing…"
                             : live?.status === "errored"
                               ? live.error ?? "Download failed"
                               : `${formatBytes(r.sizeBytes)} · ${r.status}`}
@@ -426,11 +468,9 @@ export function OfflineSettingsPanel() {
                         </button>
                       ) : (
                         <button
-                          onClick={async () => {
-                            await deleteRegion(r.id);
-                            clearDownload(r.id);
-                            await refreshAll();
-                          }}
+                          onClick={() =>
+                            setConfirm({ kind: "remove-region", region: r })
+                          }
                           className="rounded p-0.5 text-muted hover:text-red-500"
                           aria-label="Remove region"
                           title="Remove region from this list"
@@ -462,7 +502,7 @@ export function OfflineSettingsPanel() {
             </button>
             {tilesCount > 0 && (
               <button
-                onClick={handleClearTiles}
+                onClick={() => setConfirm({ kind: "clear-tiles" })}
                 className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
               >
                 <Trash2 className="h-3 w-3" />
@@ -479,11 +519,74 @@ export function OfflineSettingsPanel() {
       {addOpen && (
         <AddRegionDialog
           onClose={() => setAddOpen(false)}
-          onAdded={refreshAll}
+          onAdded={() => void refresh(publicKey)}
+        />
+      )}
+      {confirm && (
+        <ConfirmDialog
+          title={confirmTitle(confirm)}
+          body={
+            confirm.kind === "remove-region"
+              ? `Remove "${confirm.region.name}" from the list? The cached tiles for this region stay on disk (other regions may share them) — use "Clear all tiles" to wipe tile storage entirely.`
+              : confirm.kind === "drop-outbox"
+                ? `Drop this queued ${confirm.entry.op.toUpperCase()} write? It will not be retried.`
+                : confirmBodies[confirm.kind]
+          }
+          confirmLabel={confirmLabel(confirm)}
+          onConfirm={() => {
+            switch (confirm.kind) {
+              case "clear-own":
+                void handleClearOwn();
+                break;
+              case "clear-routes":
+                void handleClearRoutes();
+                break;
+              case "clear-tiles":
+                void handleClearTiles();
+                break;
+              case "remove-region":
+                void handleRemoveRegion(confirm.region);
+                break;
+              case "drop-outbox":
+                void handleDeleteEntry(confirm.entry);
+                break;
+            }
+          }}
+          onClose={() => setConfirm(null)}
         />
       )}
     </DiscoverSidebar>
   );
+}
+
+function confirmTitle(c: ConfirmKind): string {
+  switch (c.kind) {
+    case "clear-own":
+      return "Clear your local data?";
+    case "clear-routes":
+      return "Clear cached routes?";
+    case "clear-tiles":
+      return "Clear all offline tiles?";
+    case "remove-region":
+      return "Remove region?";
+    case "drop-outbox":
+      return "Drop queued write?";
+  }
+}
+
+function confirmLabel(c: ConfirmKind): string {
+  switch (c.kind) {
+    case "clear-own":
+      return "Clear data";
+    case "clear-routes":
+      return "Clear routes";
+    case "clear-tiles":
+      return "Clear tiles";
+    case "remove-region":
+      return "Remove";
+    case "drop-outbox":
+      return "Drop";
+  }
 }
 
 function Section({

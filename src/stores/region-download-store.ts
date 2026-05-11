@@ -5,6 +5,7 @@ import {
   type DownloadProgress,
   type DownloadRegionInput,
 } from "@/lib/offline/region-download";
+import { putRegion } from "@/lib/offline/regions";
 
 /**
  * In-memory tracker for region downloads. The actual fetch loop runs
@@ -67,6 +68,35 @@ export const useRegionDownloadStore = create<State & Actions>((set, get) => ({
       },
       controllers: { ...s.controllers, [input.id]: controller },
     }));
+
+    // Stage the region row in IDB before anything else so the
+    // settings panel's `refresh()` (which the dialog fires right
+    // after this) sees the pending row. Without this, there's a
+    // race where the panel reads the regions list *before*
+    // downloadRegion writes its initial row, and progress has no
+    // row to render on.
+    try {
+      await putRegion({
+        id: input.id,
+        name: input.name,
+        bbox: [
+          input.bbox.west,
+          input.bbox.south,
+          input.bbox.east,
+          input.bbox.north,
+        ],
+        tier: input.tier,
+        pmtilesPath: "",
+        sizeBytes: 0,
+        downloadedAt: Date.now(),
+        lastUpdatedAt: Date.now(),
+        status: "downloading",
+      });
+      onAdded?.();
+    } catch {
+      // putRegion failing is recoverable — downloadRegion will write
+      // its own row inside the fetch loop.
+    }
 
     try {
       await downloadRegion(input, {
