@@ -19,6 +19,7 @@ import type {
   SequenceDetails,
   SequenceViewportItem,
   SequenceFullResponse,
+  IncidentDetails,
 } from "@/types/mapky";
 
 /** Build the `activity` + `min_rating` query params for the place
@@ -397,6 +398,51 @@ export async function fetchUserReviews(
 ): Promise<ReviewDetails[]> {
   const { data } = await nexusClient.get<ReviewDetails[]>(
     `/v0/mapky/reviews/user/${userId}`,
+    {
+      params: {
+        skip: options?.skip ?? 0,
+        limit: options?.limit ?? 100,
+      },
+    },
+  );
+  return data;
+}
+
+export async function fetchViewportIncidents(
+  bounds: ViewportBounds,
+  limit = 200,
+): Promise<IncidentDetails[]> {
+  const { data } = await nexusClient.get<IncidentDetails[]>(
+    "/v0/mapky/incidents/viewport",
+    {
+      params: {
+        min_lat: bounds.minLat,
+        min_lon: bounds.minLon,
+        max_lat: bounds.maxLat,
+        max_lon: bounds.maxLon,
+        limit,
+      },
+    },
+  );
+  return data;
+}
+
+export async function fetchIncidentDetail(
+  authorId: string,
+  incidentId: string,
+): Promise<IncidentDetails> {
+  const { data } = await nexusClient.get<IncidentDetails>(
+    `/v0/mapky/incidents/${authorId}/${incidentId}`,
+  );
+  return data;
+}
+
+export async function fetchUserIncidents(
+  userId: string,
+  options?: { skip?: number; limit?: number },
+): Promise<IncidentDetails[]> {
+  const { data } = await nexusClient.get<IncidentDetails[]>(
+    `/v0/mapky/incidents/user/${userId}`,
     {
       params: {
         skip: options?.skip ?? 0,

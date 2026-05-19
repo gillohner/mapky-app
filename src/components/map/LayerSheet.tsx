@@ -10,6 +10,7 @@ import {
   Mountain,
   Building2,
   Bitcoin,
+  AlertTriangle,
   Layers,
 } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
@@ -51,6 +52,7 @@ export function LayerSheet() {
   const buildings = useUiStore((s) => s.buildings3DVisible);
   const places = useUiStore((s) => s.placesLayerVisible);
   const captures = useUiStore((s) => s.capturesLayerVisible);
+  const incidents = useUiStore((s) => s.incidentsLayerVisible);
   const basemap = useMapStore((s) => s.basemap);
   const filtersActive =
     filters.activities.length > 0 || (filters.minRating ?? 0) > 0;
@@ -60,6 +62,7 @@ export function LayerSheet() {
     filtersActive ||
     buildings ||
     !places ||
+    !incidents ||
     !captures ||
     basemap !== "default";
 
@@ -176,6 +179,8 @@ function MapkyTab() {
   const togglePlacesLayer = useUiStore((s) => s.togglePlacesLayer);
   const capturesLayerVisible = useUiStore((s) => s.capturesLayerVisible);
   const toggleCapturesLayer = useUiStore((s) => s.toggleCapturesLayer);
+  const incidentsLayerVisible = useUiStore((s) => s.incidentsLayerVisible);
+  const toggleIncidentsLayer = useUiStore((s) => s.toggleIncidentsLayer);
   const activeCollections = useUiStore((s) => s.activeCollectionOverlays);
   const clearAllCollectionOverlays = useUiStore(
     (s) => s.clearAllCollectionOverlays,
@@ -194,6 +199,12 @@ function MapkyTab() {
         label="Captures"
         on={capturesLayerVisible}
         onChange={toggleCapturesLayer}
+      />
+      <Toggle
+        icon={<AlertTriangle className="h-4 w-4" />}
+        label="Incidents"
+        on={incidentsLayerVisible}
+        onChange={toggleIncidentsLayer}
       />
       {activeCollections.size > 0 && (
         <button

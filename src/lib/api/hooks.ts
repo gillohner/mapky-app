@@ -22,6 +22,9 @@ import {
   fetchCollectionTags,
   fetchUserPosts,
   fetchUserReviews,
+  fetchViewportIncidents,
+  fetchIncidentDetail,
+  fetchUserIncidents,
   fetchViewportCaptures,
   fetchUserSequences,
   fetchViewportSequences,
@@ -56,6 +59,7 @@ import type {
 } from "./nominatim";
 import type {
   GeoCaptureDetails,
+  IncidentDetails,
   MultiViewportResponse,
   PlaceFilters,
   PlaceFullResponse,
@@ -212,6 +216,21 @@ const noRetryOn404 = (failureCount: number, err: Error): boolean => {
   if (status === 404) return false;
   return failureCount < 3;
 };
+
+function isIncidentExpired(incident: IncidentDetails): boolean {
+  const expiresAt = incident.expires_at;
+  if (expiresAt == null) return false;
+  // MapKy timestamps can appear as seconds, milliseconds, or
+  // microseconds depending on source path. Normalize before comparing.
+  const expiresAtSeconds =
+    expiresAt > 1e14
+      ? Math.floor(expiresAt / 1_000_000)
+      : expiresAt > 1e12
+        ? Math.floor(expiresAt / 1000)
+        : expiresAt;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return expiresAtSeconds <= nowSeconds;
+}
 
 export function usePlaceDetail(osmType: string, osmId: number) {
   return useQuery({
@@ -515,6 +534,37 @@ export function useUserReviews(userId: string | null) {
     queryKey: ["mapky", "reviews", "user", userId],
     queryFn: () => fetchUserReviews(userId!),
     enabled: !!userId,
+  });
+}
+
+export function useViewportIncidents(bounds: ViewportBounds | null) {
+  const padded = useMemo(() => snapBoundsForCache(bounds), [bounds]);
+  return useQuery({
+    queryKey: ["mapky", "incidents", "viewport", padded],
+    queryFn: () => fetchViewportIncidents(padded!),
+    enabled: !!padded,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    // Freshness-first map behavior: expired incidents are not rendered.
+    select: (data) => data.filter((incident) => !isIncidentExpired(incident)),
+  });
+}
+
+export function useIncidentDetail(authorId: string, incidentId: string) {
+  return useQuery({
+    queryKey: ["mapky", "incident", authorId, incidentId],
+    queryFn: () => fetchIncidentDetail(authorId, incidentId),
+    enabled: !!authorId && !!incidentId,
+    retry: noRetryOn404,
+  });
+}
+
+export function useUserIncidents(userId: string | null) {
+  return useQuery({
+    queryKey: ["mapky", "incidents", "user", userId],
+    queryFn: () => fetchUserIncidents(userId!),
+    enabled: !!userId,
+    select: (data) => data.filter((incident) => !isIncidentExpired(incident)),
   });
 }
 

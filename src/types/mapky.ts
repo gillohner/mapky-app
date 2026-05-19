@@ -196,8 +196,8 @@ export interface CollectionDetails {
 export interface IncidentDetails {
   id: string;
   author_id: string;
-  incident_type: string;
-  severity: string;
+  incident_type: IncidentType | (string & {});
+  severity: IncidentSeverity | (string & {});
   lat: number;
   lon: number;
   heading: number | null;
@@ -206,6 +206,37 @@ export interface IncidentDetails {
   expires_at: number | null;
   indexed_at: number;
 }
+
+export type IncidentType =
+  | "accident"
+  | "hazard"
+  | "road_closure"
+  | "police"
+  | "flooding"
+  | "ice_snow"
+  | "poor_visibility"
+  | "danger"
+  | "other";
+
+export type IncidentSeverity = "low" | "medium" | "high";
+
+export const INCIDENT_TYPES: readonly IncidentType[] = [
+  "accident",
+  "hazard",
+  "road_closure",
+  "police",
+  "flooding",
+  "ice_snow",
+  "poor_visibility",
+  "danger",
+  "other",
+] as const;
+
+export const INCIDENT_SEVERITIES: readonly IncidentSeverity[] = [
+  "low",
+  "medium",
+  "high",
+] as const;
 
 export interface SequenceDetails {
   id: string;

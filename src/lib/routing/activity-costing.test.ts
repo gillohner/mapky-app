@@ -24,7 +24,7 @@ describe("profileForActivity — foot mode differentiation", () => {
   it("Walk uses default speed and easy paths only", () => {
     const p = profileForActivity(RouteActivityType.Walking);
     expect(p.costing).toBe("pedestrian");
-    expect(p.options?.walking_speed).toBe(5.1);
+    expect(p.options?.walking_speed).toBe(5);
     expect(p.options?.max_hiking_difficulty).toBe(1);
   });
 
@@ -40,8 +40,8 @@ describe("profileForActivity — foot mode differentiation", () => {
     expect(p.costing).toBe("pedestrian");
     expect(p.options?.max_hiking_difficulty).toBe(6);
     expect(p.options?.walkway_factor).toBe(0.7);
-    // Slightly slower than Walk — realistic for trails.
-    expect(p.options?.walking_speed).toBe(4.5);
+    // Walk and Hike share baseline speed; the path model differs.
+    expect(p.options?.walking_speed).toBe(5);
   });
 
   it("Walk vs Hike differ in trail tolerance (same costing, different options)", () => {

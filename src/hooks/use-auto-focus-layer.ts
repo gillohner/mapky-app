@@ -1,14 +1,15 @@
 import { useEffect } from "react";
 import { useUiStore, type DimmableLayer } from "@/stores/ui-store";
 
-const ALL_LAYERS: DimmableLayer[] = ["places", "captures"];
+const ALL_LAYERS: DimmableLayer[] = ["places", "captures", "incidents"];
 
 /**
  * When a feature surface (detail page or list view) mounts, fade the
  * other Mapky data layers so the focused content stands out.
  *
  * Focus values:
- * - "places" / "captures" — keep that one bright, fade the others.
+ * - "places" / "captures" / "incidents" — keep that one bright,
+ *   fade the others.
  * - "routes" — fade places + captures (route detail / list draws its
  *   own polylines).
  * - "collections" — fade places + captures (collection overlays own

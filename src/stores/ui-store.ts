@@ -62,7 +62,7 @@ export interface SelectedFeature {
   name?: string;
 }
 
-export type DimmableLayer = "places" | "captures";
+export type DimmableLayer = "places" | "captures" | "incidents";
 
 export type LayerSheetTab = "mapky" | "basemap" | "overlays";
 
@@ -80,6 +80,10 @@ interface UiStore {
   capturesLayerVisible: boolean;
   setCapturesLayerVisible: (visible: boolean) => void;
   toggleCapturesLayer: () => void;
+
+  incidentsLayerVisible: boolean;
+  setIncidentsLayerVisible: (visible: boolean) => void;
+  toggleIncidentsLayer: () => void;
 
   /** OpenRailwayMap raster overlay — rail lines, metro, signals. */
   metroOverlayVisible: boolean;
@@ -252,6 +256,12 @@ export const useUiStore = create<UiStore>()(
         set({ capturesLayerVisible: visible }),
       toggleCapturesLayer: () =>
         set((s) => ({ capturesLayerVisible: !s.capturesLayerVisible })),
+
+      incidentsLayerVisible: true,
+      setIncidentsLayerVisible: (visible) =>
+        set({ incidentsLayerVisible: visible }),
+      toggleIncidentsLayer: () =>
+        set((s) => ({ incidentsLayerVisible: !s.incidentsLayerVisible })),
 
       metroOverlayVisible: false,
       setMetroOverlayVisible: (visible) => set({ metroOverlayVisible: visible }),
@@ -443,7 +453,8 @@ export const useUiStore = create<UiStore>()(
       //     all three pills were on with non-overlapping data).
       // v9: add layerSheetActiveTab so the tabbed LayerSheet re-opens
       //     where the user left off. Default "mapky".
-      version: 9,
+      // v10: add incidentsLayerVisible toggle (default true).
+      version: 10,
       migrate: (persisted: unknown, version: number) => {
         if (!persisted || typeof persisted !== "object") return persisted;
         const state = persisted as Record<string, unknown>;
@@ -466,6 +477,9 @@ export const useUiStore = create<UiStore>()(
             state.layerSheetActiveTab = "mapky";
           }
         }
+        if (version < 10) {
+          state.incidentsLayerVisible = true;
+        }
         return state;
       },
       // Persist user-controlled toggles only. Theme/basemap lives in
@@ -475,6 +489,7 @@ export const useUiStore = create<UiStore>()(
       partialize: (state) => ({
         placesLayerVisible: state.placesLayerVisible,
         capturesLayerVisible: state.capturesLayerVisible,
+        incidentsLayerVisible: state.incidentsLayerVisible,
         metroOverlayVisible: state.metroOverlayVisible,
         placesFilters: state.placesFilters,
         btcOverlayVisible: state.btcOverlayVisible,

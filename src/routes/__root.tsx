@@ -3,6 +3,7 @@ import { QueryProvider } from "@/components/providers/QueryProvider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { MapView } from "@/components/map/MapView";
 import { PlaceAnnotationsLayer } from "@/components/map/PlaceAnnotationsLayer";
+import { IncidentMarkersLayer } from "@/components/map/IncidentMarkersLayer";
 import { CaptureMarkersLayer } from "@/components/map/CaptureMarkersLayer";
 import { SequenceCoverageLayer } from "@/components/map/SequenceCoverageLayer";
 import { SequenceMarkersLayer } from "@/components/map/SequenceMarkersLayer";
@@ -39,6 +40,7 @@ function RootLayout() {
         <div className="relative h-dvh w-screen overflow-hidden">
           <MapView />
           <PlaceAnnotationsLayer />
+          <IncidentMarkersLayer />
           <CaptureMarkersLayer />
           <SequenceCoverageLayer />
           <SequenceMarkersLayer />
@@ -68,4 +70,3 @@ function RootLayout() {
     </QueryProvider>
   );
 }
-

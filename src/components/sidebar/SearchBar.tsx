@@ -8,6 +8,7 @@ import {
   FolderHeart,
   MessageSquare,
   Route as RouteIcon,
+  AlertTriangle,
 } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import {
@@ -127,6 +128,18 @@ export function SearchBar() {
         rows.push({
           key: `post-${post.author_id}-${post.id}`,
           select: () => handleSelectPost(post),
+        });
+      }
+      for (const incident of tagResults.incidents ?? []) {
+        rows.push({
+          key: `incident-${incident.author_id}-${incident.id}`,
+          select: () =>
+            handleSelectIncident(
+              incident.author_id,
+              incident.id.includes(":")
+                ? incident.id.split(":").pop() ?? incident.id
+                : incident.id,
+            ),
         });
       }
       return rows;
@@ -427,7 +440,7 @@ export function SearchBar() {
                 ? "bg-background text-accent shadow-sm"
                 : "text-muted hover:text-foreground"
             }`}
-            title="Search by tag (places, collections, posts, routes)"
+            title="Search by tag (places, collections, posts, routes, incidents)"
           >
             <Tag className="h-3.5 w-3.5" />
           </button>
@@ -632,6 +645,39 @@ export function SearchBar() {
                   })}
                 </div>
               )}
+
+              {tagResults.incidents?.length > 0 && (
+                <div>
+                  <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                    Incidents
+                  </div>
+                  {tagResults.incidents.map((incident) => {
+                    const k = `incident-${incident.author_id}-${incident.id}`;
+                    const incidentId = incident.id.includes(":")
+                      ? incident.id.split(":").pop() ?? incident.id
+                      : incident.id;
+                    return (
+                      <button
+                        key={k}
+                        onClick={() =>
+                          handleSelectIncident(incident.author_id, incidentId)
+                        }
+                        className={`flex w-full items-center gap-3 px-4 py-2 text-left ${selectedKey === k ? "bg-accent/10" : "hover:bg-surface"}`}
+                      >
+                        <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-500" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {incident.description || incident.incident_type}
+                          </p>
+                          <p className="text-xs uppercase text-muted">
+                            {incident.incident_type} · {incident.severity}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -711,9 +757,33 @@ export function SearchBar() {
         );
         continue;
       }
-      // sequences / incidents — no detail route yet; bail silently.
+      if (parentType === "sequences") {
+        navigate({
+          to: "/sequence/$authorId/$sequenceId",
+          params: { authorId: parentAuthor, sequenceId: parentId },
+        });
+        return;
+      }
+      if (parentType === "incidents") {
+        navigate({
+          to: "/incident/$authorId/$incidentId",
+          params: { authorId: parentAuthor, incidentId: parentId },
+        });
+        return;
+      }
       return;
     }
+  }
+
+  function handleSelectIncident(authorId: string, incidentId: string) {
+    setInput("");
+    setQuery("");
+    setShowResults(false);
+
+    navigate({
+      to: "/incident/$authorId/$incidentId",
+      params: { authorId, incidentId },
+    });
   }
 
   function handleSelectRoute(route: RouteDetails) {

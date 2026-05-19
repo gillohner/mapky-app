@@ -416,7 +416,13 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
         });
         return;
       }
-      // incidents — no detail route yet.
+      if (parentType === "incidents") {
+        navigate({
+          to: "/incident/$authorId/$incidentId",
+          params: { authorId: parentAuthor, incidentId: parentId },
+        });
+        return;
+      }
       return;
     }
   };
@@ -439,6 +445,13 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
     navigate({
       to: "/route/$authorId/$routeId",
       params: { authorId: route.author_id, routeId },
+    });
+  };
+
+  const handleSelectIncident = (authorId: string, incidentId: string) => {
+    navigate({
+      to: "/incident/$authorId/$incidentId",
+      params: { authorId, incidentId },
     });
   };
 
@@ -711,8 +724,14 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
                 Incidents
               </div>
               {tagResults.incidents.map((i) => (
-                <div
+                <button
                   key={i.id}
+                  onClick={() =>
+                    handleSelectIncident(
+                      i.author_id,
+                      i.id.includes(":") ? i.id.split(":").pop() ?? i.id : i.id,
+                    )
+                  }
                   className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-surface"
                 >
                   <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-500" />
@@ -724,7 +743,7 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
                       {i.incident_type} · {i.severity}
                     </p>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}

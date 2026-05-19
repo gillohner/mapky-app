@@ -37,7 +37,9 @@ export function useLayerOpacityMultiplier(layer: DimmableLayer): number {
       ? s.placesLayerVisible
       : layer === "captures"
         ? s.capturesLayerVisible
-        : true,
+        : layer === "incidents"
+          ? s.incidentsLayerVisible
+          : true,
   );
   if (focusHidden) return 0;
   // No focus active → the user's toggle in the Layers sheet wins.

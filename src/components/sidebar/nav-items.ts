@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Camera,
   FolderHeart,
   MapPin,
@@ -17,6 +18,7 @@ export type NavTarget =
   | "/places"
   | "/collections"
   | "/routes"
+  | "/incidents"
   | "/captures"
   | "/my-posts";
 
@@ -32,6 +34,7 @@ export const MAIN_NAV: NavItem[] = [
   { to: "/places", label: "Places", icon: MapPin },
   { to: "/collections", label: "Collections", icon: FolderHeart },
   { to: "/routes", label: "Routes", icon: RouteIcon },
+  { to: "/incidents", label: "Incidents", icon: AlertTriangle },
   // "Captures" feeds both single captures and sequences — see
   // CaptureList. There's no separate "Sequences" nav.
   { to: "/captures", label: "Captures", icon: Camera },
@@ -53,6 +56,8 @@ export function navMatchPrefixes(to: NavTarget): readonly string[] {
       return ["/collection"]; // matches /collections, /collection/...
     case "/routes":
       return ["/route"]; // matches /routes, /route/...
+    case "/incidents":
+      return ["/incident"]; // matches /incidents, /incident/...
     case "/captures":
       return ["/capture", "/sequence"]; // matches /captures, /capture/..., /sequence/...
     case "/my-posts":
