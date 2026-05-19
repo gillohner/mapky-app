@@ -67,10 +67,9 @@ export function CollectionPicker({
         collection.name,
         collection.description ?? undefined,
         newItems,
-        collection.image_uri ?? undefined,
         collection.color ?? undefined,
       );
-      const path = `/pub/mapky.app/collections/${cId}`;
+      const path = `/pub/mapky.app/posts/${cId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
 
       // Cancel in-flight fetches so they don't overwrite optimistic data

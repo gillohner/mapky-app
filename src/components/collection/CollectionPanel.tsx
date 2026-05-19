@@ -56,7 +56,7 @@ export function CollectionPanel({
   const handleDelete = useCallback(async () => {
     if (!session || !collection) return;
     try {
-      const path = `/pub/mapky.app/collections/${collectionId}`;
+      const path = `/pub/mapky.app/posts/${collectionId}`;
       await session.storage.delete(path as `/pub/${string}`);
 
       await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", authorId] });
@@ -88,10 +88,9 @@ export function CollectionPanel({
         collection.name,
         collection.description ?? undefined,
         newItems,
-        collection.image_uri ?? undefined,
         collection.color ?? undefined,
       );
-      const path = `/pub/mapky.app/collections/${collectionId}`;
+      const path = `/pub/mapky.app/posts/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
 
       await Promise.all([

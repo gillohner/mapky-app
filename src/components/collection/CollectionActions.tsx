@@ -178,10 +178,9 @@ function EditInline({
         name.trim(),
         description.trim() || undefined,
         collection.items,
-        collection.image_uri ?? undefined,
         color,
       );
-      const path = `/pub/mapky.app/collections/${collectionId}`;
+      const path = `/pub/mapky.app/posts/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
 
       await queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, collectionId] });
@@ -331,10 +330,9 @@ function AddPlaceInline({
         collection.name,
         collection.description ?? undefined,
         newItems,
-        collection.image_uri ?? undefined,
         collection.color ?? undefined,
       );
-      const path = `/pub/mapky.app/collections/${collectionId}`;
+      const path = `/pub/mapky.app/posts/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
 
       await queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, collectionId] });

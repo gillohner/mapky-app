@@ -3,11 +3,18 @@ import {
   PubkyAppPostKind,
   PubkyAppPostEmbed,
   GeoCaptureKind,
+  IncidentType as IncidentTypeEnum,
+  IncidentSeverity as IncidentSeverityEnum,
   PubkySpecsBuilder,
   RouteActivityType,
 } from "mapky-app-specs";
 
-import type { GeoCaptureKind as GeoCaptureKindType, MapkyPostKind } from "@/types/mapky";
+import type {
+  GeoCaptureKind as GeoCaptureKindType,
+  IncidentSeverity as IncidentSeverityKey,
+  IncidentType as IncidentTypeKey,
+  MapkyPostKind,
+} from "@/types/mapky";
 import type { Waypoint } from "@/lib/routing/types";
 
 export function makeOsmUrl(osmType: string, osmId: number): string {
@@ -219,20 +226,26 @@ export function createCollection(
   name: string,
   description?: string,
   items?: string[],
-  imageUri?: string,
   color?: string,
 ): CreateCollectionResult {
   const builder = new MapkySpecsBuilder(pubkyId);
-  const result = builder.createCollection(
-    name,
-    description || null,
-    items || [],
-    imageUri || null,
-  );
+  const result = builder.createCollection(name, description || null, items || []);
+  const resultAny = result as unknown as {
+    post?: { toJson: () => unknown };
+    collection?: { toJson: () => unknown };
+  };
 
-  // Inject color into the JSON (WASM builder doesn't know about it yet)
-  const obj = result.collection.toJson() as Record<string, unknown>;
-  if (color) obj.color = color;
+  const obj =
+    ((resultAny.post ?? resultAny.collection)?.toJson() as Record<string, unknown>) ?? {};
+  if (color) {
+    try {
+      const envelope = JSON.parse(String(obj.content)) as Record<string, unknown>;
+      envelope.color = color;
+      obj.content = JSON.stringify(envelope);
+    } catch {
+      // Keep canonical JSON emitted by wasm builder if content parse fails.
+    }
+  }
   const json = JSON.stringify(obj);
   const path = result.meta.path;
   const url = result.meta.url;
@@ -248,15 +261,21 @@ export function updateCollectionJson(
   name: string,
   description?: string,
   items?: string[],
-  imageUri?: string,
   color?: string,
 ): string {
-  return JSON.stringify({
+  const envelope: Record<string, unknown> = {
     name,
     description: description || null,
     items: items || [],
-    image_uri: imageUri || null,
-    color: color || null,
+  };
+  if (color) envelope.color = color;
+
+  return JSON.stringify({
+    content: JSON.stringify(envelope),
+    kind: "collection",
+    parent: null,
+    embed: null,
+    attachments: null,
   });
 }
 
@@ -267,7 +286,7 @@ export function createCollectionTag(
   label: string,
 ): CreateTagResult {
   const builder = new MapkySpecsBuilder(pubkyId);
-  const collectionUri = `pubky://${authorId}/pub/mapky.app/collections/${collectionId}`;
+  const collectionUri = `pubky://${authorId}/pub/mapky.app/posts/${collectionId}`;
 
   const result = builder.createPlaceTag(collectionUri, label);
   const json = JSON.stringify(result.tag.toJson());
@@ -277,6 +296,81 @@ export function createCollectionTag(
   builder.free();
 
   return { path, json };
+}
+
+const INCIDENT_TYPE_MAP: Record<IncidentTypeKey, IncidentTypeEnum> = {
+  accident: IncidentTypeEnum.Accident,
+  hazard: IncidentTypeEnum.Hazard,
+  road_closure: IncidentTypeEnum.RoadClosure,
+  police: IncidentTypeEnum.Police,
+  flooding: IncidentTypeEnum.Flooding,
+  ice_snow: IncidentTypeEnum.IceSnow,
+  poor_visibility: IncidentTypeEnum.PoorVisibility,
+  danger: IncidentTypeEnum.Danger,
+  other: IncidentTypeEnum.Other,
+};
+
+const INCIDENT_SEVERITY_MAP: Record<IncidentSeverityKey, IncidentSeverityEnum> =
+  {
+    low: IncidentSeverityEnum.Low,
+    medium: IncidentSeverityEnum.Medium,
+    high: IncidentSeverityEnum.High,
+  };
+
+export interface CreateIncidentResult {
+  /** Homeserver path: /pub/mapky.app/incidents/{id} */
+  path: string;
+  /** Full pubky:// URI */
+  url: string;
+  /** JSON string to write */
+  json: string;
+  /** Bare timestamp id (without author prefix). */
+  incidentId: string;
+}
+
+export function createIncident(
+  pubkyId: string,
+  opts: {
+    incidentType: IncidentTypeKey;
+    severity: IncidentSeverityKey;
+    lat: number;
+    lon: number;
+    heading?: number | null;
+    description?: string | null;
+    attachments?: string[] | null;
+    /** UNIX microseconds */
+    expiresAt?: number | null;
+  },
+): CreateIncidentResult {
+  const builder = new MapkySpecsBuilder(pubkyId);
+  const result = builder.createIncident(
+    INCIDENT_TYPE_MAP[opts.incidentType],
+    INCIDENT_SEVERITY_MAP[opts.severity],
+    opts.lat,
+    opts.lon,
+  );
+
+  const obj = result.incident.toJson() as Record<string, unknown>;
+  if (opts.heading != null) obj.heading = opts.heading;
+  if (opts.description !== undefined) {
+    obj.description = opts.description?.trim() || null;
+  }
+  if (opts.attachments !== undefined) {
+    obj.attachments = opts.attachments?.length ? opts.attachments : [];
+  }
+  if (opts.expiresAt != null) {
+    obj.expires_at = opts.expiresAt;
+  }
+
+  const json = JSON.stringify(obj);
+  const path = result.meta.path;
+  const url = result.meta.url;
+  const incidentId = path.split("/").pop()!;
+
+  result.free();
+  builder.free();
+
+  return { path, url, json, incidentId };
 }
 
 export interface CreateGeoCaptureResult {

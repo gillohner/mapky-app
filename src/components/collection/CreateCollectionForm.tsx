@@ -32,7 +32,6 @@ export function CreateCollectionForm({ onClose }: CreateCollectionFormProps) {
         name.trim(),
         description.trim() || undefined,
         undefined,
-        undefined,
         color,
       );
       await session.storage.putText(
