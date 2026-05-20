@@ -12,7 +12,6 @@ import { useUserCollections } from "@/lib/api/hooks";
 import {
   createCollection,
   updateCollectionJson,
-  makeOsmUrl,
 } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import {
@@ -27,15 +26,23 @@ import type { CollectionDetails } from "@/types/mapky";
 const sameItems = (a: string[], b: string[]) =>
   a.length === b.length && a.every((v, i) => v === b[i]);
 
+const OSM_ITEM_RE = /^https:\/\/www\.openstreetmap\.org\/(node|way|relation)\/\d+$/;
+
+function isSupportedCollectionItem(uri: string): boolean {
+  return OSM_ITEM_RE.test(uri);
+}
+
 interface CollectionPickerProps {
-  osmType: string;
-  osmId: number;
+  resourceUri: string;
+  membershipQueryKey?: readonly unknown[];
+  resourceLabel?: string;
   onClose: () => void;
 }
 
 export function CollectionPicker({
-  osmType,
-  osmId,
+  resourceUri,
+  membershipQueryKey,
+  resourceLabel,
   onClose,
 }: CollectionPickerProps) {
   const { session, publicKey } = useAuth();
@@ -45,9 +52,15 @@ export function CollectionPicker({
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
-  const osmUrl = makeOsmUrl(osmType, osmId);
+  if (!isSupportedCollectionItem(resourceUri)) {
+    return (
+      <div className="rounded-lg border border-border bg-surface p-3 text-xs text-muted">
+        Collections currently support places only.
+      </div>
+    );
+  }
 
-  const togglePlace = async (collectionId: string) => {
+  const toggleResource = async (collectionId: string) => {
     if (!session || !publicKey) return;
     const collection = collections?.find((c) => {
       const [, cId] = c.id.split(":");
@@ -58,10 +71,10 @@ export function CollectionPicker({
     setBusy(collectionId);
     try {
       const [, cId] = collection.id.split(":");
-      const hasPlace = collection.items.includes(osmUrl);
-      const newItems = hasPlace
-        ? collection.items.filter((i) => i !== osmUrl)
-        : [...collection.items, osmUrl];
+      const hasResource = collection.items.includes(resourceUri);
+      const newItems = hasResource
+        ? collection.items.filter((i) => i !== resourceUri)
+        : [...collection.items, resourceUri];
 
       const json = updateCollectionJson(
         collection.name,
@@ -74,7 +87,9 @@ export function CollectionPicker({
       // Cancel in-flight fetches so they don't overwrite optimistic data
       await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
       await queryClient.cancelQueries({ queryKey: ["mapky", "collection", publicKey, cId] });
-      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "place", osmType, osmId] });
+      if (membershipQueryKey) {
+        await queryClient.cancelQueries({ queryKey: [...membershipQueryKey] });
+      }
 
       // Optimistic cache updates + matching overlay registrations.
       // Cache writes give the user immediate feedback; overlays survive
@@ -91,13 +106,15 @@ export function CollectionPicker({
         ["mapky", "collection", publicKey, cId],
         (old) => (old ? { ...old, items: newItems } : old),
       );
-      queryClient.setQueryData<CollectionDetails[]>(
-        ["mapky", "collections", "place", osmType, osmId],
-        (old) => {
-          if (hasPlace) return old?.filter((c) => { const [, id] = c.id.split(":"); return id !== cId; });
-          return [...(old ?? []), { ...collection, items: newItems }];
-        },
-      );
+      if (membershipQueryKey) {
+        queryClient.setQueryData<CollectionDetails[]>(
+          [...membershipQueryKey],
+          (old) => {
+            if (hasResource) return old?.filter((c) => { const [, id] = c.id.split(":"); return id !== cId; });
+            return [...(old ?? []), { ...collection, items: newItems }];
+          },
+        );
+      }
 
       const patchOpId = `coll-items:${cId}`;
       pendingEntityFieldPatch<CollectionDetails, string[]>({
@@ -116,34 +133,40 @@ export function CollectionPicker({
         value: newItems,
         matches: sameItems,
       });
-      // Place ↔ collection membership view: add/remove this collection
-      // from the place's collection list.
-      const placeKey = ["mapky", "collections", "place", osmType, osmId];
-      const membershipOpId = `coll-membership:${cId}:${osmType}:${osmId}`;
-      if (hasPlace) {
-        pendingListRemove<CollectionDetails>({
-          queryKey: placeKey,
-          opId: membershipOpId,
-          itemId: collection.id,
-          getId: (c) => c.id,
-        });
-      } else {
-        pendingListAdd<CollectionDetails>({
-          queryKey: placeKey,
-          opId: membershipOpId,
-          item: { ...collection, items: newItems },
-          getId: (c) => c.id,
-        });
+      if (membershipQueryKey) {
+        const membershipOpId = `coll-membership:${cId}:${resourceUri}`;
+        if (hasResource) {
+          pendingListRemove<CollectionDetails>({
+            queryKey: [...membershipQueryKey],
+            opId: membershipOpId,
+            itemId: collection.id,
+            getId: (c) => c.id,
+          });
+        } else {
+          pendingListAdd<CollectionDetails>({
+            queryKey: [...membershipQueryKey],
+            opId: membershipOpId,
+            item: { ...collection, items: newItems },
+            getId: (c) => c.id,
+          });
+        }
       }
 
-      toast.success(hasPlace ? "Removed from collection" : "Added to collection");
+      const target = resourceLabel ?? "item";
+      toast.success(
+        hasResource
+          ? `${target} removed from collection`
+          : `${target} added to collection`,
+      );
       onClose();
 
       // Background reconciliation — delay to let server finish indexing
       ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
         queryClient.invalidateQueries({ queryKey: ["mapky", "collection", publicKey, cId] });
-        queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "place", osmType, osmId] });
+        if (membershipQueryKey) {
+          queryClient.invalidateQueries({ queryKey: [...membershipQueryKey] });
+        }
       }, 5000));
     } catch {
       toast.error("Failed to update collection");
@@ -160,7 +183,7 @@ export function CollectionPicker({
         publicKey,
         newName.trim(),
         undefined,
-        [osmUrl],
+        [resourceUri],
       );
       await session.storage.putText(
         result.path as `/pub/${string}`,
@@ -169,7 +192,9 @@ export function CollectionPicker({
 
       // Cancel in-flight fetches so they don't overwrite optimistic data
       await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
-      await queryClient.cancelQueries({ queryKey: ["mapky", "collections", "place", osmType, osmId] });
+      if (membershipQueryKey) {
+        await queryClient.cancelQueries({ queryKey: [...membershipQueryKey] });
+      }
 
       // Optimistic cache update — add new collection to user's list and place's collections
       const collectionId = result.path.split("/").pop()!;
@@ -178,17 +203,19 @@ export function CollectionPicker({
         author_id: publicKey,
         name: newName.trim(),
         description: null,
-        items: [osmUrl],
+        items: [resourceUri],
         indexed_at: Date.now() / 1000,
       };
       queryClient.setQueryData<CollectionDetails[]>(
         ["mapky", "collections", "user", publicKey],
         (old) => [...(old ?? []), optimistic],
       );
-      queryClient.setQueryData<CollectionDetails[]>(
-        ["mapky", "collections", "place", osmType, osmId],
-        (old) => [...(old ?? []), optimistic],
-      );
+      if (membershipQueryKey) {
+        queryClient.setQueryData<CollectionDetails[]>(
+          [...membershipQueryKey],
+          (old) => [...(old ?? []), optimistic],
+        );
+      }
 
       // Overlay both lists so the new collection survives the delayed
       // refetch even if its node + edge haven't reached neo4j yet.
@@ -199,20 +226,25 @@ export function CollectionPicker({
         item: optimistic,
         getId: (c) => c.id,
       });
-      pendingListAdd<CollectionDetails>({
-        queryKey: ["mapky", "collections", "place", osmType, osmId],
-        opId: newColOpId,
-        item: optimistic,
-        getId: (c) => c.id,
-      });
+      if (membershipQueryKey) {
+        pendingListAdd<CollectionDetails>({
+          queryKey: [...membershipQueryKey],
+          opId: newColOpId,
+          item: optimistic,
+          getId: (c) => c.id,
+        });
+      }
 
-      toast.success(`Created "${newName.trim()}" with this place`);
+      const target = resourceLabel ?? "item";
+      toast.success(`Created "${newName.trim()}" with this ${target}`);
       onClose();
 
       // Background reconciliation — delay to let server finish indexing
       ingestUserIntoNexus(publicKey).then(() => setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "user", publicKey] });
-        queryClient.invalidateQueries({ queryKey: ["mapky", "collections", "place", osmType, osmId] });
+        if (membershipQueryKey) {
+          queryClient.invalidateQueries({ queryKey: [...membershipQueryKey] });
+        }
       }, 5000));
     } catch {
       toast.error("Failed to create collection");
@@ -246,19 +278,19 @@ export function CollectionPicker({
         <div className="max-h-48 space-y-1 overflow-y-auto">
           {collections.map((c) => {
             const [, cId] = c.id.split(":");
-            const hasPlace = c.items.includes(osmUrl);
+            const hasResource = c.items.includes(resourceUri);
             const isBusy = busy === cId;
 
             return (
               <button
                 key={c.id}
-                onClick={() => togglePlace(cId)}
+                onClick={() => toggleResource(cId)}
                 disabled={!!busy}
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-background disabled:opacity-50"
               >
                 <FolderHeart
                   className={`h-4 w-4 flex-shrink-0 ${
-                    hasPlace ? "text-accent" : "text-muted"
+                    hasResource ? "text-accent" : "text-muted"
                   }`}
                 />
                 <span className="flex-1 truncate text-foreground">
@@ -266,7 +298,7 @@ export function CollectionPicker({
                 </span>
                 {isBusy ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-muted" />
-                ) : hasPlace ? (
+                ) : hasResource ? (
                   <Check className="h-3.5 w-3.5 text-accent" />
                 ) : null}
               </button>

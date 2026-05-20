@@ -28,6 +28,10 @@ export interface CollectionOverlayEntry {
   color: string;
 }
 
+export function collectionOverlayKey(authorId: string, collectionId: string): string {
+  return `${authorId}:${collectionId}`;
+}
+
 const OVERLAY_COLORS = [
   "#3b82f6", "#a855f7", "#f97316", "#ec4899",
   "#06b6d4", "#eab308", "#ef4444",
@@ -396,14 +400,15 @@ export const useUiStore = create<UiStore>()(
       activeCollectionOverlays: new Map(),
       addCollectionOverlay: (authorId, collectionId) =>
         set((s) => {
-          const existing = s.activeCollectionOverlays.get(collectionId);
+          const key = collectionOverlayKey(authorId, collectionId);
+          const existing = s.activeCollectionOverlays.get(key);
           // Use a stable hash of the collection identity so the same
           // collection gets the same color across reloads / open order.
           const resolvedColor =
             existing?.color || colorForCollection(authorId, collectionId);
           if (existing && existing.color === resolvedColor) return s;
           const next = new Map(s.activeCollectionOverlays);
-          next.set(collectionId, { authorId, collectionId, color: resolvedColor });
+          next.set(key, { authorId, collectionId, color: resolvedColor });
           return { activeCollectionOverlays: next };
         }),
       removeCollectionOverlay: (collectionId) =>
@@ -415,11 +420,12 @@ export const useUiStore = create<UiStore>()(
         }),
       toggleCollectionOverlay: (authorId, collectionId) =>
         set((s) => {
+          const key = collectionOverlayKey(authorId, collectionId);
           const next = new Map(s.activeCollectionOverlays);
-          if (next.has(collectionId)) {
-            next.delete(collectionId);
+          if (next.has(key)) {
+            next.delete(key);
           } else {
-            next.set(collectionId, {
+            next.set(key, {
               authorId,
               collectionId,
               color: colorForCollection(authorId, collectionId),

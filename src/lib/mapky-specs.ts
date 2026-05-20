@@ -252,10 +252,17 @@ export function updateCollectionJson(
   description?: string,
   items?: string[],
 ): string {
+  const nextItems = items || [];
+  const isOsmItem = (uri: string) =>
+    /^https:\/\/www\.openstreetmap\.org\/(node|way|relation)\/\d+$/.test(uri);
+  if (!nextItems.every(isOsmItem)) {
+    throw new Error("Collections currently support OpenStreetMap place URLs only.");
+  }
+
   const envelope = {
     name,
     description: description || null,
-    items: items || [],
+    items: nextItems,
   };
 
   return JSON.stringify({

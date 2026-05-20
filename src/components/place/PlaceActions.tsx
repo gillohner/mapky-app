@@ -55,8 +55,9 @@ export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
   if (formMode === "collect") {
     return (
       <CollectionPicker
-        osmType={osmType}
-        osmId={osmId}
+        resourceUri={makeOsmUrl(osmType, osmId)}
+        membershipQueryKey={["mapky", "collections", "place", osmType, osmId]}
+        resourceLabel="Place"
         onClose={() => setFormMode(null)}
       />
     );

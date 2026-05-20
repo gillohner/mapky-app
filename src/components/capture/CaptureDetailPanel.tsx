@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   X,
   Compass,
+  Check,
   MapPin,
   Loader2,
   ChevronLeft,
@@ -12,7 +13,6 @@ import {
   Clock,
   Maximize,
 } from "lucide-react";
-import { Check } from "lucide-react";
 import { useShareLink } from "@/lib/hooks/use-share-link";
 import { PanelHeaderActions } from "@/components/shared/PanelHeaderActions";
 import { createGeoCapture } from "@/lib/mapky-specs";

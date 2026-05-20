@@ -9,7 +9,11 @@ import {
   useViewportCollections,
 } from "@/lib/api/hooks";
 import { fetchCollectionTags } from "@/lib/api/mapky";
-import { useUiStore, type CollectionOverlayEntry } from "@/stores/ui-store";
+import {
+  useUiStore,
+  collectionOverlayKey,
+  type CollectionOverlayEntry,
+} from "@/stores/ui-store";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
 import { DiscoverSidebar, type DiscoverTab } from "@/components/discover/DiscoverSidebar";
@@ -373,7 +377,7 @@ function CollectionCard({
   const toggleOverlay = useUiStore((s) => s.toggleCollectionOverlay);
   const [authorId, collectionId] = collection.id.split(":");
 
-  const overlay = overlays.get(collectionId);
+  const overlay = overlays.get(collectionOverlayKey(authorId, collectionId));
   const isVisible = !!overlay;
   const topTags = tags.slice(0, 3);
   const overflow = tags.length - topTags.length;
