@@ -72,7 +72,7 @@ export function CollectionList() {
       s.clearAllCollectionOverlays();
       if (savedOverlaysRef.current) {
         for (const e of savedOverlaysRef.current.values()) {
-          s.addCollectionOverlay(e.authorId, e.collectionId, e.color);
+          s.addCollectionOverlay(e.authorId, e.collectionId);
         }
       }
     };
@@ -165,7 +165,7 @@ export function CollectionList() {
     s.clearAllCollectionOverlays();
     for (const c of top) {
       const [authorId, collectionId] = c.id.split(":");
-      s.addCollectionOverlay(authorId, collectionId, c.color ?? undefined);
+      s.addCollectionOverlay(authorId, collectionId);
     }
     // filteredKey gates the effect; filteredTarget is the actual data
     // we read. ESLint can't see through the gate so silence it.
@@ -426,7 +426,7 @@ function CollectionCard({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            toggleOverlay(authorId, collectionId, collection.color ?? undefined);
+            toggleOverlay(authorId, collectionId);
           }}
           title={isVisible ? "Hide on map" : "Show on map"}
           className="flex-shrink-0 rounded-lg p-1.5 text-muted transition-colors hover:bg-background hover:text-foreground"

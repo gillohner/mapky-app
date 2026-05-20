@@ -88,7 +88,6 @@ export function CollectionPanel({
         collection.name,
         collection.description ?? undefined,
         newItems,
-        collection.color ?? undefined,
       );
       const path = `/pub/mapky.app/posts/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
@@ -140,14 +139,14 @@ export function CollectionPanel({
     const store = useUiStore.getState();
     savedOverlays.current = new Map(store.activeCollectionOverlays);
     store.clearAllCollectionOverlays();
-    store.addCollectionOverlay(authorId, collectionId, collection?.color ?? undefined);
+    store.addCollectionOverlay(authorId, collectionId);
 
     return () => {
       const s = useUiStore.getState();
       s.clearAllCollectionOverlays();
       if (savedOverlays.current) {
         for (const entry of savedOverlays.current.values()) {
-          s.addCollectionOverlay(entry.authorId, entry.collectionId, entry.color);
+          s.addCollectionOverlay(entry.authorId, entry.collectionId);
         }
       }
     };
@@ -155,10 +154,10 @@ export function CollectionPanel({
   }, [authorId, collectionId]);
 
   useEffect(() => {
-    if (collection?.color) {
-      addOverlay(authorId, collectionId, collection.color);
+    if (collection) {
+      addOverlay(authorId, collectionId);
     }
-  }, [collection?.color, authorId, collectionId, addOverlay]);
+  }, [collection, authorId, collectionId, addOverlay]);
 
   const close = () => navigate({ to: "/" });
 

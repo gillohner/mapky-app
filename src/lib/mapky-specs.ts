@@ -226,7 +226,6 @@ export function createCollection(
   name: string,
   description?: string,
   items?: string[],
-  color?: string,
 ): CreateCollectionResult {
   const builder = new MapkySpecsBuilder(pubkyId);
   const result = builder.createCollection(name, description || null, items || []);
@@ -237,15 +236,6 @@ export function createCollection(
 
   const obj =
     ((resultAny.post ?? resultAny.collection)?.toJson() as Record<string, unknown>) ?? {};
-  if (color) {
-    try {
-      const envelope = JSON.parse(String(obj.content)) as Record<string, unknown>;
-      envelope.color = color;
-      obj.content = JSON.stringify(envelope);
-    } catch {
-      // Keep canonical JSON emitted by wasm builder if content parse fails.
-    }
-  }
   const json = JSON.stringify(obj);
   const path = result.meta.path;
   const url = result.meta.url;
@@ -261,14 +251,12 @@ export function updateCollectionJson(
   name: string,
   description?: string,
   items?: string[],
-  color?: string,
 ): string {
-  const envelope: Record<string, unknown> = {
+  const envelope = {
     name,
     description: description || null,
     items: items || [],
   };
-  if (color) envelope.color = color;
 
   return JSON.stringify({
     content: JSON.stringify(envelope),

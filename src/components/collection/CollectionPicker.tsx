@@ -67,7 +67,6 @@ export function CollectionPicker({
         collection.name,
         collection.description ?? undefined,
         newItems,
-        collection.color ?? undefined,
       );
       const path = `/pub/mapky.app/posts/${cId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
@@ -180,8 +179,6 @@ export function CollectionPicker({
         name: newName.trim(),
         description: null,
         items: [osmUrl],
-        image_uri: null,
-        color: null,
         indexed_at: Date.now() / 1000,
       };
       queryClient.setQueryData<CollectionDetails[]>(

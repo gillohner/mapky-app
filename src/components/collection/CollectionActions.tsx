@@ -167,7 +167,6 @@ function EditInline({
   const [description, setDescription] = useState(
     collection.description ?? "",
   );
-  const [color, setColor] = useState(collection.color ?? "#3B82F6");
   const [submitting, setSubmitting] = useState(false);
 
   const handleSave = async () => {
@@ -178,7 +177,6 @@ function EditInline({
         name.trim(),
         description.trim() || undefined,
         collection.items,
-        color,
       );
       const path = `/pub/mapky.app/posts/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);
@@ -188,13 +186,13 @@ function EditInline({
 
       queryClient.setQueryData<CollectionDetails>(
         ["mapky", "collection", publicKey, collectionId],
-        (old) => old ? { ...old, name: name.trim(), description: description.trim() || null, color } : old,
+        (old) => old ? { ...old, name: name.trim(), description: description.trim() || null } : old,
       );
       queryClient.setQueryData<CollectionDetails[]>(
         ["mapky", "collections", "user", publicKey],
         (old) => old?.map((c) => {
           const [, id] = c.id.split(":");
-          return id === collectionId ? { ...c, name: name.trim(), description: description.trim() || null, color } : c;
+          return id === collectionId ? { ...c, name: name.trim(), description: description.trim() || null } : c;
         }),
       );
 
@@ -230,16 +228,6 @@ function EditInline({
         rows={3}
         className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
       />
-      <div className="flex items-center gap-2">
-        <label className="text-xs text-muted">Map color</label>
-        <input
-          type="color"
-          value={color}
-          onChange={(e) => setColor(e.target.value.toUpperCase())}
-          className="h-8 w-10 cursor-pointer rounded border border-border bg-background p-0.5"
-        />
-        <span className="text-xs font-mono text-muted">{color}</span>
-      </div>
       <div className="flex justify-end gap-2">
         <button
           type="button"
@@ -330,7 +318,6 @@ function AddPlaceInline({
         collection.name,
         collection.description ?? undefined,
         newItems,
-        collection.color ?? undefined,
       );
       const path = `/pub/mapky.app/posts/${collectionId}`;
       await session.storage.putText(path as `/pub/${string}`, json);

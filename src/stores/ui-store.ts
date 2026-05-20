@@ -229,9 +229,9 @@ interface UiStore {
   toggleMobileNav: () => void;
 
   activeCollectionOverlays: Map<string, CollectionOverlayEntry>;
-  addCollectionOverlay: (authorId: string, collectionId: string, color?: string) => void;
+  addCollectionOverlay: (authorId: string, collectionId: string) => void;
   removeCollectionOverlay: (collectionId: string) => void;
-  toggleCollectionOverlay: (authorId: string, collectionId: string, color?: string) => void;
+  toggleCollectionOverlay: (authorId: string, collectionId: string) => void;
   clearAllCollectionOverlays: () => void;
 
   streetViewActive: boolean;
@@ -394,17 +394,13 @@ export const useUiStore = create<UiStore>()(
       toggleMobileNav: () => set((s) => ({ mobileNavOpen: !s.mobileNavOpen })),
 
       activeCollectionOverlays: new Map(),
-      addCollectionOverlay: (authorId, collectionId, color) =>
+      addCollectionOverlay: (authorId, collectionId) =>
         set((s) => {
           const existing = s.activeCollectionOverlays.get(collectionId);
-          // Caller-provided color (set by the user on the collection)
-          // wins; otherwise fall back to a stable hash of the
-          // collection identity so the same collection gets the same
-          // color across reloads / open order.
+          // Use a stable hash of the collection identity so the same
+          // collection gets the same color across reloads / open order.
           const resolvedColor =
-            color ||
-            existing?.color ||
-            colorForCollection(authorId, collectionId);
+            existing?.color || colorForCollection(authorId, collectionId);
           if (existing && existing.color === resolvedColor) return s;
           const next = new Map(s.activeCollectionOverlays);
           next.set(collectionId, { authorId, collectionId, color: resolvedColor });
@@ -417,7 +413,7 @@ export const useUiStore = create<UiStore>()(
           next.delete(collectionId);
           return { activeCollectionOverlays: next };
         }),
-      toggleCollectionOverlay: (authorId, collectionId, color) =>
+      toggleCollectionOverlay: (authorId, collectionId) =>
         set((s) => {
           const next = new Map(s.activeCollectionOverlays);
           if (next.has(collectionId)) {
@@ -426,7 +422,7 @@ export const useUiStore = create<UiStore>()(
             next.set(collectionId, {
               authorId,
               collectionId,
-              color: color || colorForCollection(authorId, collectionId),
+              color: colorForCollection(authorId, collectionId),
             });
           }
           return { activeCollectionOverlays: next };
