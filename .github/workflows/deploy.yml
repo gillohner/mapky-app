@@ -1,12 +1,12 @@
 name: Deploy mapky-app
 
-# Triggers: a published release (e.g. v0.1.0) — *or* a manual run with a
-# tag/branch ref via the workflow_dispatch input. Push-to-main is intentionally
-# *not* a trigger: deploys go through tagged releases only so the artifact on
-# the VPS always matches a git ref the user signed off on.
+# Triggers: pushes to main and version tags (e.g. v0.1.0), plus manual runs
+# with an optional tag/branch override. This keeps prod moving on merged fixes
+# while preserving explicit release-tag deploys.
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main, master]
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       ref:
@@ -28,14 +28,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ github.event.inputs.ref || github.ref }}
 
       - name: Resolve release tag
         id: tag
-        # Prefer the release tag when this fires from a release event, fall back
-        # to ref_name (`v0.1.0`, `master`, etc.) for manual dispatches.
+        # Use the pushed ref (`v0.1.0`, `main`, etc.), unless workflow_dispatch
+        # provided an explicit override.
         run: |
-          tag="${{ github.event.release.tag_name }}"
+          tag="${{ github.event.inputs.ref }}"
           if [ -z "$tag" ]; then tag="${{ github.ref_name }}"; fi
           # Sanitize: keep only safe filename chars so nothing exotic ends up in
           # a path on the VPS.
