@@ -61,7 +61,7 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
         });
       }}
       theme="accent"
-      inputMode="none"
+      inputMode="free"
       title="Tags"
       onCountDelta={(delta) => {
         // Mirror tag_count into both detail caches so the place
