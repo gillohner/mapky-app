@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { Star, FileDown, ImageOff, Pencil } from "lucide-react";
 import {
   usePlaceFullReviews,
@@ -39,6 +39,7 @@ function classifyAttachment(uri: string): MediaItem["type"] {
 
 function Thumbnail({ item, onClick }: { item: MediaItem; onClick: () => void }) {
   const [failed, setFailed] = useState(false);
+  const handleError = () => setFailed(true);
   if (failed) {
     return (
       <button
@@ -66,7 +67,7 @@ function Thumbnail({ item, onClick }: { item: MediaItem; onClick: () => void }) 
           alt=""
           className="h-20 w-20 object-cover"
           loading="lazy"
-          onError={useCallback(() => setFailed(true), [])}
+          onError={handleError}
         />
       ) : (
         <video
@@ -74,7 +75,7 @@ function Thumbnail({ item, onClick }: { item: MediaItem; onClick: () => void }) 
           className="h-20 w-20 object-cover"
           muted
           preload="metadata"
-          onError={useCallback(() => setFailed(true), [])}
+          onError={handleError}
         />
       )}
     </button>
