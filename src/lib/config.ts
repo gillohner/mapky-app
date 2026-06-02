@@ -75,8 +75,8 @@ const DEFAULT_RELAYS: Record<PubkyEnvironment, string> = {
 
 const DEFAULT_GATEWAYS: Record<PubkyEnvironment, string> = {
   testnet: "http://localhost:8080",
-  staging: "https://nexus.staging.pubky.app",
-  production: "https://nexus.pubky.app",
+  staging: "https://nexus.mapky.app",
+  production: "https://nexus.mapky.app",
 };
 
 const DEFAULT_PKARR_RELAYS: string[] = [
