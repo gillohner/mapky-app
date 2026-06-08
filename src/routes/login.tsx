@@ -5,8 +5,6 @@ import { PubkyClient } from "@/lib/pubky/client";
 import { PubkyAuthWidget } from "@/components/auth/PubkyAuthWidget";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { config, isTestnet } from "@/lib/config";
-import { createUserProfile, randomTestProfile } from "@/lib/mapky-specs";
-import { uploadFile } from "@/lib/pubky/files";
 import { toast } from "sonner";
 import { Upload, X } from "lucide-react";
 import { Pubky, Keypair, PublicKey } from "@synonymdev/pubky";
@@ -130,35 +128,6 @@ function LoginPage() {
       const session = await signer.signup(homeserver, signupToken);
 
       await new Promise((r) => setTimeout(r, 2000));
-
-      const testData = randomTestProfile(publicKey);
-
-      // Fetch a deterministic avatar PNG and upload it as a Pubky file
-      // so the gateway can serve it via /static/avatar/{publicKey}.
-      let imageUri: string | undefined;
-      try {
-        const avatarRes = await fetch(
-          `https://api.dicebear.com/9.x/avataaars/png?seed=${publicKey}&size=256`,
-        );
-        if (avatarRes.ok) {
-          const avatarBlob = await avatarRes.blob();
-          const avatarFile = new File([avatarBlob], "avatar.png", { type: "image/png" });
-          const uploaded = await uploadFile(session, publicKey, avatarFile);
-          imageUri = uploaded.fileUri;
-        }
-      } catch (e) {
-        console.warn("[Signup] Failed to upload avatar, profile will have no image", e);
-      }
-
-      const profile = createUserProfile(publicKey, {
-        name: testData.name,
-        bio: testData.bio,
-        image: imageUri,
-      });
-      await session.storage.putText(
-        profile.path as `/pub/${string}`,
-        profile.json,
-      );
 
       const testPassphrase = "testnet123";
       const recoveryFileData = keypair.createRecoveryFile(testPassphrase);
