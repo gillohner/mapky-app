@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil, Reply } from "lucide-react";
+import { FileDown, ImageOff, Pencil, Reply } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   usePlaceFullPosts,
@@ -8,9 +8,10 @@ import {
 } from "@/lib/api/hooks";
 import { useEnsureIngested } from "@/lib/nexus/use-ensure-ingested";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { truncatePublicKey } from "@/lib/api/user";
+import { resolveFileUrl, truncatePublicKey } from "@/lib/api/user";
 import type { MapkyPostDetails } from "@/types/mapky";
 import { UserAvatar } from "@/components/shared/UserAvatar";
+import { MediaViewer, type MediaItem } from "@/components/shared/MediaViewer";
 import { CommentForm } from "./CommentForm";
 import { PostTags } from "./PostTags";
 import { ReplyThread } from "@/components/posts/ReplyThread";
@@ -27,6 +28,114 @@ function timeAgo(timestamp: number): string {
   if (days < 30) return `${days}d ago`;
   const months = Math.floor(days / 30);
   return `${months}mo ago`;
+}
+
+function classifyAttachment(uri: string): MediaItem["type"] {
+  const lower = uri.toLowerCase();
+  if (/\.(jpe?g|png|gif|webp|avif|svg|bmp|ico)$/i.test(lower)) return "image";
+  if (/\.(mp4|webm|mov|avi|mkv|ogv)$/i.test(lower)) return "video";
+  if (uri.startsWith("pubky://")) return "image";
+  return "other";
+}
+
+function AttachmentThumb({ item, onClick }: { item: MediaItem; onClick: () => void }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        className="flex h-20 w-20 items-center justify-center rounded-lg bg-surface ring-1 ring-border"
+      >
+        <ImageOff className="h-5 w-5 text-muted" />
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className="overflow-hidden rounded-lg ring-1 ring-border transition-shadow hover:ring-accent"
+    >
+      {item.type === "image" ? (
+        <img
+          src={item.url}
+          alt=""
+          className="h-20 w-20 object-cover"
+          loading="lazy"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <video
+          src={item.url}
+          className="h-20 w-20 object-cover"
+          muted
+          preload="metadata"
+          onError={() => setFailed(true)}
+        />
+      )}
+    </button>
+  );
+}
+
+function PostAttachments({ attachments }: { attachments: string[] }) {
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const resolved: MediaItem[] = attachments
+    .map((uri) => {
+      const url = resolveFileUrl(uri);
+      if (!url) return null;
+      return { url, type: classifyAttachment(uri) } as MediaItem;
+    })
+    .filter((item): item is MediaItem => item !== null);
+
+  if (resolved.length === 0) return null;
+
+  const media = resolved.filter((item) => item.type === "image" || item.type === "video");
+  const files = resolved.filter((item) => item.type === "other");
+
+  return (
+    <>
+      {media.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {media.map((item, index) => (
+            <AttachmentThumb
+              key={index}
+              item={item}
+              onClick={() => setViewerIndex(index)}
+            />
+          ))}
+        </div>
+      )}
+      {files.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {files.map((item, index) => (
+            <a
+              key={index}
+              href={item.url}
+              download
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
+            >
+              <FileDown className="h-3 w-3" />
+              File {index + 1}
+            </a>
+          ))}
+        </div>
+      )}
+      {viewerIndex !== null && (
+        <MediaViewer
+          items={media}
+          initialIndex={viewerIndex}
+          onClose={() => setViewerIndex(null)}
+        />
+      )}
+    </>
+  );
 }
 
 function CommentCard({ post }: { post: MapkyPostDetails }) {
@@ -99,6 +208,9 @@ function CommentCard({ post }: { post: MapkyPostDetails }) {
           </div>
           {post.content && (
             <p className="mt-1 text-sm text-foreground">{post.content}</p>
+          )}
+          {post.attachments.length > 0 && (
+            <PostAttachments attachments={post.attachments} />
           )}
           <div className="mt-1 flex items-center gap-3">
             <PostTags authorId={post.author_id} postId={post.id} />

@@ -36,6 +36,7 @@ interface BasePutOptions {
 export async function outboxPutText(
   opts: BasePutOptions & { text: string },
 ): Promise<OutboxWriteResult> {
+  assertMapkyWritePath(opts.path);
   return attempt(opts, async () => {
     await opts.session.storage.putText(opts.path, opts.text);
   }, {
@@ -50,6 +51,7 @@ export async function outboxPutText(
 export async function outboxDelete(
   opts: BasePutOptions,
 ): Promise<OutboxWriteResult> {
+  assertMapkyWritePath(opts.path);
   return attempt(opts, async () => {
     await opts.session.storage.delete(opts.path);
   }, {
@@ -123,6 +125,7 @@ export async function drainOutbox(
 
     await markOutboxStatus(entry.id, "syncing");
     try {
+      assertMapkyWritePath(entry.path as `/pub/${string}`);
       if (entry.op === "delete") {
         await session.storage.delete(entry.path as `/pub/${string}`);
       } else if (entry.op === "put") {
@@ -155,4 +158,10 @@ export async function drainOutbox(
   }
 
   return { written, failed };
+}
+
+function assertMapkyWritePath(path: `/pub/${string}`) {
+  if (path.startsWith("/pub/pubky.app/")) {
+    throw new Error("MapKy must not write to /pub/pubky.app/ paths");
+  }
 }

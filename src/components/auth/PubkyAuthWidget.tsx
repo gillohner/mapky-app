@@ -19,7 +19,7 @@ interface PubkyAuthWidgetProps {
 
 export function PubkyAuthWidget({
   relay,
-  caps = "/pub/mapky.app/:rw,/pub/pubky.app/:rw",
+  caps = "/pub/mapky.app/:rw,/pub/pubky.app/:r",
   open = false,
   onSuccess,
   onError,
