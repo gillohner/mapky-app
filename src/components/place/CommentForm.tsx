@@ -21,10 +21,10 @@ import type { MapkyPostDetails } from "@/types/mapky";
  * nexus has indexed the new post — instead of blanket-invalidating
  * `["mapky"]` and stomping every concurrent optimistic update.
  *
- * Returns null when the parent is unrecognized (cross-domain or absent);
- * in that case we skip the refetch and rely on the optimistic state. */
-function parentListQueryKey(parent: string | null | undefined): QueryKey | null {
-  if (!parent) return null;
+ * Returns an empty array when the parent is unrecognized (cross-domain or
+ * absent); in that case we skip the refetch and rely on optimistic state. */
+function parentListQueryKeys(parent: string | null | undefined): QueryKey[] {
+  if (!parent) return [];
 
   // OSM URL → place posts list
   const osm = parent.match(
@@ -33,7 +33,10 @@ function parentListQueryKey(parent: string | null | undefined): QueryKey | null 
   if (osm) {
     const osmType = osm[1];
     const osmId = Number(osm[2]);
-    return ["mapky", "place", osmType, osmId, "posts"];
+    return [
+      ["mapky", "place-full", osmType, osmId],
+      ["mapky", "place", osmType, osmId, "posts"],
+    ];
   }
 
   // pubky://{author}/pub/mapky.app/{type}/{id} → that resource's reply list
@@ -41,10 +44,10 @@ function parentListQueryKey(parent: string | null | undefined): QueryKey | null 
     /^pubky:\/\/([^/]+)\/pub\/mapky\.app\/(reviews|routes|collections|geo_captures|sequences|incidents|posts)\/([^/?#]+)/,
   );
   if (mapky) {
-    return ["mapky", mapky[2], mapky[1], mapky[3], "replies"];
+    return [["mapky", mapky[2], mapky[1], mapky[3], "replies"]];
   }
 
-  return null;
+  return [];
 }
 
 interface CommentFormProps {
@@ -172,7 +175,7 @@ export function CommentForm({
       // Each submit owns its own closure — rapid back-to-back posts no
       // longer pile up on a single 5 s timer that wipes everyone's
       // optimistic state.
-      const refetchKey = parentListQueryKey(
+      const refetchKeys = parentListQueryKeys(
         parent ?? editPost?.parent_uri ?? null,
       );
       const writtenPostId = postId;
@@ -188,8 +191,10 @@ export function CommentForm({
           },
           { intervalMs: 600, timeoutMs: 30_000, initialDelayMs: 800 },
         );
-        if (indexed && refetchKey) {
-          queryClient.refetchQueries({ queryKey: refetchKey, type: "active" });
+        if (indexed) {
+          for (const queryKey of refetchKeys) {
+            queryClient.refetchQueries({ queryKey, type: "active" });
+          }
         }
       });
     } catch (err) {

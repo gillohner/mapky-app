@@ -3,7 +3,8 @@ import { MessageSquarePlus, Star, FolderHeart } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { makeOsmUrl } from "@/lib/mapky-specs";
-import type { MapkyPostDetails } from "@/types/mapky";
+import { registerPending } from "@/lib/api/optimistic-overlay";
+import type { MapkyPostDetails, PlaceFullResponse } from "@/types/mapky";
 import { ReviewForm } from "./ReviewForm";
 import { CommentForm } from "./CommentForm";
 import { CollectionPicker } from "@/components/collection/CollectionPicker";
@@ -13,6 +14,40 @@ interface PlaceActionsProps {
   osmId: number;
 }
 
+const samePost = (a: MapkyPostDetails, b: MapkyPostDetails) =>
+  a.id === b.id && a.author_id === b.author_id;
+
+function upsertPost(posts: MapkyPostDetails[], post: MapkyPostDetails) {
+  const existing = posts.some((p) => samePost(p, post));
+  return existing
+    ? posts.map((p) => (samePost(p, post) ? post : p))
+    : [post, ...posts];
+}
+
+function emptyPlaceFull(osmType: string, osmId: number): PlaceFullResponse {
+  return {
+    detail: {
+      osm_canonical: makeOsmUrl(osmType, osmId),
+      osm_type: osmType,
+      osm_id: osmId,
+      lat: 0,
+      lon: 0,
+      geocoded: false,
+      review_count: 0,
+      avg_rating: 0,
+      tag_count: 0,
+      photo_count: 0,
+      indexed_at: Math.floor(Date.now() / 1000),
+      name: null,
+    },
+    reviews: [],
+    posts: [],
+    tags: [],
+    collections: [],
+    routes: [],
+  };
+}
+
 /**
  * Workflow triggers on a place panel. Tagging used to live here too,
  * but it's now handled by the inline `<PlaceTags />` strip's `+` button
@@ -20,7 +55,7 @@ interface PlaceActionsProps {
  * places are public OSM data, and Share lives in the panel header.
  */
 export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, publicKey } = useAuth();
   const queryClient = useQueryClient();
   const [formMode, setFormMode] =
     useState<"review" | "post" | "collect" | null>(null);
@@ -43,10 +78,37 @@ export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
         parentPreview={`About ${osmType}/${osmId}`}
         onClose={() => setFormMode(null)}
         onPosted={(post: MapkyPostDetails) => {
+          const placeFullKey = ["mapky", "place-full", osmType, osmId] as const;
+          const pendingId = `post:${post.author_id}:${post.id}`;
+
+          registerPending<PlaceFullResponse>(placeFullKey, {
+            id: pendingId,
+            apply: (data) => ({
+              ...data,
+              posts: upsertPost(data.posts, post),
+            }),
+            isConfirmed: (data) =>
+              data.posts.some(
+                (p) =>
+                  samePost(p, post) &&
+                  p.content === post.content &&
+                  p.attachments.length === post.attachments.length,
+              ),
+          });
+
+          queryClient.setQueryData<PlaceFullResponse>(placeFullKey, (old) =>
+            old ? { ...old } : emptyPlaceFull(osmType, osmId),
+          );
           queryClient.setQueryData<MapkyPostDetails[]>(
             ["mapky", "place", osmType, osmId, "posts"],
-            (old) => (old ? [post, ...old] : [post]),
+            (old) => (old ? upsertPost(old, post) : [post]),
           );
+          if (publicKey) {
+            queryClient.setQueryData<MapkyPostDetails[]>(
+              ["mapky", "posts", "user", publicKey],
+              (old) => (old ? upsertPost(old, post) : [post]),
+            );
+          }
         }}
       />
     );

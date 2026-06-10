@@ -6,6 +6,7 @@ import { createReview, makeOsmUrl } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { fetchReviewTags } from "@/lib/api/mapky";
 import { waitForIndexed } from "@/lib/api/wait-for-indexed";
+import { registerPending } from "@/lib/api/optimistic-overlay";
 import {
   uploadFile,
   ACCEPTED_IMAGE_TYPES,
@@ -14,7 +15,7 @@ import {
 } from "@/lib/pubky/files";
 import { toast } from "sonner";
 import { resolveFileUrl } from "@/lib/api/user";
-import type { ReviewDetails, PlaceDetails } from "@/types/mapky";
+import type { ReviewDetails, PlaceDetails, PlaceFullResponse } from "@/types/mapky";
 
 interface ReviewFormProps {
   osmType: string;
@@ -27,6 +28,70 @@ interface ReviewFormProps {
 interface PendingImage {
   file: File;
   previewUrl: string;
+}
+
+const sameReview = (a: ReviewDetails, b: ReviewDetails) =>
+  a.id === b.id && a.author_id === b.author_id;
+
+function upsertReview(reviews: ReviewDetails[], review: ReviewDetails) {
+  const existing = reviews.some((r) => sameReview(r, review));
+  return existing
+    ? reviews.map((r) => (sameReview(r, review) ? review : r))
+    : [review, ...reviews];
+}
+
+function emptyPlaceFull(osmType: string, osmId: number): PlaceFullResponse {
+  return {
+    detail: {
+      osm_canonical: makeOsmUrl(osmType, osmId),
+      osm_type: osmType,
+      osm_id: osmId,
+      lat: 0,
+      lon: 0,
+      geocoded: false,
+      review_count: 0,
+      avg_rating: 0,
+      tag_count: 0,
+      photo_count: 0,
+      indexed_at: Math.floor(Date.now() / 1000),
+      name: null,
+    },
+    reviews: [],
+    posts: [],
+    tags: [],
+    collections: [],
+    routes: [],
+  };
+}
+
+function patchPlaceFullReview(
+  data: PlaceFullResponse,
+  review: ReviewDetails,
+  previousReview: ReviewDetails | undefined,
+  addedPhotos: number,
+): PlaceFullResponse {
+  const isNew = !previousReview && !data.reviews.some((r) => sameReview(r, review));
+  const currentCount = data.detail.review_count;
+  const nextCount = isNew ? currentCount + 1 : currentCount;
+  const previousRating = previousReview?.rating;
+  const nextAvg = previousRating
+    ? (data.detail.avg_rating * currentCount - previousRating + review.rating) /
+      Math.max(currentCount, 1)
+    : isNew
+      ? (data.detail.avg_rating * currentCount + review.rating) /
+        Math.max(nextCount, 1)
+      : data.detail.avg_rating;
+
+  return {
+    ...data,
+    reviews: upsertReview(data.reviews, review),
+    detail: {
+      ...data.detail,
+      review_count: nextCount,
+      avg_rating: nextAvg,
+      photo_count: data.detail.photo_count + addedPhotos,
+    },
+  };
 }
 
 export function ReviewForm({ osmType, osmId, onClose, editReview }: ReviewFormProps) {
@@ -99,6 +164,12 @@ export function ReviewForm({ osmType, osmId, onClose, editReview }: ReviewFormPr
       await queryClient.cancelQueries({
         queryKey: ["mapky", "place", osmType, osmId],
       });
+      await queryClient.cancelQueries({
+        queryKey: ["mapky", "place-full", osmType, osmId],
+      });
+      await queryClient.cancelQueries({
+        queryKey: ["mapky", "reviews", "user", publicKey],
+      });
 
       const reviewId = editReview?.id ?? result.path.split("/").pop()!;
       const optimistic: ReviewDetails = {
@@ -110,6 +181,33 @@ export function ReviewForm({ osmType, osmId, onClose, editReview }: ReviewFormPr
         attachments: allAttachments,
         indexed_at: editReview?.indexed_at ?? Math.floor(Date.now() / 1000),
       };
+
+      const placeFullKey = ["mapky", "place-full", osmType, osmId] as const;
+      const userReviewsKey = ["mapky", "reviews", "user", publicKey] as const;
+      const pendingId = `review:${publicKey}:${reviewId}`;
+      const reviewConfirmed = (data: PlaceFullResponse) =>
+        data.reviews.some(
+          (r) =>
+            sameReview(r, optimistic) &&
+            r.rating === optimistic.rating &&
+            r.content === optimistic.content &&
+            r.attachments.length === optimistic.attachments.length,
+        );
+
+      registerPending<PlaceFullResponse>(placeFullKey, {
+        id: pendingId,
+        apply: (data) =>
+          patchPlaceFullReview(data, optimistic, editReview, newAttachments.length),
+        isConfirmed: reviewConfirmed,
+      });
+
+      queryClient.setQueryData<PlaceFullResponse>(placeFullKey, (old) =>
+        old ? { ...old } : emptyPlaceFull(osmType, osmId),
+      );
+
+      queryClient.setQueryData<ReviewDetails[]>(userReviewsKey, (old) =>
+        old ? upsertReview(old, optimistic) : [optimistic],
+      );
 
       if (editReview) {
         queryClient.setQueryData<ReviewDetails[]>(
@@ -168,6 +266,14 @@ export function ReviewForm({ osmType, osmId, onClose, editReview }: ReviewFormPr
           });
           queryClient.refetchQueries({
             queryKey: ["mapky", "place", osmType, osmId],
+            type: "active",
+          });
+          queryClient.refetchQueries({
+            queryKey: ["mapky", "place-full", osmType, osmId],
+            type: "active",
+          });
+          queryClient.refetchQueries({
+            queryKey: ["mapky", "reviews", "user", publicKey],
             type: "active",
           });
         }
