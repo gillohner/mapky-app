@@ -1,6 +1,7 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePlaceFullTags } from "@/lib/api/hooks";
-import { createPlaceTag } from "@/lib/mapky-specs";
+import { fetchOsmResourceTags } from "@/lib/api/mapky";
+import { createPlaceTag, makeOsmUrl } from "@/lib/mapky-specs";
 import { TagStrip } from "@/components/shared/TagStrip";
 import type {
   PlaceDetails,
@@ -11,6 +12,30 @@ import type {
 interface PlaceTagsProps {
   osmType: string;
   osmId: number;
+}
+
+function emptyPlaceFull(osmType: string, osmId: number): PlaceFullResponse {
+  return {
+    detail: {
+      osm_canonical: makeOsmUrl(osmType, osmId),
+      osm_type: osmType,
+      osm_id: osmId,
+      lat: 0,
+      lon: 0,
+      geocoded: false,
+      review_count: 0,
+      avg_rating: 0,
+      tag_count: 0,
+      photo_count: 0,
+      indexed_at: Math.floor(Date.now() / 1000),
+      name: null,
+    },
+    reviews: [],
+    posts: [],
+    tags: [],
+    collections: [],
+    routes: [],
+  };
 }
 
 /**
@@ -29,9 +54,17 @@ interface PlaceTagsProps {
  * in sync on tag_count.
  */
 export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
-  const { data: tags } = usePlaceFullTags(osmType, osmId);
+  const { data: placeFullTags } = usePlaceFullTags(osmType, osmId);
   const queryClient = useQueryClient();
   const fullKey = ["mapky", "place-full", osmType, osmId] as const;
+  const resourceTagsKey = ["mapky", "place", osmType, osmId, "resource-tags"] as const;
+  const { data: resourceTags } = useQuery({
+    queryKey: resourceTagsKey,
+    queryFn: () => fetchOsmResourceTags(osmType, osmId),
+    enabled: !!osmType && !!osmId && (!placeFullTags || placeFullTags.length === 0),
+    retry: false,
+  });
+  const tags = placeFullTags && placeFullTags.length > 0 ? placeFullTags : resourceTags;
 
   return (
     <TagStrip
@@ -42,9 +75,9 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
       mutate={async (updater) => {
         await queryClient.cancelQueries({ queryKey: fullKey });
         queryClient.setQueryData<PlaceFullResponse>(fullKey, (old) => {
-          if (!old) return old;
-          const nextTags = updater(old.tags) ?? [];
-          return { ...old, tags: nextTags };
+          const base = old ?? emptyPlaceFull(osmType, osmId);
+          const nextTags = updater(base.tags) ?? [];
+          return { ...base, tags: nextTags };
         });
         // Also feed the legacy per-endpoint /tags cache so any non-
         // composite consumer (e.g. PlaceList row tag chips) sees the
@@ -53,9 +86,13 @@ export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
           ["mapky", "place", osmType, osmId, "tags"],
           (old) => updater(old),
         );
+        queryClient.setQueryData<PostTagDetails[]>(resourceTagsKey, (old) =>
+          updater(old),
+        );
       }}
       refresh={() => {
         queryClient.invalidateQueries({ queryKey: fullKey });
+        queryClient.invalidateQueries({ queryKey: resourceTagsKey });
         queryClient.invalidateQueries({
           queryKey: ["mapky", "place", osmType, osmId, "tags"],
         });

@@ -267,6 +267,36 @@ export async function fetchPlaceTags(
   return data;
 }
 
+interface ResourceTagsResponse {
+  tags: Array<{
+    label: string;
+    taggers: string[];
+    taggers_count: number;
+  }>;
+}
+
+export async function fetchOsmResourceTags(
+  osmType: string,
+  osmId: number,
+): Promise<PostTagDetails[]> {
+  try {
+    const uri = `https://www.openstreetmap.org/${osmType}/${osmId}`;
+    const { data } = await nexusClient.get<ResourceTagsResponse>(
+      "/v0/resource/by-uri",
+      { params: { uri } },
+    );
+    return data.tags.map((tag) => ({
+      label: tag.label,
+      taggers: tag.taggers,
+      taggers_count: tag.taggers_count,
+    }));
+  } catch (err) {
+    const status = (err as { response?: { status?: number } }).response?.status;
+    if (status === 404) return [];
+    throw err;
+  }
+}
+
 export async function fetchPostTags(
   authorId: string,
   postId: string,
