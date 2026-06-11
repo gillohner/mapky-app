@@ -22,14 +22,17 @@ interface MapStore {
   toggleSatelliteLabels: () => void;
 }
 
+export const DEFAULT_MAP_CENTER: [number, number] = [0, 20];
+export const DEFAULT_MAP_ZOOM = 0;
+
 export const useMapStore = create<MapStore>()(
   persist(
     (set) => ({
       map: null,
       setMap: (map) => set({ map }),
 
-      center: [8.55, 47.37], // Zurich default
-      zoom: 13,
+      center: DEFAULT_MAP_CENTER,
+      zoom: DEFAULT_MAP_ZOOM,
       setView: (center, zoom) => set({ center, zoom }),
 
       theme: window.matchMedia("(prefers-color-scheme: dark)").matches

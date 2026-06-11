@@ -1,6 +1,10 @@
 import { useEffect } from "react";
 import { useUiStore } from "@/stores/ui-store";
-import { useMapStore } from "@/stores/map-store";
+import {
+  DEFAULT_MAP_CENTER,
+  DEFAULT_MAP_ZOOM,
+  useMapStore,
+} from "@/stores/map-store";
 import { PLACE_ACTIVITIES, type PlaceActivity } from "@/types/mapky";
 
 /**
@@ -191,11 +195,18 @@ export function useUrlSync() {
     );
     setOrDelete(params, "b3", buildings3DVisible ? "1" : null);
 
-    setOrDelete(params, "z", zoom.toFixed(2));
+    const isDefaultViewport =
+      Math.abs(zoom - DEFAULT_MAP_ZOOM) < 0.005 &&
+      Math.abs(center[0] - DEFAULT_MAP_CENTER[0]) < 0.00001 &&
+      Math.abs(center[1] - DEFAULT_MAP_CENTER[1]) < 0.00001;
+
+    setOrDelete(params, "z", isDefaultViewport ? null : zoom.toFixed(2));
     setOrDelete(
       params,
       "c",
-      `${center[1].toFixed(5)},${center[0].toFixed(5)}`,
+      isDefaultViewport
+        ? null
+        : `${center[1].toFixed(5)},${center[0].toFixed(5)}`,
     );
 
     const search = params.toString();
