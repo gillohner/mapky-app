@@ -3,6 +3,10 @@ import type maplibregl from "maplibre-gl";
 import { useNavigate } from "@tanstack/react-router";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
+import {
+  incidentResultKey,
+  useIncidentResultsStore,
+} from "@/stores/incident-results-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useViewportIncidents } from "@/lib/api/hooks";
 import { useViewportBounds } from "@/hooks/use-viewport-bounds";
@@ -159,8 +163,17 @@ export function IncidentMarkersLayer() {
 
   const bounds = useViewportBounds(enabled);
   const incidents = useViewportIncidents(enabled ? bounds : null).data;
+  const sidebarResultsActive = useIncidentResultsStore((s) => s.active);
+  const sidebarResultKeys = useIncidentResultsStore((s) => s.resultKeys);
 
-  const data = useMemo(() => incidentsToGeoJSON(incidents ?? []), [incidents]);
+  const visibleIncidents = useMemo(() => {
+    if (!sidebarResultsActive) return incidents ?? [];
+    return (incidents ?? []).filter((incident) =>
+      sidebarResultKeys.has(incidentResultKey(incident)),
+    );
+  }, [incidents, sidebarResultsActive, sidebarResultKeys]);
+
+  const data = useMemo(() => incidentsToGeoJSON(visibleIncidents), [visibleIncidents]);
   const dataRef = useRef<GeoJSON.FeatureCollection>(data);
   useEffect(() => {
     dataRef.current = data;
