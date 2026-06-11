@@ -26,6 +26,10 @@ import { useUserIncidents, useViewportIncidents } from "@/lib/api/hooks";
 import { createIncident } from "@/lib/mapky-specs";
 import { ingestUserIntoNexus } from "@/lib/nexus/ingest";
 import { useMapStore } from "@/stores/map-store";
+import {
+  incidentResultKey,
+  useIncidentResultsStore,
+} from "@/stores/incident-results-store";
 import type {
   IncidentDetails,
   IncidentSeverity,
@@ -185,6 +189,13 @@ export function IncidentList() {
         .some((v) => v.toLowerCase().includes(needle));
     });
   }, [allIncidents, filter, activeType, activeSeverity]);
+
+  const setIncidentResults = useIncidentResultsStore((s) => s.setResults);
+  const clearIncidentResults = useIncidentResultsStore((s) => s.clearResults);
+  useEffect(() => {
+    setIncidentResults(new Set(filtered.map(incidentResultKey)));
+    return clearIncidentResults;
+  }, [filtered, setIncidentResults, clearIncidentResults]);
 
   const close = () => navigate({ to: "/" });
 
