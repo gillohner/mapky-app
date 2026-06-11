@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { Star, Tag, MessageCircle, FolderHeart, Filter, RotateCcw } from "lucide-react";
+import { Star, Tag, MessageCircle, Filter, RotateCcw } from "lucide-react";
 import { useUiStore } from "@/stores/ui-store";
 import { PLACE_ACTIVITIES, type PlaceActivity } from "@/types/mapky";
 
@@ -14,7 +14,6 @@ const ACTIVITY_LABEL: Record<PlaceActivity, string> = {
   tagged: "Tagged",
   reviewed: "Reviewed",
   posted: "Posted",
-  collected: "Collected",
 };
 
 const ACTIVITY_ICON: Record<
@@ -24,13 +23,12 @@ const ACTIVITY_ICON: Record<
   tagged: ({ className }) => <Tag className={className} />,
   reviewed: ({ className }) => <Star className={className} />,
   posted: ({ className }) => <MessageCircle className={className} />,
-  collected: ({ className }) => <FolderHeart className={className} />,
 };
 
 /**
  * Filter controls for the Places layer. Two dimensions:
  *
- * - **Activity** — multi-select OR pills (`tagged|reviewed|posted|collected`).
+ * - **Activity** — multi-select OR pills (`tagged|reviewed|posted`).
  *   Each picks one or more activity dimensions a place must satisfy. Pills
  *   combine with OR — the empty set means "any place in viewport".
  * - **Min rating** — 0–5 floor on the average rating; default 0 (no filter).

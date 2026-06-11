@@ -8,7 +8,7 @@ interface Props {
 
 /**
  * Standard "create new …" button used at the top of every discover
- * list body (Routes / Collections / Captures). Full-width, dashed
+ * list body (Routes / Captures). Full-width, dashed
  * border, muted by default, accent on hover — matches the
  * "secondary action" feel of the lists. Replaces the small
  * top-right corner buttons we used to have on Routes/Captures.

@@ -181,10 +181,6 @@ function MapkyTab() {
   const toggleCapturesLayer = useUiStore((s) => s.toggleCapturesLayer);
   const incidentsLayerVisible = useUiStore((s) => s.incidentsLayerVisible);
   const toggleIncidentsLayer = useUiStore((s) => s.toggleIncidentsLayer);
-  const activeCollections = useUiStore((s) => s.activeCollectionOverlays);
-  const clearAllCollectionOverlays = useUiStore(
-    (s) => s.clearAllCollectionOverlays,
-  );
   return (
     <div className="flex flex-col gap-1">
       <Toggle
@@ -206,15 +202,6 @@ function MapkyTab() {
         on={incidentsLayerVisible}
         onChange={toggleIncidentsLayer}
       />
-      {activeCollections.size > 0 && (
-        <button
-          onClick={clearAllCollectionOverlays}
-          className="mt-2 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-left text-xs text-muted hover:border-accent hover:text-foreground"
-        >
-          Hide all {activeCollections.size} pinned collection
-          {activeCollections.size === 1 ? "" : "s"}
-        </button>
-      )}
     </div>
   );
 }

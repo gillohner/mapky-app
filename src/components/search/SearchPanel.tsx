@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   X,
   MapPin,
-  FolderHeart,
   MessageSquare,
   Route as RouteIcon,
   Camera,
@@ -190,9 +189,8 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
 
   // Search is the loudest "focus mode" the app has — the user typed a
   // query expecting an answer, so kill EVERY Mapky data layer until
-  // they leave /search. Orange-dot search markers and any pinned
-  // collection overlays still render (they're not in the dimmable
-  // set), so the user keeps the context they actually asked for.
+  // they leave /search. Orange-dot search markers still render, so the
+  // user keeps the context they actually asked for.
   // (null focus = no exception, hide everything.)
   useAutoFocusLayer(null, { hide: true });
 
@@ -303,17 +301,6 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
     });
   };
 
-  const handleSelectCollection = (authorId: string, collectionId: string) => {
-    navigate({
-      to: "/collection/$authorId/$collectionId",
-      params: { authorId, collectionId },
-      search: {
-        fromSearchQuery: query,
-        fromSearchMode: mode,
-      },
-    });
-  };
-
   const handleSelectReview = (review: ReviewDetails) => {
     const parsed = parseOsmCanonical(review.osm_canonical);
     if (!parsed) return;
@@ -331,8 +318,8 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
   /**
    * Navigation target for a `:MapkyAppPost` search result. We don't have a
    * standalone post-detail route, so we follow `parent_uri` to the nearest
-   * anchored context: the OSM place, the route / collection / capture detail,
-   * or the place behind a review parent. When the parent is itself another
+   * anchored context: the OSM place, route / capture detail, or the place
+   * behind a review parent. When the parent is itself another
    * post, we walk the chain (bounded depth) using whatever posts the
    * tag-search payload already returned — no extra round-trips.
    */
@@ -360,7 +347,7 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
       }
 
       const matched = parentUri.match(
-        /^pubky:\/\/([^/]+)\/pub\/mapky\.app\/(reviews|routes|collections|geo_captures|sequences|incidents|posts)\/([^/?#]+)/,
+        /^pubky:\/\/([^/]+)\/pub\/mapky\.app\/(reviews|routes|geo_captures|sequences|incidents|posts)\/([^/?#]+)/,
       );
       if (!matched) return;
       const parentAuthor: string = matched[1];
@@ -372,10 +359,6 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
           to: "/route/$authorId/$routeId",
           params: { authorId: parentAuthor, routeId: parentId },
         });
-        return;
-      }
-      if (parentType === "collections") {
-        handleSelectCollection(parentAuthor, parentId);
         return;
       }
       if (parentType === "geo_captures") {
@@ -431,7 +414,6 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
     mode === "places"
       ? allPlaceResults.length
       : (tagResults?.places?.length ?? 0) +
-        (tagResults?.collections?.length ?? 0) +
         (tagResults?.reviews?.length ?? 0) +
         (tagResults?.posts?.length ?? 0) +
         (tagResults?.routes?.length ?? 0) +
@@ -495,7 +477,7 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
       )}
 
       {/* Tags mode — places sectioned by viewport (matches places-mode
-          structure), then collections / posts / routes underneath. */}
+          structure), then posts / routes underneath. */}
       {mode === "tags" && tagResults && (
         <div className="space-y-3">
           {tagEnrichedNearby.length > 0 && (
@@ -539,34 +521,6 @@ export function SearchPanel({ query, mode }: SearchPanelProps) {
                   />
                 ) : null,
               )}
-            </div>
-          )}
-
-          {tagResults.collections?.length > 0 && (
-            <div>
-              <div className="px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
-                Collections
-              </div>
-              {tagResults.collections.map((c) => {
-                const [authorId, collectionId] = c.id.split(":");
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => handleSelectCollection(authorId, collectionId)}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-surface"
-                  >
-                    <FolderHeart className="h-4 w-4 flex-shrink-0 text-accent" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {c.name}
-                      </p>
-                      <p className="text-xs text-muted">
-                        {c.items.length} places
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
             </div>
           )}
 

@@ -18,8 +18,7 @@ const STARTS_SOURCE = "mapky-routes-index-starts";
 const STARTS_LAYER = "mapky-routes-index-starts-dots";
 
 /** Per-route hue palette so adjacent polylines stay visually
- * distinguishable. Same set as collection overlays for visual
- * consistency across the app. */
+ * distinguishable across the app. */
 const ROUTE_COLORS = [
   "#3b82f6", // blue
   "#a855f7", // purple

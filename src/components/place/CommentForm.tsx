@@ -41,7 +41,7 @@ function parentListQueryKeys(parent: string | null | undefined): QueryKey[] {
 
   // pubky://{author}/pub/mapky.app/{type}/{id} → that resource's reply list
   const mapky = parent.match(
-    /^pubky:\/\/([^/]+)\/pub\/mapky\.app\/(reviews|routes|collections|geo_captures|sequences|incidents|posts)\/([^/?#]+)/,
+    /^pubky:\/\/([^/]+)\/pub\/mapky\.app\/(reviews|routes|geo_captures|sequences|incidents|posts)\/([^/?#]+)/,
   );
   if (mapky) {
     return [["mapky", mapky[2], mapky[1], mapky[3], "replies"]];

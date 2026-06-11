@@ -139,8 +139,7 @@ export function pendingListRemove<T>(opts: {
   });
 }
 
-/** Patch a single field on every entity in a list whose key matches.
- *  Used by collections (items array on each `CollectionDetails`). */
+/** Patch a single field on every entity in a list whose key matches. */
 export function pendingEntityFieldPatch<E, F>(opts: {
   queryKey: QueryKey;
   opId: string;

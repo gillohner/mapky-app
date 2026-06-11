@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   Camera,
-  FolderHeart,
   MapPin,
   MessageSquare,
   Route as RouteIcon,
@@ -16,7 +15,6 @@ import {
  */
 export type NavTarget =
   | "/places"
-  | "/collections"
   | "/routes"
   | "/incidents"
   | "/captures"
@@ -32,7 +30,6 @@ export interface NavItem {
 
 export const MAIN_NAV: NavItem[] = [
   { to: "/places", label: "Places", icon: MapPin },
-  { to: "/collections", label: "Collections", icon: FolderHeart },
   { to: "/routes", label: "Routes", icon: RouteIcon },
   { to: "/incidents", label: "Incidents", icon: AlertTriangle },
   // "Captures" feeds both single captures and sequences — see
@@ -52,8 +49,6 @@ export function navMatchPrefixes(to: NavTarget): readonly string[] {
   switch (to) {
     case "/places":
       return ["/place"]; // matches /places, /place/...
-    case "/collections":
-      return ["/collection"]; // matches /collections, /collection/...
     case "/routes":
       return ["/route"]; // matches /routes, /route/...
     case "/incidents":

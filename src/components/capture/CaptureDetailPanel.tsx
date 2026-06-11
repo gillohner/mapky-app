@@ -421,7 +421,7 @@ export function CaptureDetailPanel({
   );
 
   // ─── Single render path for every capture kind ─── left sidebar via DiscoverSidebar
-  // so place / collection / route / capture details all share one
+  // so place / route / capture details all share one
   // shell. The sphere variant above still uses its bespoke fullscreen
   // layout because the 360 viewer needs the whole screen.
   const headerActions = (

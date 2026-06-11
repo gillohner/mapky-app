@@ -29,7 +29,7 @@ interface RouteDetailPanelProps {
 
 /**
  * Route detail panel. Lives in the same left sidebar shell as
- * `CollectionPanel` and `PlacePanel` (via `DiscoverSidebar`) so all three
+ * `PlacePanel` (via `DiscoverSidebar`) so both
  * detail views read identically. Polyline renders on the map; this panel
  * holds metadata + actions.
  */

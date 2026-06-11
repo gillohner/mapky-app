@@ -41,7 +41,7 @@ const APPEND_STEP_TITLES: Record<CaptureStep, string> = {
  * action surface uses (`<DiscoverSidebar />`):
  *
  *   - **Desktop**: 380px left-anchored sidebar past the IconRail —
- *     same slot as Places / Captures / Routes / Collections lists.
+ *     same slot as Places / Captures / Routes lists.
  *   - **Mobile**: draggable bottom sheet (`<MobileBottomSheet />`)
  *     with the standard 3 snap positions. The "place" step starts
  *     COLLAPSED so the map is fully visible while the user is

@@ -12,7 +12,7 @@ import type { PostTagDetails } from "@/types/mapky";
 /**
  * Color palette for a TagStrip instance — chosen at the call site so
  * different resource types stay visually distinct (places, captures,
- * routes, posts, collections). Each maps to ~5 Tailwind utilities applied
+ * routes, posts). Each maps to ~5 Tailwind utilities applied
  * to the active chip + add-button.
  */
 export type TagStripTheme = "accent" | "sky" | "violet";
@@ -63,7 +63,7 @@ export interface TagStripProps {
    *     `PostTagDetails[]` directly. TagStrip handles cancel +
    *     setQueryData + invalidate against the key. Used by every
    *     resource type whose `*Tags` component reads off a dedicated
-   *     `/tags` endpoint (post / review / collection / capture / route).
+   *     `/tags` endpoint (post / review / capture / route).
    *   - `mutate` + `refresh` — composite-aware callbacks. The caller
    *     owns where the tags slice lives (typically inside a larger
    *     envelope like `PlaceFullResponse`) and runs the optimistic

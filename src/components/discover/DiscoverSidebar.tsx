@@ -32,7 +32,7 @@ interface Props {
   /** Free slot below tabs, above body — typically a search input. */
   toolbar?: React.ReactNode;
   /**
-   * Mobile: detail panels (Place / Route / Capture / Collection) pass
+   * Mobile: detail panels (Place / Route / Capture) pass
    * `true` to start the sheet collapsed so the map stays visible by
    * default — the user can drag up when they want the full body.
    * Lists default to the middle snap so half-map / half-list is the
@@ -43,7 +43,7 @@ interface Props {
 }
 
 /**
- * Shared shell for the discover surfaces: Routes / Collections / Places.
+ * Shared shell for the discover surfaces: Routes / Captures / Places.
  * Desktop: 380px left-anchored full-height sidebar.
  * Mobile: draggable bottom sheet via `MobileBottomSheet` (3 snap
  * positions — collapsed / middle / expanded), unified with Search

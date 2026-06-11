@@ -15,11 +15,6 @@ import {
   fetchPostTags,
   fetchReviewTags,
   fetchResourceReplies,
-  fetchCollection,
-  fetchUserCollections,
-  fetchViewportCollections,
-  fetchCollectionsForPlace,
-  fetchCollectionTags,
   fetchUserPosts,
   fetchUserReviews,
   fetchViewportIncidents,
@@ -120,15 +115,14 @@ function snapBoundsForCache(
  * server-side and identical TanStack queryKey client-side. */
 const MAP_VIEWPORT_LAYERS: readonly ViewportLayer[] = [
   "captures",
-  "collections",
   "places",
   "routes",
 ] as const;
 
 /**
  * Composite map-viewport hook for always-mounted map layers. Hits the
- * plugin's `/v0/mapky/viewport/all` endpoint with all four slices
- * (places + collections + captures + routes) in one request — server
+ * plugin's `/v0/mapky/viewport/all` endpoint with all map slices
+ * (places + captures + routes) in one request — server
  * runs them in parallel via `tokio::try_join!` so the wall-clock cost
  * is max(t_layers), not sum(t_layers).
  *
@@ -137,7 +131,7 @@ const MAP_VIEWPORT_LAYERS: readonly ViewportLayer[] = [
  * (bounds, zoom, filters) tuple, so TanStack dedups them into one
  * network round-trip per pan no matter how many layers subscribe.
  *
- * Sidebar lists (PlaceList, CollectionList, …) stay on the per-layer
+ * Sidebar lists (PlaceList, CaptureList, …) stay on the per-layer
  * hooks below — they have different lifecycles (only mounted when the
  * user opens the sidebar) and different zoom semantics (PlaceList
  * pins zoom to the cluster threshold to always get individual places).
@@ -276,7 +270,7 @@ function usePlaceFullSlice<T>(
 
 /** Composite-backed slice hooks — drop-in replacements for the per-endpoint
  * hooks below, intended for PlacePanel sub-components. They share a query
- * key, so all five fire one network request total per place open. */
+ * key, so all slices fire one network request total per place open. */
 export function usePlaceFullDetail(osmType: string, osmId: number) {
   return usePlaceFullSlice(osmType, osmId, (d) => d.detail);
 }
@@ -288,9 +282,6 @@ export function usePlaceFullPosts(osmType: string, osmId: number) {
 }
 export function usePlaceFullTags(osmType: string, osmId: number) {
   return usePlaceFullSlice(osmType, osmId, (d) => d.tags);
-}
-export function usePlaceFullCollections(osmType: string, osmId: number) {
-  return usePlaceFullSlice(osmType, osmId, (d) => d.collections);
 }
 export function usePlaceFullRoutes(osmType: string, osmId: number) {
   return usePlaceFullSlice(osmType, osmId, (d) => d.routes);
@@ -315,8 +306,8 @@ export function usePlacePosts(osmType: string, osmId: number) {
 }
 
 /** Replies (`:MapkyAppPost`) anchored to any MapKy resource. Mount this on
- * route, collection, geo-capture, sequence, incident, review, or post detail
- * views to render the reply thread. */
+ * route, geo-capture, sequence, incident, review, or post detail views to
+ * render the reply thread. */
 export function useResourceReplies(
   resourceType: MapkyResourceType,
   authorId: string | null,
@@ -490,38 +481,6 @@ export function useOsmLookupBatch(
   return { ...query, byKey };
 }
 
-export function useCollection(authorId: string, collectionId: string) {
-  const queryKey = ["mapky", "collection", authorId, collectionId] as const;
-  return useQuery({
-    queryKey,
-    queryFn: () => fetchCollection(authorId, collectionId),
-    enabled: !!authorId && !!collectionId,
-    retry: noRetryOn404,
-    select: (data) => applyPending(queryKey, data),
-  });
-}
-
-export function useUserCollections(userId: string | null) {
-  const queryKey = ["mapky", "collections", "user", userId] as const;
-  return useQuery({
-    queryKey,
-    queryFn: () => fetchUserCollections(userId!),
-    enabled: !!userId,
-    select: (data) => applyPending(queryKey, data),
-  });
-}
-
-export function useViewportCollections(bounds: ViewportBounds | null) {
-  const padded = useMemo(() => snapBoundsForCache(bounds), [bounds]);
-  return useQuery({
-    queryKey: ["mapky", "collections", "viewport", padded],
-    queryFn: () => fetchViewportCollections(padded!),
-    enabled: !!padded,
-    staleTime: 30_000,
-    placeholderData: keepPreviousData,
-  });
-}
-
 export function useUserPosts(userId: string | null) {
   return useQuery({
     queryKey: ["mapky", "posts", "user", userId],
@@ -566,40 +525,6 @@ export function useUserIncidents(userId: string | null) {
     queryFn: () => fetchUserIncidents(userId!),
     enabled: !!userId,
     select: (data) => data.filter((incident) => !isIncidentExpired(incident)),
-  });
-}
-
-export function useCollectionTags(authorId: string, collectionId: string) {
-  const queryKey = [
-    "mapky",
-    "collection",
-    authorId,
-    collectionId,
-    "tags",
-  ] as const;
-  return useQuery({
-    queryKey,
-    queryFn: () => fetchCollectionTags(authorId, collectionId),
-    enabled: !!authorId && !!collectionId,
-    retry: noRetryOn404,
-    select: (data) => applyPending(queryKey, data),
-  });
-}
-
-export function useCollectionsForPlace(osmType: string, osmId: number) {
-  const queryKey = [
-    "mapky",
-    "collections",
-    "place",
-    osmType,
-    osmId,
-  ] as const;
-  return useQuery({
-    queryKey,
-    queryFn: () => fetchCollectionsForPlace(osmType, osmId),
-    enabled: !!osmType && !!osmId,
-    retry: noRetryOn404,
-    select: (data) => applyPending(queryKey, data),
   });
 }
 

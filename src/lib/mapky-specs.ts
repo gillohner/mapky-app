@@ -152,9 +152,9 @@ const MAPKY_POST_KIND_MAP: Record<MapkyPostKind, PubkyAppPostKind> = {
 
 /** Create a `PubkyAppPost` (generic comment / threaded reply) stored under the
  * MapKy namespace at `/pub/mapky.app/posts/{id}`. The `parent` URI can target
- * any MapKy resource (review, route, collection, geo-capture, sequence,
- * incident, or another mapky-namespaced post). Cross-domain parents are
- * accepted but only edge-indexed when the target is a MapKy resource. */
+ * any MapKy resource (review, route, geo-capture, sequence, incident, or
+ * another mapky-namespaced post). Cross-domain parents are accepted but only
+ * edge-indexed when the target is a MapKy resource. */
 export function createMapkyPost(
   pubkyId: string,
   opts: {
@@ -206,84 +206,6 @@ export function createPlaceTag(
   const osmUrl = makeOsmUrl(osmType, osmId);
 
   const result = builder.createPlaceTag(osmUrl, label);
-  const json = JSON.stringify(result.tag.toJson());
-  const path = result.meta.path;
-
-  result.free();
-  builder.free();
-
-  return { path, json };
-}
-
-export interface CreateCollectionResult {
-  path: string;
-  url: string;
-  json: string;
-}
-
-export function createCollection(
-  pubkyId: string,
-  name: string,
-  description?: string,
-  items?: string[],
-): CreateCollectionResult {
-  const builder = new MapkySpecsBuilder(pubkyId);
-  const result = builder.createCollection(name, description || null, items || []);
-  const resultAny = result as unknown as {
-    post?: { toJson: () => unknown };
-    collection?: { toJson: () => unknown };
-  };
-
-  const obj =
-    ((resultAny.post ?? resultAny.collection)?.toJson() as Record<string, unknown>) ?? {};
-  const json = JSON.stringify(obj);
-  const path = result.meta.path;
-  const url = result.meta.url;
-
-  result.free();
-  builder.free();
-
-  return { path, url, json };
-}
-
-/** Build collection JSON for updating an existing collection (same path, no new ID). */
-export function updateCollectionJson(
-  name: string,
-  description?: string,
-  items?: string[],
-): string {
-  const nextItems = items || [];
-  const isOsmItem = (uri: string) =>
-    /^https:\/\/www\.openstreetmap\.org\/(node|way|relation)\/\d+$/.test(uri);
-  if (!nextItems.every(isOsmItem)) {
-    throw new Error("Collections currently support OpenStreetMap place URLs only.");
-  }
-
-  const envelope = {
-    name,
-    description: description || null,
-    items: nextItems,
-  };
-
-  return JSON.stringify({
-    content: JSON.stringify(envelope),
-    kind: "collection",
-    parent: null,
-    embed: null,
-    attachments: null,
-  });
-}
-
-export function createCollectionTag(
-  pubkyId: string,
-  authorId: string,
-  collectionId: string,
-  label: string,
-): CreateTagResult {
-  const builder = new MapkySpecsBuilder(pubkyId);
-  const collectionUri = `pubky://${authorId}/pub/mapky.app/posts/${collectionId}`;
-
-  const result = builder.createPlaceTag(collectionUri, label);
   const json = JSON.stringify(result.tag.toJson());
   const path = result.meta.path;
 
@@ -569,9 +491,8 @@ export interface CreateRouteResult {
 
 /**
  * Build a sanitized & validated MapkyAppRoute JSON via the WASM builder, then
- * splice in the optional fields (description, geometry, computed stats) that
- * the bare constructor doesn't take. Mirrors the pattern in `createCollection`
- * for the `color` field.
+ * splice in the optional fields (description, geometry, computed stats, color)
+ * that the bare constructor doesn't take.
  */
 export function createRoute(
   pubkyId: string,

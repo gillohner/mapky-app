@@ -25,11 +25,6 @@ interface Props {
    * Falls back to a small white dot until Nominatim resolves the
    * category. */
   Icon: LucideIcon | null;
-  /** When set, marks the place as a member of an active collection
-   * overlay. The whole balloon body switches to this color with a
-   * white border (overrides the variant's body color), so collection
-   * pins read as one cohesive group at a glance. */
-  collectionColor?: string;
 }
 
 const ACCENT = "#0d9488"; // teal-600 — matches --raw-accent
@@ -56,18 +51,9 @@ const BITCOIN = "#f7931a"; // BTC orange, used only on the corner badge
  * Lucide components are stable singletons) so panning the map
  * doesn't re-render every balloon.
  */
-function PlaceBalloonImpl({ variant, rating, Icon, collectionColor }: Props) {
-  // Collection membership overrides the variant body — places pinned
-  // to an active collection render entirely in that collection's
-  // color with a white outline. Only when no collection is active
-  // does the place/place-btc variant drive the body color.
-  const inCollection = !!collectionColor;
-  const body = inCollection
-    ? collectionColor
-    : variant === "place-btc"
-      ? ACCENT
-      : MUTED;
-  const showBtcBadge = !inCollection && variant === "place-btc";
+function PlaceBalloonImpl({ variant, rating, Icon }: Props) {
+  const body = variant === "place-btc" ? ACCENT : MUTED;
+  const showBtcBadge = variant === "place-btc";
   const showRating = rating !== null;
   // Reserve vertical space for the chip when present so the SVG
   // bottom (the teardrop tip) still aligns with the marker anchor.
@@ -165,6 +151,5 @@ export const PlaceBalloon = memo(
   (a, b) =>
     a.variant === b.variant &&
     a.rating === b.rating &&
-    a.Icon === b.Icon &&
-    a.collectionColor === b.collectionColor,
+    a.Icon === b.Icon,
 );

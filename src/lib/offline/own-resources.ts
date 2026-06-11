@@ -66,7 +66,6 @@ export async function countOwnByUserType(
   const types: OwnResourceType[] = [
     "post",
     "review",
-    "collection",
     "incident",
     "geoCapture",
     "sequence",
@@ -78,7 +77,6 @@ export async function countOwnByUserType(
   const result: Record<OwnResourceType, number> = {
     post: 0,
     review: 0,
-    collection: 0,
     incident: 0,
     geoCapture: 0,
     sequence: 0,

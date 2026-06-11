@@ -8,7 +8,7 @@ interface ShareablePlace {
 }
 
 interface ShareableUserResource {
-  kind: "collection" | "capture" | "sequence" | "route" | "incident";
+  kind: "capture" | "sequence" | "route" | "incident";
   authorId: string;
   resourceId: string;
 }
@@ -16,7 +16,6 @@ interface ShareableUserResource {
 export type ShareableTarget = ShareablePlace | ShareableUserResource;
 
 const PATH_BY_KIND: Record<ShareableUserResource["kind"], string> = {
-  collection: "collection",
   capture: "capture",
   sequence: "sequence",
   route: "route",

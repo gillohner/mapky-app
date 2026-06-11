@@ -4,7 +4,6 @@ import type {
   ReviewDetails,
   MapkyPostDetails,
   PostTagDetails,
-  CollectionDetails,
   GeoCaptureDetails,
   RouteDetails,
   TagSearchResult,
@@ -41,7 +40,6 @@ function placeFilterParams(filters: PlaceFilters): Record<string, string> {
 export type MapkyResourceType =
   | "reviews"
   | "routes"
-  | "collections"
   | "geo_captures"
   | "sequences"
   | "incidents"
@@ -96,7 +94,7 @@ export async function fetchViewport(
  * (the server ignores them when the place layer isn't in `include`).
  *
  * Used by `useViewportAll` and the per-slice hooks (`useViewportPlaces`,
- * `useViewportCollections`, `useViewportCaptures`, `useViewportRoutes`)
+ * `useViewportCaptures`, `useViewportRoutes`)
  * which share a query key and split the response via TanStack `select`,
  * so all consumers of the same bbox/zoom/filters/include set share one
  * round-trip.
@@ -202,11 +200,11 @@ export async function fetchPlaceDetail(
  *
  * Backed by `/v0/mapky/place/{osm_type}/{osm_id}/full`. Server-side runs
  * detail synchronously (need lat/lon for routes-near + 404 short-circuit)
- * then fans out reviews + posts + tags + collections + routes via
+ * then fans out reviews + posts + tags + routes via
  * `tokio::try_join!`. Wall-clock is `t_detail + max(t_others)`.
  *
  * The frontend's PlacePanel sub-components (`PlaceTags`, `PlaceReviews`,
- * `PlaceComments`, `PlaceCollections`, `PlaceRoutes`) all read slices off
+ * `PlaceComments`, `PlaceRoutes`) all read slices off
  * this single composite via `usePlaceFull*` selectors — so opening a
  * place fires ONE request instead of six.
  */
@@ -334,72 +332,6 @@ export async function fetchResourceReplies(
         limit: options?.limit ?? 100,
       },
     },
-  );
-  return data;
-}
-
-export async function fetchCollection(
-  authorId: string,
-  collectionId: string,
-): Promise<CollectionDetails> {
-  const { data } = await nexusClient.get<CollectionDetails>(
-    `/v0/mapky/collections/${authorId}/${collectionId}`,
-  );
-  return data;
-}
-
-export async function fetchUserCollections(
-  userId: string,
-  options?: { skip?: number; limit?: number },
-): Promise<CollectionDetails[]> {
-  const { data } = await nexusClient.get<CollectionDetails[]>(
-    `/v0/mapky/collections/user/${userId}`,
-    {
-      params: {
-        skip: options?.skip ?? 0,
-        limit: options?.limit ?? 100,
-      },
-    },
-  );
-  return data;
-}
-
-/** Public collections that contain at least one Place inside the bbox. */
-export async function fetchViewportCollections(
-  bounds: ViewportBounds,
-  limit = 100,
-): Promise<CollectionDetails[]> {
-  const { data } = await nexusClient.get<CollectionDetails[]>(
-    "/v0/mapky/collections/viewport",
-    {
-      params: {
-        min_lat: bounds.minLat,
-        min_lon: bounds.minLon,
-        max_lat: bounds.maxLat,
-        max_lon: bounds.maxLon,
-        limit,
-      },
-    },
-  );
-  return data;
-}
-
-export async function fetchCollectionsForPlace(
-  osmType: string,
-  osmId: number,
-): Promise<CollectionDetails[]> {
-  const { data } = await nexusClient.get<CollectionDetails[]>(
-    `/v0/mapky/collections/place/${osmType}/${osmId}`,
-  );
-  return data;
-}
-
-export async function fetchCollectionTags(
-  authorId: string,
-  collectionId: string,
-): Promise<PostTagDetails[]> {
-  const { data } = await nexusClient.get<PostTagDetails[]>(
-    `/v0/mapky/collections/${authorId}/${collectionId}/tags`,
   );
   return data;
 }

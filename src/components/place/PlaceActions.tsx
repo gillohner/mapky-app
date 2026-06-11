@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageSquarePlus, Star, FolderHeart } from "lucide-react";
+import { MessageSquarePlus, Star } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { makeOsmUrl } from "@/lib/mapky-specs";
@@ -7,7 +7,6 @@ import { registerPending } from "@/lib/api/optimistic-overlay";
 import type { MapkyPostDetails, PlaceFullResponse } from "@/types/mapky";
 import { ReviewForm } from "./ReviewForm";
 import { CommentForm } from "./CommentForm";
-import { CollectionPicker } from "@/components/collection/CollectionPicker";
 
 interface PlaceActionsProps {
   osmType: string;
@@ -43,7 +42,6 @@ function emptyPlaceFull(osmType: string, osmId: number): PlaceFullResponse {
     reviews: [],
     posts: [],
     tags: [],
-    collections: [],
     routes: [],
   };
 }
@@ -57,8 +55,7 @@ function emptyPlaceFull(osmType: string, osmId: number): PlaceFullResponse {
 export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
   const { isAuthenticated, publicKey } = useAuth();
   const queryClient = useQueryClient();
-  const [formMode, setFormMode] =
-    useState<"review" | "post" | "collect" | null>(null);
+  const [formMode, setFormMode] = useState<"review" | "post" | null>(null);
 
   if (formMode === "review") {
     return (
@@ -114,17 +111,6 @@ export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
     );
   }
 
-  if (formMode === "collect") {
-    return (
-      <CollectionPicker
-        resourceUri={makeOsmUrl(osmType, osmId)}
-        membershipQueryKey={["mapky", "collections", "place", osmType, osmId]}
-        resourceLabel="Place"
-        onClose={() => setFormMode(null)}
-      />
-    );
-  }
-
   const btnClass =
     "flex flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-accent disabled:text-muted disabled:opacity-50";
 
@@ -147,15 +133,6 @@ export function PlaceActions({ osmType, osmId }: PlaceActionsProps) {
       >
         <MessageSquarePlus className="h-3.5 w-3.5" />
         Post
-      </button>
-      <button
-        onClick={() => setFormMode("collect")}
-        disabled={!isAuthenticated}
-        className={btnClass}
-        title={isAuthenticated ? "Add to collection" : "Sign in to collect"}
-      >
-        <FolderHeart className="h-3.5 w-3.5" />
-        Collect
       </button>
     </div>
   );

@@ -293,7 +293,7 @@ function PostNode({
  *
  * `:MapkyAppPost` (cross-namespace comments) form the reply tree:
  *   - Top-level replies have `parent_uri` pointing at the resource
- *     (review/route/collection/etc.).
+ *     (review/route/capture/etc.).
  *   - Reply-of-reply nodes have `parent_uri` pointing at another
  *     `:MapkyAppPost` URI (parsed via `parsePostParent`).
  *

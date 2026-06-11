@@ -15,7 +15,6 @@ import { Route as MyPostsRouteImport } from './routes/my-posts'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IncidentsRouteImport } from './routes/incidents'
 import { Route as DirectionsRouteImport } from './routes/directions'
-import { Route as CollectionsRouteImport } from './routes/collections'
 import { Route as CapturesRouteImport } from './routes/captures'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RoutesIndexRouteImport } from './routes/routes/index'
@@ -24,7 +23,6 @@ import { Route as SequenceAuthorIdSequenceIdRouteImport } from './routes/sequenc
 import { Route as RouteAuthorIdRouteIdRouteImport } from './routes/route/$authorId.$routeId'
 import { Route as PlaceOsmTypeOsmIdRouteImport } from './routes/place/$osmType.$osmId'
 import { Route as IncidentAuthorIdIncidentIdRouteImport } from './routes/incident/$authorId.$incidentId'
-import { Route as CollectionAuthorIdCollectionIdRouteImport } from './routes/collection/$authorId.$collectionId'
 import { Route as CaptureAuthorIdCaptureIdRouteImport } from './routes/capture/$authorId.$captureId'
 
 const SearchRoute = SearchRouteImport.update({
@@ -55,11 +53,6 @@ const IncidentsRoute = IncidentsRouteImport.update({
 const DirectionsRoute = DirectionsRouteImport.update({
   id: '/directions',
   path: '/directions',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CollectionsRoute = CollectionsRouteImport.update({
-  id: '/collections',
-  path: '/collections',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CapturesRoute = CapturesRouteImport.update({
@@ -104,12 +97,6 @@ const IncidentAuthorIdIncidentIdRoute =
     path: '/incident/$authorId/$incidentId',
     getParentRoute: () => rootRouteImport,
   } as any)
-const CollectionAuthorIdCollectionIdRoute =
-  CollectionAuthorIdCollectionIdRouteImport.update({
-    id: '/collection/$authorId/$collectionId',
-    path: '/collection/$authorId/$collectionId',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const CaptureAuthorIdCaptureIdRoute =
   CaptureAuthorIdCaptureIdRouteImport.update({
     id: '/capture/$authorId/$captureId',
@@ -120,7 +107,6 @@ const CaptureAuthorIdCaptureIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/captures': typeof CapturesRoute
-  '/collections': typeof CollectionsRoute
   '/directions': typeof DirectionsRoute
   '/incidents': typeof IncidentsRoute
   '/login': typeof LoginRoute
@@ -130,7 +116,6 @@ export interface FileRoutesByFullPath {
   '/settings/offline': typeof SettingsOfflineRoute
   '/routes/': typeof RoutesIndexRoute
   '/capture/$authorId/$captureId': typeof CaptureAuthorIdCaptureIdRoute
-  '/collection/$authorId/$collectionId': typeof CollectionAuthorIdCollectionIdRoute
   '/incident/$authorId/$incidentId': typeof IncidentAuthorIdIncidentIdRoute
   '/place/$osmType/$osmId': typeof PlaceOsmTypeOsmIdRoute
   '/route/$authorId/$routeId': typeof RouteAuthorIdRouteIdRoute
@@ -139,7 +124,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/captures': typeof CapturesRoute
-  '/collections': typeof CollectionsRoute
   '/directions': typeof DirectionsRoute
   '/incidents': typeof IncidentsRoute
   '/login': typeof LoginRoute
@@ -149,7 +133,6 @@ export interface FileRoutesByTo {
   '/settings/offline': typeof SettingsOfflineRoute
   '/routes': typeof RoutesIndexRoute
   '/capture/$authorId/$captureId': typeof CaptureAuthorIdCaptureIdRoute
-  '/collection/$authorId/$collectionId': typeof CollectionAuthorIdCollectionIdRoute
   '/incident/$authorId/$incidentId': typeof IncidentAuthorIdIncidentIdRoute
   '/place/$osmType/$osmId': typeof PlaceOsmTypeOsmIdRoute
   '/route/$authorId/$routeId': typeof RouteAuthorIdRouteIdRoute
@@ -159,7 +142,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/captures': typeof CapturesRoute
-  '/collections': typeof CollectionsRoute
   '/directions': typeof DirectionsRoute
   '/incidents': typeof IncidentsRoute
   '/login': typeof LoginRoute
@@ -169,7 +151,6 @@ export interface FileRoutesById {
   '/settings/offline': typeof SettingsOfflineRoute
   '/routes/': typeof RoutesIndexRoute
   '/capture/$authorId/$captureId': typeof CaptureAuthorIdCaptureIdRoute
-  '/collection/$authorId/$collectionId': typeof CollectionAuthorIdCollectionIdRoute
   '/incident/$authorId/$incidentId': typeof IncidentAuthorIdIncidentIdRoute
   '/place/$osmType/$osmId': typeof PlaceOsmTypeOsmIdRoute
   '/route/$authorId/$routeId': typeof RouteAuthorIdRouteIdRoute
@@ -180,7 +161,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/captures'
-    | '/collections'
     | '/directions'
     | '/incidents'
     | '/login'
@@ -190,7 +170,6 @@ export interface FileRouteTypes {
     | '/settings/offline'
     | '/routes/'
     | '/capture/$authorId/$captureId'
-    | '/collection/$authorId/$collectionId'
     | '/incident/$authorId/$incidentId'
     | '/place/$osmType/$osmId'
     | '/route/$authorId/$routeId'
@@ -199,7 +178,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/captures'
-    | '/collections'
     | '/directions'
     | '/incidents'
     | '/login'
@@ -209,7 +187,6 @@ export interface FileRouteTypes {
     | '/settings/offline'
     | '/routes'
     | '/capture/$authorId/$captureId'
-    | '/collection/$authorId/$collectionId'
     | '/incident/$authorId/$incidentId'
     | '/place/$osmType/$osmId'
     | '/route/$authorId/$routeId'
@@ -218,7 +195,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/captures'
-    | '/collections'
     | '/directions'
     | '/incidents'
     | '/login'
@@ -228,7 +204,6 @@ export interface FileRouteTypes {
     | '/settings/offline'
     | '/routes/'
     | '/capture/$authorId/$captureId'
-    | '/collection/$authorId/$collectionId'
     | '/incident/$authorId/$incidentId'
     | '/place/$osmType/$osmId'
     | '/route/$authorId/$routeId'
@@ -238,7 +213,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CapturesRoute: typeof CapturesRoute
-  CollectionsRoute: typeof CollectionsRoute
   DirectionsRoute: typeof DirectionsRoute
   IncidentsRoute: typeof IncidentsRoute
   LoginRoute: typeof LoginRoute
@@ -248,7 +222,6 @@ export interface RootRouteChildren {
   SettingsOfflineRoute: typeof SettingsOfflineRoute
   RoutesIndexRoute: typeof RoutesIndexRoute
   CaptureAuthorIdCaptureIdRoute: typeof CaptureAuthorIdCaptureIdRoute
-  CollectionAuthorIdCollectionIdRoute: typeof CollectionAuthorIdCollectionIdRoute
   IncidentAuthorIdIncidentIdRoute: typeof IncidentAuthorIdIncidentIdRoute
   PlaceOsmTypeOsmIdRoute: typeof PlaceOsmTypeOsmIdRoute
   RouteAuthorIdRouteIdRoute: typeof RouteAuthorIdRouteIdRoute
@@ -297,13 +270,6 @@ declare module '@tanstack/react-router' {
       path: '/directions'
       fullPath: '/directions'
       preLoaderRoute: typeof DirectionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/collections': {
-      id: '/collections'
-      path: '/collections'
-      fullPath: '/collections'
-      preLoaderRoute: typeof CollectionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/captures': {
@@ -362,13 +328,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IncidentAuthorIdIncidentIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/collection/$authorId/$collectionId': {
-      id: '/collection/$authorId/$collectionId'
-      path: '/collection/$authorId/$collectionId'
-      fullPath: '/collection/$authorId/$collectionId'
-      preLoaderRoute: typeof CollectionAuthorIdCollectionIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/capture/$authorId/$captureId': {
       id: '/capture/$authorId/$captureId'
       path: '/capture/$authorId/$captureId'
@@ -382,7 +341,6 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CapturesRoute: CapturesRoute,
-  CollectionsRoute: CollectionsRoute,
   DirectionsRoute: DirectionsRoute,
   IncidentsRoute: IncidentsRoute,
   LoginRoute: LoginRoute,
@@ -392,7 +350,6 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsOfflineRoute: SettingsOfflineRoute,
   RoutesIndexRoute: RoutesIndexRoute,
   CaptureAuthorIdCaptureIdRoute: CaptureAuthorIdCaptureIdRoute,
-  CollectionAuthorIdCollectionIdRoute: CollectionAuthorIdCollectionIdRoute,
   IncidentAuthorIdIncidentIdRoute: IncidentAuthorIdIncidentIdRoute,
   PlaceOsmTypeOsmIdRoute: PlaceOsmTypeOsmIdRoute,
   RouteAuthorIdRouteIdRoute: RouteAuthorIdRouteIdRoute,

@@ -91,33 +91,33 @@ describe("optimistic-overlay", () => {
 
   it("patches an entity field across stale refetches", () => {
     pendingEntityFieldPatch({
-      queryKey: ["collections"],
-      opId: "items:c1",
-      entityId: "c1",
-      getEntityId: (e: { id: string; items: string[] }) => e.id,
-      field: "items",
-      value: ["osm/A", "osm/B"],
+      queryKey: ["entities"],
+      opId: "labels:e1",
+      entityId: "e1",
+      getEntityId: (e: { id: string; labels: string[] }) => e.id,
+      field: "labels",
+      value: ["alpha", "beta"],
       matches: (cur, exp) => JSON.stringify(cur) === JSON.stringify(exp),
     });
-    // Stale refetch — server's items lag behind.
+    // Stale refetch — server's labels lag behind.
     expect(
-      applyPending(["collections"], [
-        { id: "c1", items: ["osm/A"] },
-        { id: "c2", items: [] },
+      applyPending(["entities"], [
+        { id: "e1", labels: ["alpha"] },
+        { id: "e2", labels: [] },
       ]),
     ).toEqual([
-      { id: "c1", items: ["osm/A", "osm/B"] },
-      { id: "c2", items: [] },
+      { id: "e1", labels: ["alpha", "beta"] },
+      { id: "e2", labels: [] },
     ]);
     // Confirmed refetch — overlay retires.
     expect(
-      applyPending(["collections"], [
-        { id: "c1", items: ["osm/A", "osm/B"] },
-        { id: "c2", items: [] },
+      applyPending(["entities"], [
+        { id: "e1", labels: ["alpha", "beta"] },
+        { id: "e2", labels: [] },
       ]),
     ).toEqual([
-      { id: "c1", items: ["osm/A", "osm/B"] },
-      { id: "c2", items: [] },
+      { id: "e1", labels: ["alpha", "beta"] },
+      { id: "e2", labels: [] },
     ]);
   });
 
