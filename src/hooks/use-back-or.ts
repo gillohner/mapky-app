@@ -7,7 +7,7 @@ import { useRouter } from "@tanstack/react-router";
  * an explicit navigate so the user still gets somewhere usable.
  *
  * Usage:
- *   const close = useBackOr(() => navigate({ to: "/collections" }));
+ *   const close = useBackOr(() => navigate({ to: "/places" }));
  *   <button onClick={close}>×</button>
  */
 export function useBackOr(fallback: () => void): () => void {

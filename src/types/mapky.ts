@@ -70,21 +70,20 @@ export interface BitcoinPoi {
 }
 
 /** Multi-select activity dimensions used by the place viewport filter.
- * `tagged|reviewed|posted|collected` — combined with OR semantics so a
- * place needs only one of the selected activities to match. */
-export type PlaceActivity = "tagged" | "reviewed" | "posted" | "collected";
+ * `tagged|reviewed|posted` — combined with OR semantics so a place needs
+ * only one of the selected activities to match. */
+export type PlaceActivity = "tagged" | "reviewed" | "posted";
 
 export const PLACE_ACTIVITIES: readonly PlaceActivity[] = [
   "tagged",
   "reviewed",
   "posted",
-  "collected",
 ] as const;
 
 /** Filter dimensions layered on the place viewport.
  *
- * `activities` — multi-select OR (any of: tagged, reviewed, posted,
- * collected). Empty array = "no activity narrowing".
+ * `activities` — multi-select OR (any of: tagged, reviewed, posted).
+ * Empty array = "no activity narrowing".
  *
  * `minRating` — optional 0–5 floor on the place's average rating.
  *
@@ -101,27 +100,25 @@ export interface PlaceFilters {
 /** Layer selector for the composite `/v0/mapky/viewport/all` endpoint.
  * Maps to the `include` query param; flags toggle whether each layer's
  * Neo4j query runs server-side. */
-export type ViewportLayer = "places" | "collections" | "captures" | "routes";
+export type ViewportLayer = "places" | "captures" | "routes";
 
 /** Response envelope from `/v0/mapky/place/{osm_type}/{osm_id}/full`.
- * All six slices are served in one request — replaces the six independent
+ * All slices are served in one request — replaces the independent
  * fetches PlacePanel used to mount on every place open. */
 export interface PlaceFullResponse {
   detail: PlaceDetails;
   reviews: ReviewDetails[];
   posts: MapkyPostDetails[];
   tags: PostTagDetails[];
-  collections: CollectionDetails[];
   routes: RouteDetails[];
 }
 
 /** Response envelope from `/v0/mapky/viewport/all`. Each branch is
- * present iff the layer was in `include`; the four `Vec<T>` fields
- * (`collections`, `captures`, `routes`) come back as plain arrays,
- * `places` as the discriminated cluster/places envelope. */
+ * present iff the layer was in `include`; `captures` and `routes` come
+ * back as plain arrays, `places` as the discriminated cluster/places
+ * envelope. */
 export interface MultiViewportResponse {
   places?: ViewportResponse;
-  collections?: CollectionDetails[];
   captures?: GeoCaptureDetails[];
   routes?: RouteDetails[];
 }
@@ -141,8 +138,7 @@ export interface ReviewDetails {
 /** A `PubkyAppPost`-shaped comment stored under the MapKy namespace at
  * `/pub/mapky.app/posts/{id}` and indexed as a dual-labeled `:Post:MapkyAppPost`
  * node. Used as the threaded reply unit on any MapKy resource (review, route,
- * collection, geo-capture, sequence, incident, or another mapky-namespaced
- * post). */
+ * geo-capture, sequence, incident, or another mapky-namespaced post). */
 export type MapkyPostKind = "short" | "long" | "image" | "video" | "link" | "file";
 
 export interface MapkyPostDetails {
@@ -180,15 +176,6 @@ export interface ResourceDetails {
 export interface ResourceTagsResponse {
   resource: ResourceDetails;
   tags: PostTagDetails[];
-}
-
-export interface CollectionDetails {
-  id: string;
-  author_id: string;
-  name: string;
-  description: string | null;
-  items: string[];
-  indexed_at: number;
 }
 
 export interface IncidentDetails {
@@ -273,7 +260,6 @@ export interface SequenceFullResponse {
 
 export interface TagSearchResult {
   places: PlaceDetails[];
-  collections: CollectionDetails[];
   reviews: ReviewDetails[];
   posts: MapkyPostDetails[];
   routes: RouteDetails[];

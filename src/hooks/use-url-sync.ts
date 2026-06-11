@@ -26,7 +26,7 @@ import { PLACE_ACTIVITIES, type PlaceActivity } from "@/types/mapky";
  *   ca  captures layer     (0 to hide; default visible)
  *   mt  metro overlay      (1 to show)
  *   bo  BTC overlay        (1 to show — BTCMap merchants, sibling overlay)
- *   pa  place activity OR  (csv of `tagged|reviewed|posted|collected`)
+ *   pa  place activity OR  (csv of `tagged|reviewed|posted`)
  *   pr  min rating floor   (0.5–5.0)
  *   b3  3D buildings       (1 to show)
  *   z   zoom level
@@ -115,9 +115,9 @@ hydrateFromUrl();
 /**
  * popstate (browser back/forward) handler — re-reads the URL's c/z
  * params and asks MapLibre to flyTo them smoothly. This is what makes
- * /collection/$id → back → /collections feel cohesive: the user's
- * pre-click viewport is captured in the /collections URL via the
- * store→URL effect, so popping back can restore it.
+ * detail → back → list feel cohesive: the user's pre-click viewport is
+ * captured in the list URL via the store→URL effect, so popping back
+ * can restore it.
  */
 function applyUrlViewportSmoothly() {
   if (typeof window === "undefined") return;

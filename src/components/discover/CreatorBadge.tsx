@@ -17,7 +17,7 @@ interface Props {
 
 /**
  * Small "made by …" badge used at the bottom of every discover card
- * (Routes, Collections, Captures). Pulls the user's profile via
+ * (Routes, Captures). Pulls the user's profile via
  * useUserProfile (TanStack Query, 5-min stale, retries idempotent
  * 404s) and falls back to a truncated public key when no profile is
  * available.

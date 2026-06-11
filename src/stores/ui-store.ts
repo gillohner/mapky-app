@@ -18,38 +18,6 @@ export interface PendingPoiClick {
   sourceLayer?: string;
   /** Back-navigation context from search results */
   fromSearch?: { query: string; mode: string };
-  /** Back-navigation context from collection overlay */
-  fromCollection?: { authorId: string; collectionId: string };
-}
-
-export interface CollectionOverlayEntry {
-  authorId: string;
-  collectionId: string;
-  color: string;
-}
-
-export function collectionOverlayKey(authorId: string, collectionId: string): string {
-  return `${authorId}:${collectionId}`;
-}
-
-const OVERLAY_COLORS = [
-  "#3b82f6", "#a855f7", "#f97316", "#ec4899",
-  "#06b6d4", "#eab308", "#ef4444",
-];
-
-/**
- * Stable color per (authorId, collectionId) — same hash trick the
- * routes layer uses for `routeColor`. Previously the overlay store
- * incremented a module-level counter, so a collection's overlay
- * color depended on the order it was opened during the session and
- * shifted on reload. Hashing keeps the color tied to the collection
- * identity instead.
- */
-function colorForCollection(authorId: string, collectionId: string): string {
-  const key = `${authorId}:${collectionId}`;
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
-  return OVERLAY_COLORS[Math.abs(h) % OVERLAY_COLORS.length];
 }
 
 export interface SelectedFeature {
@@ -150,13 +118,12 @@ interface UiStore {
    *
    * Driven by the discover sidebars: PlaceList / CaptureList / etc.
    * push the keys of their currently-visible (post-filter) items so
-   * the green dots / camera icons / collection overlays match what
-   * the user sees in the sidebar.
+   * the green dots / camera icons match what the user sees in the
+   * sidebar.
    *
    * Place keys are `${osm_type}:${osm_id}`; capture keys are the
-   * compound `${author}:${id}` used by the indexer; collection keys
-   * are also the compound id. Each layer uses its own field to avoid
-   * coupling.
+   * compound `${author}:${id}` used by the indexer. Each layer uses
+   * its own field to avoid coupling.
    */
   visiblePlaceKeys: Set<string> | null;
   setVisiblePlaceKeys: (s: Set<string> | null) => void;
@@ -169,9 +136,6 @@ interface UiStore {
    *  the captures-list filtered set (kind, tags, text). */
   visibleSequenceIds: Set<string> | null;
   setVisibleSequenceIds: (s: Set<string> | null) => void;
-
-  visibleCollectionIds: Set<string> | null;
-  setVisibleCollectionIds: (s: Set<string> | null) => void;
 
   /**
    * Captures that should always render on the map regardless of the
@@ -231,12 +195,6 @@ interface UiStore {
   mobileNavOpen: boolean;
   setMobileNavOpen: (open: boolean) => void;
   toggleMobileNav: () => void;
-
-  activeCollectionOverlays: Map<string, CollectionOverlayEntry>;
-  addCollectionOverlay: (authorId: string, collectionId: string) => void;
-  removeCollectionOverlay: (collectionId: string) => void;
-  toggleCollectionOverlay: (authorId: string, collectionId: string) => void;
-  clearAllCollectionOverlays: () => void;
 
   streetViewActive: boolean;
   setStreetViewActive: (active: boolean) => void;
@@ -324,9 +282,6 @@ export const useUiStore = create<UiStore>()(
       visibleSequenceIds: null,
       setVisibleSequenceIds: (s) => set({ visibleSequenceIds: s }),
 
-      visibleCollectionIds: null,
-      setVisibleCollectionIds: (s) => set({ visibleCollectionIds: s }),
-
       pinnedCaptures: null,
       setPinnedCaptures: (c) => set({ pinnedCaptures: c }),
 
@@ -396,44 +351,6 @@ export const useUiStore = create<UiStore>()(
       mobileNavOpen: false,
       setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
       toggleMobileNav: () => set((s) => ({ mobileNavOpen: !s.mobileNavOpen })),
-
-      activeCollectionOverlays: new Map(),
-      addCollectionOverlay: (authorId, collectionId) =>
-        set((s) => {
-          const key = collectionOverlayKey(authorId, collectionId);
-          const existing = s.activeCollectionOverlays.get(key);
-          // Use a stable hash of the collection identity so the same
-          // collection gets the same color across reloads / open order.
-          const resolvedColor =
-            existing?.color || colorForCollection(authorId, collectionId);
-          if (existing && existing.color === resolvedColor) return s;
-          const next = new Map(s.activeCollectionOverlays);
-          next.set(key, { authorId, collectionId, color: resolvedColor });
-          return { activeCollectionOverlays: next };
-        }),
-      removeCollectionOverlay: (collectionId) =>
-        set((s) => {
-          if (!s.activeCollectionOverlays.has(collectionId)) return s;
-          const next = new Map(s.activeCollectionOverlays);
-          next.delete(collectionId);
-          return { activeCollectionOverlays: next };
-        }),
-      toggleCollectionOverlay: (authorId, collectionId) =>
-        set((s) => {
-          const key = collectionOverlayKey(authorId, collectionId);
-          const next = new Map(s.activeCollectionOverlays);
-          if (next.has(key)) {
-            next.delete(key);
-          } else {
-            next.set(key, {
-              authorId,
-              collectionId,
-              color: colorForCollection(authorId, collectionId),
-            });
-          }
-          return { activeCollectionOverlays: next };
-        }),
-      clearAllCollectionOverlays: () => set({ activeCollectionOverlays: new Map() }),
 
       streetViewActive: false,
       setStreetViewActive: (active) => set({ streetViewActive: active, streetViewExpanded: active }),

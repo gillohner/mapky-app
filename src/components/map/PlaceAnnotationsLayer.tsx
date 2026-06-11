@@ -7,15 +7,12 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "@tanstack/react-router";
-import { useQueries } from "@tanstack/react-query";
 import maplibregl from "maplibre-gl";
 import { useMapStore } from "@/stores/map-store";
 import { useUiStore } from "@/stores/ui-store";
 import { useRouteCreationStore } from "@/stores/route-creation-store";
 import { useMapViewport, useOsmLookupBatch } from "@/lib/api/hooks";
 import { useLayerOpacityMultiplier } from "@/lib/map/dim";
-import { fetchCollection } from "@/lib/api/mapky";
-import { parseOsmCanonical } from "@/lib/map/osm-url";
 import { categoryIcon } from "@/lib/places/category-icon";
 import { PlaceBalloon, type BalloonVariant } from "./PlaceBalloon";
 import { ClusterBubble } from "./ClusterBubble";
@@ -108,47 +105,6 @@ export function PlaceAnnotationsLayer() {
   const viewportQuery = useMapViewport(bounds, zoom, placesFilters);
   const envelope = placesEnabled ? viewportQuery.data?.places : undefined;
 
-  // ─── Active collection memberships → collection-color border ────
-  const activeCollections = useUiStore((s) => s.activeCollectionOverlays);
-  const collectionEntries = useMemo(
-    () => Array.from(activeCollections.values()),
-    [activeCollections],
-  );
-  const collectionQueries = useQueries({
-    queries: collectionEntries.map((entry) => ({
-      queryKey: [
-        "mapky",
-        "collection",
-        entry.authorId,
-        entry.collectionId,
-      ] as const,
-      queryFn: () => fetchCollection(entry.authorId, entry.collectionId),
-      staleTime: 60 * 1000,
-      retry: 1,
-    })),
-  });
-  const collectionColorByKey = useMemo(() => {
-    const map = new Map<string, string>();
-    collectionEntries.forEach((entry, i) => {
-      const data = collectionQueries[i].data;
-      if (!data) return;
-      for (const url of data.items) {
-        const parsed = parseOsmCanonical(url);
-        if (!parsed) continue;
-        const key = `${parsed.osmType}:${parsed.osmId}`;
-        // First overlay wins — multiple-collection memberships are
-        // rare and a single colored border reads cleaner than a
-        // two-tone outline.
-        if (!map.has(key)) map.set(key, entry.color);
-      }
-    });
-    return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    collectionEntries,
-    collectionQueries.map((q) => q.dataUpdatedAt).join(","),
-  ]);
-
   // ─── Cluster mode: build cluster features ─────────────────────────
   //
   // When the server says `kind: "clusters"` we render ClusterBubble
@@ -173,10 +129,8 @@ export function PlaceAnnotationsLayer() {
 
   // ─── Place mode: build per-feature data the balloons read ─────────
   //
-  // Two passes: the first pass collects every place we have native
-  // coords for (Mapky, with server-driven BTC flag), the second pass
-  // adds collection items that only have an OSM URL — those need
-  // Nominatim to resolve their coordinates before they can render.
+  // Collect every place we have native coords for (Mapky, with
+  // server-driven BTC flag).
 
   const places = useMemo(
     () => (envelope?.kind === "places" ? envelope.places : []),
@@ -205,79 +159,18 @@ export function PlaceAnnotationsLayer() {
     return Array.from(out.values());
   }, [envelope, places, placesEnabled, visiblePlaceKeys, selectedKey]);
 
-  // Collection items that AREN'T already covered by the base set —
-  // typically OSM POIs that were saved into a collection but aren't
-  // Mapky-indexed. Their lat/lon comes from Nominatim (resolved in
-  // the unified lookup batch below).
-  const collectionOnlyRefs = useMemo<
-    Array<{ osmType: string; osmId: number; key: string }>
-  >(() => {
-    const inBase = new Set(baseFeatures.map((f) => f.key));
-    const seen = new Set<string>();
-    const refs: Array<{ osmType: string; osmId: number; key: string }> = [];
-    for (const key of collectionColorByKey.keys()) {
-      if (inBase.has(key)) continue;
-      if (selectedKey === key) continue;
-      if (seen.has(key)) continue;
-      const [osmType, osmIdStr] = key.split(":");
-      const osmId = Number(osmIdStr);
-      if (!osmType || !osmId) continue;
-      seen.add(key);
-      refs.push({ osmType, osmId, key });
-    }
-    return refs;
-  }, [baseFeatures, collectionColorByKey, selectedKey]);
-
   // ─── Category icons + names via Nominatim (batched) ───────────────
   //
   // ONE batched lookup for every visible place feature instead of one
   // request per marker. The plugin caches Redis-side and pre-seeds
   // BTC POIs from the BTCMap dump, so most lookups resolve instantly.
-  // Includes collection-only refs so we can read their resolved
-  // coords back out of the same response — no second round-trip.
   const lookupRefs = useMemo(
-    () => [
-      ...baseFeatures.map((f) => ({ osmType: f.osmType, osmId: f.osmId })),
-      ...collectionOnlyRefs.map((r) => ({
-        osmType: r.osmType,
-        osmId: r.osmId,
-      })),
-    ],
-    [baseFeatures, collectionOnlyRefs],
+    () => baseFeatures.map((f) => ({ osmType: f.osmType, osmId: f.osmId })),
+    [baseFeatures],
   );
   const { byKey: nominatimByKey } = useOsmLookupBatch(lookupRefs);
 
-  // Final feature set: base + collection-only entries that have a
-  // resolved lat/lon. Out-of-viewport collection items are filtered
-  // here so we don't paint balloons that aren't on screen.
-  const features = useMemo(() => {
-    if (collectionOnlyRefs.length === 0) return baseFeatures;
-    const out = [...baseFeatures];
-    for (const ref of collectionOnlyRefs) {
-      const nom = nominatimByKey.get(ref.key);
-      if (!nom?.lat || !nom?.lon) continue;
-      if (
-        bounds &&
-        (nom.lat < bounds.minLat ||
-          nom.lat > bounds.maxLat ||
-          nom.lon < bounds.minLon ||
-          nom.lon > bounds.maxLon)
-      ) {
-        continue;
-      }
-      out.push({
-        key: ref.key,
-        osmType: ref.osmType,
-        osmId: ref.osmId,
-        lat: nom.lat,
-        lon: nom.lon,
-        rating: null,
-        // Variant body is overridden by collectionColor downstream.
-        variant: "place",
-      });
-    }
-    return out;
-  }, [baseFeatures, collectionOnlyRefs, nominatimByKey, bounds]);
+  const features = baseFeatures;
 
   const iconByKey = useMemo(() => {
     const map = new Map<string, ReturnType<typeof categoryIcon> | null>();
@@ -348,8 +241,6 @@ export function PlaceAnnotationsLayer() {
 
   const placesDimRef = useRef(placesDim);
   placesDimRef.current = placesDim;
-  const collectionColorByKeyRef = useRef(collectionColorByKey);
-  collectionColorByKeyRef.current = collectionColorByKey;
 
   useEffect(() => {
     if (!map) return;
@@ -385,12 +276,7 @@ export function PlaceAnnotationsLayer() {
           // attaches to the map. Without this, opening a sidebar then
           // panning briefly shows newly-arrived markers at full
           // opacity before the dim effect catches them.
-          const inActiveCollection =
-            spec.kind === "place" &&
-            collectionColorByKeyRef.current.has(spec.key);
-          const baseDim = placesDimRef.current;
-          const featureDim =
-            baseDim === 0 && inActiveCollection ? 1 : baseDim;
+          const featureDim = placesDimRef.current;
           if (featureDim === 0) {
             el.style.display = "none";
             el.style.pointerEvents = "none";
@@ -428,17 +314,12 @@ export function PlaceAnnotationsLayer() {
   }, []);
 
   // Per-marker dim — places follow the layer dim; cluster bubbles
-  // follow the same value (both ARE the Places layer). Collection
-  // members override the dim so /collections shows pinned places
-  // even when the rest of the layer is hidden.
+  // follow the same value (both ARE the Places layer).
   useEffect(() => {
     for (const spec of markerSpecs) {
       const el = elements.get(spec.key);
       if (!el) continue;
-      const inActiveCollection =
-        spec.kind === "place" && collectionColorByKey.has(spec.key);
-      const featureDim =
-        placesDim === 0 && inActiveCollection ? 1 : placesDim;
+      const featureDim = placesDim;
       if (featureDim === 0) {
         el.style.display = "none";
         el.style.pointerEvents = "none";
@@ -448,7 +329,7 @@ export function PlaceAnnotationsLayer() {
         el.style.pointerEvents = "auto";
       }
     }
-  }, [placesDim, elements, markerSpecs, collectionColorByKey]);
+  }, [placesDim, elements, markerSpecs]);
 
   // Hover tooltip — one shared `maplibregl.Popup` reused across every
   // place marker. (Cluster bubbles already show their count in-place.)
@@ -650,7 +531,6 @@ export function PlaceAnnotationsLayer() {
               variant={f.variant}
               rating={f.rating}
               Icon={iconByKey.get(f.key) ?? null}
-              collectionColor={collectionColorByKey.get(f.key)}
             />
           </button>,
           el,

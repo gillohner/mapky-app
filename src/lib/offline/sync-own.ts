@@ -1,5 +1,4 @@
 import {
-  fetchUserCollections,
   fetchUserGeoCaptures,
   fetchUserPosts,
   fetchUserReviews,
@@ -35,7 +34,6 @@ interface SyncOutcome {
 const MAPKY_PATHS: Record<OwnResourceType, string> = {
   post: "/pub/mapky.app/posts",
   review: "/pub/mapky.app/posts", // reviews share the posts path
-  collection: "/pub/mapky.app/posts",
   incident: "/pub/mapky.app/incidents",
   geoCapture: "/pub/mapky.app/geo_captures",
   sequence: "/pub/mapky.app/sequences",
@@ -82,11 +80,10 @@ export async function syncOwnResources(
     await clearUserOwnResources(userId);
   }
 
-  const [post, review, collection, incident, geoCapture, sequence, route] =
+  const [post, review, incident, geoCapture, sequence, route] =
     await Promise.all([
       syncType(userId, "post", () => fetchUserPosts(userId)),
       syncType(userId, "review", () => fetchUserReviews(userId)),
-      syncType(userId, "collection", () => fetchUserCollections(userId)),
       syncType(userId, "incident", () => fetchUserIncidents(userId)),
       syncType(userId, "geoCapture", () => fetchUserGeoCaptures(userId)),
       syncType(userId, "sequence", () => fetchUserSequences(userId)),
@@ -99,7 +96,6 @@ export async function syncOwnResources(
     perType: {
       post,
       review,
-      collection,
       incident,
       geoCapture,
       sequence,

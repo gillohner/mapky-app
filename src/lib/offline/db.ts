@@ -47,7 +47,6 @@ export interface Region {
 export type OwnResourceType =
   | "post"
   | "review"
-  | "collection"
   | "incident"
   | "geoCapture"
   | "sequence"

@@ -14,7 +14,7 @@ interface ResourceDiscussionProps {
 /**
  * Drop-in section that wraps `ReplyThread` with a heading.
  *
- * Mount on any MapKy resource detail panel (route, collection, geo-capture,
+ * Mount on any MapKy resource detail panel (route, geo-capture,
  * sequence, incident, review) to give users threaded `:MapkyAppPost`
  * comments anchored to that resource via `[:REPLY_TO]`.
  */

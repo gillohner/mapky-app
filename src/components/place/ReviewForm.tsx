@@ -59,7 +59,6 @@ function emptyPlaceFull(osmType: string, osmId: number): PlaceFullResponse {
     reviews: [],
     posts: [],
     tags: [],
-    collections: [],
     routes: [],
   };
 }

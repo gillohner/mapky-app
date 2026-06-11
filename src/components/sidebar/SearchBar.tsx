@@ -5,7 +5,6 @@ import {
   X,
   MapPin,
   Tag,
-  FolderHeart,
   MessageSquare,
   Route as RouteIcon,
   AlertTriangle,
@@ -103,13 +102,6 @@ export function SearchBar() {
         rows.push({
           key: `tagPlace-${p.osm_type}-${p.osm_id}`,
           select: () => handleSelectTagPlace(p.osm_type, p.osm_id),
-        });
-      }
-      for (const c of tagResults.collections ?? []) {
-        const [authorId, collectionId] = c.id.split(":");
-        rows.push({
-          key: `collection-${c.id}`,
-          select: () => handleSelectCollection(authorId, collectionId),
         });
       }
       for (const review of tagResults.reviews ?? []) {
@@ -221,11 +213,10 @@ export function SearchBar() {
   }, [isOnSearchRoute, searchParams]);
 
   // Push the active query into the URL so reload restores it. We only
-  // navigate to /search when the user is NOT already on a place /
-  // collection / route detail page — otherwise typing would yank them
-  // out of whatever they were viewing. On those pages we'd lose state on
-  // reload anyway; the search-stickiness sweet spot is the home / map
-  // browsing flow.
+  // navigate to /search when the user is NOT already on a focused detail
+  // page — otherwise typing would yank them out of whatever they were
+  // viewing. On those pages we'd lose state on reload anyway; the
+  // search-stickiness sweet spot is the home / map browsing flow.
   useEffect(() => {
     if (justLeftSearchRef.current) {
       justLeftSearchRef.current = false;
@@ -249,7 +240,7 @@ export function SearchBar() {
     }
     // From the home page, push the query to /search so a reload restores
     // it. Skip when the user is in a focused detail view (place, route,
-    // collection, etc.) so we don't snatch them away mid-read.
+      // detail page, etc.) so we don't snatch them away mid-read.
     if (currentPath === "/" || currentPath === "") {
       navigate({ to: "/search", search: { q: query, mode } });
     }
@@ -282,21 +273,6 @@ export function SearchBar() {
     navigate({
       to: "/place/$osmType/$osmId",
       params: { osmType, osmId: String(osmId) },
-    });
-  };
-
-  const handleSelectCollection = (authorId: string, collectionId: string) => {
-    setInput("");
-    setQuery("");
-    setShowResults(false);
-
-    navigate({
-      to: "/collection/$authorId/$collectionId",
-      params: { authorId, collectionId },
-      search: {
-        fromSearchQuery: input,
-        fromSearchMode: mode,
-      },
     });
   };
 
@@ -365,7 +341,6 @@ export function SearchBar() {
       ? placeResults && placeResults.length > 0
       : tagResults &&
         ((tagResults.places?.length ?? 0) > 0 ||
-          (tagResults.collections?.length ?? 0) > 0 ||
           (tagResults.reviews?.length ?? 0) > 0 ||
           (tagResults.posts?.length ?? 0) > 0 ||
           (tagResults.routes?.length ?? 0) > 0 ||
@@ -440,7 +415,7 @@ export function SearchBar() {
                 ? "bg-background text-accent shadow-sm"
                 : "text-muted hover:text-foreground"
             }`}
-            title="Search by tag (places, collections, posts, routes, incidents)"
+            title="Search by tag (places, posts, routes, incidents)"
           >
             <Tag className="h-3.5 w-3.5" />
           </button>
@@ -521,37 +496,6 @@ export function SearchBar() {
                           handleSelectTagPlace(p.osm_type, p.osm_id)
                         }
                       />
-                    );
-                  })}
-                </div>
-              )}
-
-              {tagResults.collections?.length > 0 && (
-                <div>
-                  <div className="px-4 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
-                    Collections
-                  </div>
-                  {tagResults.collections.map((c) => {
-                    const [authorId, collectionId] = c.id.split(":");
-                    const k = `collection-${c.id}`;
-                    return (
-                      <button
-                        key={c.id}
-                        onClick={() =>
-                          handleSelectCollection(authorId, collectionId)
-                        }
-                        className={`flex w-full items-center gap-3 px-4 py-2 text-left ${selectedKey === k ? "bg-accent/10" : "hover:bg-surface"}`}
-                      >
-                        <FolderHeart className="h-4 w-4 flex-shrink-0 text-accent" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {c.name}
-                          </p>
-                          <p className="text-xs text-muted">
-                            {c.items.length} places
-                          </p>
-                        </div>
-                      </button>
                     );
                   })}
                 </div>
@@ -708,7 +652,7 @@ export function SearchBar() {
       }
 
       const matched = parentUri.match(
-        /^pubky:\/\/([^/]+)\/pub\/mapky\.app\/(reviews|routes|collections|geo_captures|sequences|incidents|posts)\/([^/?#]+)/,
+        /^pubky:\/\/([^/]+)\/pub\/mapky\.app\/(reviews|routes|geo_captures|sequences|incidents|posts)\/([^/?#]+)/,
       );
       if (!matched) return;
       const parentAuthor: string = matched[1];
@@ -719,13 +663,6 @@ export function SearchBar() {
         navigate({
           to: "/route/$authorId/$routeId",
           params: { authorId: parentAuthor, routeId: parentId },
-        });
-        return;
-      }
-      if (parentType === "collections") {
-        navigate({
-          to: "/collection/$authorId/$collectionId",
-          params: { authorId: parentAuthor, collectionId: parentId },
         });
         return;
       }

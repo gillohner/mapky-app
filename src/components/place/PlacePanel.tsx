@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { usePlaceFullDetail, useCollection } from "@/lib/api/hooks";
+import { usePlaceFullDetail } from "@/lib/api/hooks";
 import { useUiStore } from "@/stores/ui-store";
 import { useMapStore } from "@/stores/map-store";
 import { useAutoFocusLayer } from "@/hooks/use-auto-focus-layer";
@@ -18,7 +18,6 @@ import { PlaceComments } from "./PlaceComments";
 import { PlaceActions } from "./PlaceActions";
 import { PlaceDirectionsButton } from "./PlaceDirectionsButton";
 import { PlaceTags } from "./PlaceTags";
-import { PlaceCollections } from "./PlaceCollections";
 import { PlaceRoutes } from "./PlaceRoutes";
 import { BitcoinAcceptance } from "./BitcoinAcceptance";
 
@@ -31,10 +30,6 @@ interface PlacePanelProps {
   tileName?: string;
   /** Feature kind from the tile */
   tileKind?: string;
-  /** Back-navigation: collection author */
-  fromAuthor?: string;
-  /** Back-navigation: collection ID */
-  fromCollection?: string;
   /** Back-navigation: search query */
   fromSearchQuery?: string;
   /** Back-navigation: search mode */
@@ -50,18 +45,12 @@ export function PlacePanel({
   fallbackLon,
   tileName,
   tileKind,
-  fromAuthor,
-  fromCollection,
   fromSearchQuery,
   fromSearchMode,
   from,
 }: PlacePanelProps) {
   const navigate = useNavigate();
   const { data: place } = usePlaceFullDetail(osmType, osmId);
-  const { data: parentCollection } = useCollection(
-    fromAuthor ?? "",
-    fromCollection ?? "",
-  );
   const setSelectedFeature = useUiStore((s) => s.setSelectedFeature);
   const map = useMapStore((s) => s.map);
 
@@ -118,11 +107,6 @@ export function PlacePanel({
           mode: (fromSearchMode as "places" | "tags") ?? "places",
         },
       });
-    } else if (fromCollection && fromAuthor) {
-      navigate({
-        to: "/collection/$authorId/$collectionId",
-        params: { authorId: fromAuthor, collectionId: fromCollection },
-      });
     } else if (from === "my-posts") {
       navigate({ to: "/my-posts" });
     } else {
@@ -132,9 +116,7 @@ export function PlacePanel({
   const back = useBackOr(fallback);
   const backLabel = fromSearchQuery
     ? "Search results"
-    : fromCollection && fromAuthor
-      ? parentCollection?.name ?? "Collection"
-      : from === "my-posts"
+    : from === "my-posts"
         ? "My Posts"
         : "Places";
 
@@ -172,7 +154,6 @@ export function PlacePanel({
           <h3 className="mb-2 text-sm font-medium text-foreground">Posts</h3>
           <PlaceComments osmType={osmType} osmId={osmId} />
         </div>
-        <PlaceCollections osmType={osmType} osmId={osmId} />
         <PlaceRoutes osmType={osmType} osmId={osmId} />
       </div>
     </DiscoverSidebar>

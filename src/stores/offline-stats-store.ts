@@ -29,7 +29,6 @@ import type { OutboxEntry, Region } from "@/lib/offline/db";
 interface OwnCounts {
   post: number;
   review: number;
-  collection: number;
   incident: number;
   geoCapture: number;
   sequence: number;

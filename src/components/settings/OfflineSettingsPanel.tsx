@@ -41,7 +41,6 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 const OWN_TYPE_LABELS: Record<OwnResourceType, string> = {
   post: "Posts",
   review: "Reviews",
-  collection: "Collections",
   incident: "Incidents",
   geoCapture: "Geo-captures",
   sequence: "Sequences",
@@ -191,7 +190,6 @@ export function OfflineSettingsPanel() {
       ownCounts: {
         post: 0,
         review: 0,
-        collection: 0,
         incident: 0,
         geoCapture: 0,
         sequence: 0,
@@ -245,7 +243,7 @@ export function OfflineSettingsPanel() {
 
   const confirmBodies: Record<ConfirmKind["kind"], string> = {
     "clear-own":
-      "Removes your locally-cached posts, reviews, collections, captures, sequences and routes. Originals on your homeserver are untouched — the next sync will pull them back.",
+      "Removes your locally-cached posts, reviews, incidents, captures, sequences and routes. Originals on your homeserver are untouched — the next sync will pull them back.",
     "clear-routes":
       "Removes every snapped route cached for offline replay. You can recompute them while online.",
     "clear-tiles":

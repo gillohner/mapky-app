@@ -33,7 +33,6 @@ function emptyPlaceFull(osmType: string, osmId: number): PlaceFullResponse {
     reviews: [],
     posts: [],
     tags: [],
-    collections: [],
     routes: [],
   };
 }
@@ -48,10 +47,9 @@ function emptyPlaceFull(osmType: string, osmId: number): PlaceFullResponse {
  * rather than as a top-level `PostTagDetails[]`, so we hand TagStrip
  * `mutate` + `refresh` callbacks (composite-aware) instead of the
  * usual `queryKey`. The caller-side updater patches the slice; the
- * legacy per-endpoint cache is mirrored in `onCountDelta` so any
- * non-PlacePanel surface (`SelectedPlaceMarker`, `CollectionPlaces`,
- * `PlaceDirectionsButton`) that still reads the legacy cache stays
- * in sync on tag_count.
+  * legacy per-endpoint cache is mirrored in `onCountDelta` so any
+  * non-PlacePanel surface (`SelectedPlaceMarker`, `PlaceDirectionsButton`)
+  * that still reads the legacy cache stays in sync on tag_count.
  */
 export function PlaceTags({ osmType, osmId }: PlaceTagsProps) {
   const { data: placeFullTags } = usePlaceFullTags(osmType, osmId);
