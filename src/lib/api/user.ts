@@ -9,12 +9,10 @@ export function getPubkyAvatarUrl(publicKey: string): string {
 
 /**
  * Resolve a pubky:// file URI to a gateway HTTP URL.
- * e.g. pubky://{userId}/pub/mapky.app/files/{fileId} → {gateway}/static/files/{userId}/{fileId}
+ * e.g. pubky://{userId}/pub/{namespace}/files/{fileId} → {gateway}/static/files/{userId}/{fileId}
  */
 export function resolveFileUrl(pubkyUri: string): string | null {
-  const match = pubkyUri.match(
-    /^pubky:\/\/([^/]+)\/pub\/(?:mapky|pubky)\.app\/files\/(.+)$/,
-  );
+  const match = pubkyUri.match(/^pubky:\/\/([^/]+)\/pub\/[^/]+\/files\/(.+)$/);
   if (!match) return null;
   const [, userId, fileId] = match;
   const baseURL = import.meta.env.DEV ? "" : config.gateway.url;
