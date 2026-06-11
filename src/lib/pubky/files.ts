@@ -4,10 +4,10 @@
  * Flow:
  * 1. Read file as Uint8Array
  * 2. Compute BLAKE3 hash → blob ID
- * 3. PUT raw bytes at /pub/pubky.app/blobs/{blob_id}
- * 4. Create PubkyAppFile JSON with src = pubky://user/pub/pubky.app/blobs/{blob_id}
- * 5. PUT file JSON at /pub/pubky.app/files/{file_id}
- * 6. Return the file URI (pubky://user/pub/pubky.app/files/{file_id})
+ * 3. PUT raw bytes at /pub/mapky.app/blobs/{blob_id}
+ * 4. Create PubkyAppFile JSON with src = pubky://user/pub/mapky.app/blobs/{blob_id}
+ * 5. PUT file JSON at /pub/mapky.app/files/{file_id}
+ * 6. Return the file URI (pubky://user/pub/mapky.app/files/{file_id})
  */
 
 interface PubkyStorage {
@@ -56,7 +56,7 @@ async function computeBlobId(data: Uint8Array): Promise<string> {
 }
 
 export interface UploadedFile {
-  /** pubky://user/pub/pubky.app/files/{file_id} — use as attachment URI */
+  /** pubky://user/pub/mapky.app/files/{file_id} — use as attachment URI */
   fileUri: string;
   /** Local object URL for preview */
   previewUrl: string;
@@ -71,12 +71,12 @@ export async function uploadFile(
 
   // 1. Create blob
   const blobId = await computeBlobId(bytes);
-  const blobPath = `/pub/pubky.app/blobs/${blobId}`;
+  const blobPath = `/pub/mapky.app/blobs/${blobId}`;
   await session.storage.putBytes(blobPath as `/pub/${string}`, bytes);
 
   // 2. Create file metadata
   const fileId = generateTimestampId();
-  const filePath = `/pub/pubky.app/files/${fileId}`;
+  const filePath = `/pub/mapky.app/files/${fileId}`;
   const blobUri = `pubky://${publicKey}${blobPath}`;
 
   const fileJson = JSON.stringify({
