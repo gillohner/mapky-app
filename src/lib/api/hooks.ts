@@ -263,13 +263,14 @@ function usePlaceFullSlice<T>(
   osmId: number,
   select: (data: PlaceFullResponse) => T,
 ) {
+  const queryKey = placeFullKey(osmType, osmId);
   return useQuery({
-    queryKey: placeFullKey(osmType, osmId),
+    queryKey,
     queryFn: () => fetchPlaceDetailFull(osmType, osmId),
     enabled: !!osmType && !!osmId,
     staleTime: PLACE_FULL_STALE_MS,
     retry: noRetryOn404,
-    select,
+    select: (data) => select(applyPending(queryKey, data)),
   });
 }
 

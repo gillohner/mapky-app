@@ -5,6 +5,7 @@ import {
   parseTileCoordFromUpstream,
   tileUrlFor,
 } from "@/lib/offline/tile-source";
+import { config } from "@/lib/config";
 
 const CUSTOM_SCHEME = "mapky-tile";
 let protocolAdded = false;
@@ -76,7 +77,7 @@ export function offlineTileTransformRequest(
   url: string,
   resourceType?: string,
 ): { url: string } {
-  if (resourceType === "Tile") {
+  if (resourceType === "Tile" && isProtomapsTileUrl(url)) {
     const coord = parseTileCoordFromUpstream(url);
     if (coord) {
       return {
@@ -85,6 +86,19 @@ export function offlineTileTransformRequest(
     }
   }
   return { url };
+}
+
+function isProtomapsTileUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const configured = new URL(config.protomaps.url);
+    return (
+      parsed.hostname === configured.hostname &&
+      parsed.pathname.startsWith(configured.pathname.replace(/\.pmtiles$|\.json$/, ""))
+    );
+  } catch {
+    return false;
+  }
 }
 
 function parseSchemeUrl(
