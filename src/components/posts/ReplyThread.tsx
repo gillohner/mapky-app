@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { FileDown, ImageOff, MessageSquare, Reply, Pencil } from "lucide-react";
+import { ChevronLeft, FileDown, ImageOff, MessageSquare, Reply, Pencil } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useResourceReplies, useUserProfile } from "@/lib/api/hooks";
 import { useEnsureIngested } from "@/lib/nexus/use-ensure-ingested";
@@ -19,6 +19,8 @@ interface ReplyThreadProps {
   /** Short preview of the parent resource shown when composing a top-level reply. */
   parentPreview?: string;
 }
+
+const MAX_VISIBLE_REPLY_DEPTH = 3;
 
 function timeAgo(timestamp: number): string {
   const ms = timestamp < 1e12 ? timestamp * 1000 : timestamp;
@@ -41,6 +43,17 @@ function ck(post: MapkyPostDetails): string {
 function parsePostParent(uri: string): string | null {
   const m = uri.match(/^pubky:\/\/([^/]+)\/pub\/mapky\.app\/posts\/(.+)$/);
   return m ? `${m[1]}:${m[2]}` : null;
+}
+
+function countDescendants(
+  post: MapkyPostDetails,
+  replyMap: Map<string, MapkyPostDetails[]>,
+): number {
+  const children = replyMap.get(ck(post)) ?? [];
+  return children.reduce(
+    (total, child) => total + 1 + countDescendants(child, replyMap),
+    0,
+  );
 }
 
 function classifyAttachment(uri: string): MediaItem["type"] {
@@ -158,6 +171,8 @@ function PostNode({
   resourceType,
   authorId,
   resourceId,
+  maxDepth,
+  onFocusSubthread,
 }: {
   post: MapkyPostDetails;
   depth: number;
@@ -165,6 +180,8 @@ function PostNode({
   resourceType: MapkyResourceType;
   authorId: string;
   resourceId: string;
+  maxDepth: number;
+  onFocusSubthread: (postKey: string) => void;
 }) {
   const { isAuthenticated, publicKey } = useAuth();
   const queryClient = useQueryClient();
@@ -175,6 +192,8 @@ function PostNode({
   const authorName = authorProfile?.name?.trim() || null;
   const isOwner = publicKey === post.author_id;
   const children = replyMap.get(ck(post)) ?? [];
+  const canShowChildren = depth < maxDepth;
+  const hiddenReplyCount = canShowChildren ? 0 : countDescendants(post, replyMap);
   const indent = depth > 0 ? { marginLeft: `${depth * 1.25}rem` } : undefined;
   const replyParentUri = `pubky://${post.author_id}/pub/mapky.app/posts/${post.id}`;
   const repliesQueryKey = ["mapky", resourceType, authorId, resourceId, "replies"];
@@ -273,17 +292,33 @@ function PostNode({
         </div>
       )}
 
-      {children.map((child) => (
-        <PostNode
-          key={ck(child)}
-          post={child}
-          depth={depth + 1}
-          replyMap={replyMap}
-          resourceType={resourceType}
-          authorId={authorId}
-          resourceId={resourceId}
-        />
-      ))}
+      {canShowChildren
+        ? children.map((child) => (
+            <PostNode
+              key={ck(child)}
+              post={child}
+              depth={depth + 1}
+              replyMap={replyMap}
+              resourceType={resourceType}
+              authorId={authorId}
+              resourceId={resourceId}
+              maxDepth={maxDepth}
+              onFocusSubthread={onFocusSubthread}
+            />
+          ))
+        : hiddenReplyCount > 0 && (
+            <div
+              className="border-l-2 border-border pl-2.5"
+              style={indent}
+            >
+              <button
+                onClick={() => onFocusSubthread(ck(post))}
+                className="mt-1 rounded-md border border-border px-2 py-1 text-[11px] text-muted transition-colors hover:border-accent hover:text-accent"
+              >
+                View more replies ({hiddenReplyCount})
+              </button>
+            </div>
+          )}
     </>
   );
 }
@@ -316,12 +351,15 @@ export function ReplyThread({
     resourceId,
   );
   const [composing, setComposing] = useState(false);
+  const [focusedPostKey, setFocusedPostKey] = useState<string | null>(null);
 
-  const { roots, replyMap } = useMemo(() => {
+  const { roots, replyMap, postMap } = useMemo(() => {
     const map = new Map<string, MapkyPostDetails[]>();
+    const postsByKey = new Map<string, MapkyPostDetails>();
     const top: MapkyPostDetails[] = [];
     const ids = new Set((replies ?? []).map((p) => ck(p)));
     for (const post of replies ?? []) {
+      postsByKey.set(ck(post), post);
       const parent = post.parent_uri ? parsePostParent(post.parent_uri) : null;
       if (parent && ids.has(parent)) {
         const arr = map.get(parent) ?? [];
@@ -331,11 +369,13 @@ export function ReplyThread({
         top.push(post);
       }
     }
-    return { roots: top, replyMap: map };
+    return { roots: top, replyMap: map, postMap: postsByKey };
   }, [replies]);
 
   const repliesQueryKey = ["mapky", resourceType, authorId, resourceId, "replies"];
   const parentUri = `pubky://${authorId}/pub/mapky.app/${resourceType}/${resourceId}`;
+  const focusedPost = focusedPostKey ? postMap.get(focusedPostKey) : null;
+  const visibleRoots = focusedPost ? [focusedPost] : roots;
 
   return (
     <div>
@@ -375,10 +415,10 @@ export function ReplyThread({
       )}
 
       {!isLoading && roots.length > 0 && !composing && isAuthenticated && (
-        <div className="mb-1 flex justify-end">
+        <div className="mb-1 flex justify-start">
           <button
             onClick={() => setComposing(true)}
-            className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-muted transition-colors hover:border-accent hover:text-accent"
+            className="flex items-center gap-1 text-[11px] text-muted transition-colors hover:text-accent"
           >
             <Reply className="h-3 w-3" />
             Reply
@@ -386,15 +426,30 @@ export function ReplyThread({
         </div>
       )}
 
-      {roots.map((root) => (
+      {focusedPost && (
+        <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-border bg-surface/60 px-2 py-1.5">
+          <span className="text-[11px] text-muted">Viewing deeper replies</span>
+          <button
+            onClick={() => setFocusedPostKey(null)}
+            className="flex items-center gap-1 text-[11px] text-muted transition-colors hover:text-accent"
+          >
+            <ChevronLeft className="h-3 w-3" />
+            Back to thread
+          </button>
+        </div>
+      )}
+
+      {visibleRoots.map((root) => (
         <PostNode
-          key={ck(root)}
+          key={`${focusedPostKey ?? "root"}:${ck(root)}`}
           post={root}
           depth={0}
           replyMap={replyMap}
           resourceType={resourceType}
           authorId={authorId}
           resourceId={resourceId}
+          maxDepth={MAX_VISIBLE_REPLY_DEPTH}
+          onFocusSubthread={setFocusedPostKey}
         />
       ))}
     </div>
