@@ -67,7 +67,7 @@ export function PlaceFilterControls({
         disabled ? "opacity-50 pointer-events-none" : ""
       }`}
     >
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 overflow-hidden">
         {PLACE_ACTIVITIES.map((a) => {
           const Icon = ACTIVITY_ICON[a];
           const on = placesFilters.activities.includes(a);
@@ -77,7 +77,7 @@ export function PlaceFilterControls({
               type="button"
               onClick={() => togglePlaceActivity(a)}
               aria-pressed={on}
-              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+              className={`inline-flex max-w-full shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors ${
                 on
                   ? "border-accent/40 bg-accent/10 text-accent"
                   : "border-border bg-surface text-muted hover:border-accent/60 hover:text-accent"
@@ -92,7 +92,7 @@ export function PlaceFilterControls({
           <button
             type="button"
             onClick={resetPlacesFilters}
-            className="ml-auto inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-1 text-[10px] text-muted hover:text-foreground"
+            className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-surface px-2 py-1 text-[10px] text-muted hover:text-foreground"
             title="Clear filters"
           >
             <RotateCcw className="h-3 w-3" />
@@ -123,7 +123,7 @@ function RatingSlider({
   onChange: (v: number | undefined) => void;
 }) {
   return (
-    <label className="flex items-center gap-2 text-xs text-muted">
+    <label className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2 text-xs text-muted">
       <Star
         className={`h-3.5 w-3.5 ${value > 0 ? "text-accent" : "text-muted"}`}
         aria-hidden
@@ -139,7 +139,7 @@ function RatingSlider({
           const next = parseFloat(e.target.value);
           onChange(Number.isFinite(next) ? next : undefined);
         }}
-        className="flex-1 accent-accent"
+        className="min-w-0 accent-accent"
         aria-label="Minimum rating"
       />
       <span
